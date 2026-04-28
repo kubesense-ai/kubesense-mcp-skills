@@ -105,9 +105,9 @@ duration > 5000000 AND workload = 'checkout-service'
 
 For detailed field references, examples, and query patterns, read the datasource-specific skill:
 
-- **[kubesense-logs](../kubesense-logs/SKILL.md)** — Discover fields, search raw logs, aggregate with counts/percentiles, filter syntax
-- **[kubesense-apm](../kubesense-apm/SKILL.md)** — Discover fields, search raw spans, analyze latency and errors, filter syntax
-- **[kubesense-metrics](../kubesense-metrics/SKILL.md)** — Discover metrics, get labels, write PromQL queries
+- **[kubesense-logs](./kubesense-logs/SKILL.md)** — Discover fields, search raw logs, aggregate with counts/percentiles, filter syntax
+- **[kubesense-apm](./kubesense-apm/SKILL.md)** — Discover fields, search raw spans, analyze latency and errors, filter syntax
+- **[kubesense-metrics](./kubesense-metrics/SKILL.md)** — Discover metrics, get labels, write PromQL queries
 
 ## Multi-Query Reference
 
