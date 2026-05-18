@@ -9,11 +9,11 @@ Tools for discovering and querying Kubernetes metrics via PromQL.
 
 ## Tools
 
-| Tool                   | Purpose                               |
-| ---------------------- | ------------------------------------- |
-| `get-available-metrics`| Discover available metric names       |
-| `get-metric-labels`    | Get label names for a specific metric |
-| `analyze-metrics`      | Execute PromQL queries on metrics     |
+| Tool                    | Purpose                               |
+| ----------------------- | ------------------------------------- |
+| `get-available-metrics` | Discover available metric names       |
+| `get-metric-labels`     | Get label names for a specific metric |
+| `analyze-metrics`       | Execute PromQL queries on metrics     |
 
 ## Discovery-First Rule
 

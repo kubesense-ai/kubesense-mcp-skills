@@ -9,11 +9,11 @@ Tools for querying and analyzing logs from Kubernetes clusters.
 
 ## Tools
 
-| Tool                      | Purpose                                     |
-| ------------------------- | ------------------------------------------- |
-| `get-trace-or-log-fields` | Discover available fields for logs          |
-| `search-logs`             | Browse raw log records (max 10 rows)        |
-| `analyze-logs`            | Run aggregated analysis on logs             |
+| Tool                      | Purpose                              |
+| ------------------------- | ------------------------------------ |
+| `get-trace-or-log-fields` | Discover available fields for logs   |
+| `search-logs`             | Browse raw log records (max 10 rows) |
+| `analyze-logs`            | Run aggregated analysis on logs      |
 
 ## Discovery-First Rule
 
