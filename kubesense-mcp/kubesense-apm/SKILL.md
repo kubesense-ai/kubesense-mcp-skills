@@ -1,6 +1,6 @@
 ---
 name: kubesense-apm
-description: Query and analyze distributed traces (APM) from Kubernetes clusters using KubeSense MCP tools. Covers field discovery, raw span search, latency/error analysis, and filter syntax.
+description: Query and analyze distributed traces (APM) from Kubernetes clusters using KubeSense MCP tools. Covers field discovery, raw span search, latency/error analysis, and the UnifiedFilter syntax — including the ARRAY_MAP rule for trace attributes.
 ---
 
 # KubeSense APM (Traces)
@@ -12,25 +12,43 @@ Tools for querying distributed traces and spans from Kubernetes clusters.
 | Tool                      | Purpose                                      |
 | ------------------------- | -------------------------------------------- |
 | `get-trace-or-log-fields` | Discover available fields for traces         |
-| `search-traces`           | Browse raw trace/span records (max 10 rows)  |
+| `search-traces`           | Browse raw trace/span records (default 10 rows) |
 | `analyze-traces`          | Run aggregated analysis on traces            |
 
 ## Discovery-First Rule
 
-**Always discover before querying.** Never guess field names.
+**Always discover before querying.** Trace attribute keys vary by deployment and are window-scoped — pass the same `from_time`/`to_time` to discovery that you'll use for the follow-up call.
 
 ```
 get-trace-or-log-fields  →  search-traces / analyze-traces
 ```
 
+## Trace Attributes Are Special
+
+Trace attributes are stored as parallel `attribute_names[]` / `attribute_values[]` arrays. They reject standard operators like `EQ` or `LIKE`. **Use only `ARRAY_MAP*` operators** on any leaf where `"type": "attribute"`:
+
+| Operator             | Use                                        |
+| -------------------- | ------------------------------------------ |
+| `ARRAY_MAP`          | attribute equals one of the given values   |
+| `NOT_ARRAY_MAP`      | attribute does not equal any given value   |
+| `ARRAY_MAP_LIKE`     | wildcard match against attribute values    |
+| `NOT_ARRAY_MAP_LIKE` | negated wildcard                           |
+| `ARRAY_MAP_ILIKE`    | case-insensitive wildcard                  |
+| `NOT_ARRAY_MAP_ILIKE`| negated case-insensitive wildcard          |
+
+Trying `EQ` on a trace attribute will fail validation with a path-pointed error like `adv_filters.children[1]: operator "EQ" not allowed for traces attribute field "http.method"`. The `example` leaf returned by discovery already uses `ARRAY_MAP` for trace attributes — just clone it.
+
+Top-level trace columns (`workload`, `namespace`, `duration`, etc.) keep using the standard operators.
+
 ## Step 1: Discover Fields
 
 ```json
 {
-  "datasource": "traces",
-  "search": "",
+  "signal": "traces",
   "from_time": "2026-04-23T10:00:00Z",
-  "to_time": "2026-04-23T10:30:00Z"
+  "to_time": "2026-04-23T10:30:00Z",
+  "search": "",
+  "limit": 0
 }
 ```
 
@@ -55,19 +73,31 @@ get-trace-or-log-fields  →  search-traces / analyze-traces
 | `clustered_resource` | string | Resource path (e.g. `/api/v1/users`)               |
 | `source`             | string | Trace source (eBPF, OTel)                          |
 
+Custom trace attribute keys (e.g. `http.method`, `db.statement`) are returned alongside these and must use `ARRAY_MAP*` operators.
+
 ## Step 2: Search Raw Traces
 
 ```json
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "filters": "status = 'error' AND protocol_type = 'HTTP'",
-  "fields": [
+  "filters": {
+    "type": "advanced",
+    "adv_filters": {
+      "operation": "AND",
+      "children": [
+        { "field": "status", "operation": "EQ", "values": ["error"], "type": "", "field_type": "string" },
+        { "field": "protocol_type", "operation": "EQ", "values": ["HTTP"], "type": "", "field_type": "string" }
+      ]
+    }
+  },
+  "required_fields": [
     { "field": "workload", "type": "string" },
     { "field": "operation_name", "type": "string" },
     { "field": "duration", "type": "float" },
     { "field": "return_code", "type": "string" }
-  ]
+  ],
+  "page_size": 10
 }
 ```
 
@@ -79,13 +109,19 @@ get-trace-or-log-fields  →  search-traces / analyze-traces
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "queryType": "range",
-  "filters": "protocol_type = 'HTTP'",
-  "groupBy": [{ "field": "workload", "type": "string" }],
-  "aggregation": {
-    "function": "p99",
-    "fields": [{ "field": "duration", "type": "float" }]
-  }
+  "query_type": "range",
+  "filters": {
+    "type": "advanced",
+    "adv_filters": {
+      "operation": "AND",
+      "children": [
+        { "field": "protocol_type", "operation": "EQ", "values": ["HTTP"], "type": "", "field_type": "string" }
+      ]
+    }
+  },
+  "group_by_fields": [{ "field": "workload", "type": "string" }],
+  "value_operation": "p99",
+  "fields": [{ "field": "duration", "type": "float" }]
 }
 ```
 
@@ -95,30 +131,51 @@ get-trace-or-log-fields  →  search-traces / analyze-traces
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "queryType": "instant",
-  "filters": "status = 'error'",
-  "groupBy": [
+  "query_type": "instant",
+  "filters": {
+    "type": "advanced",
+    "adv_filters": {
+      "operation": "AND",
+      "children": [
+        { "field": "status", "operation": "EQ", "values": ["error"], "type": "", "field_type": "string" }
+      ]
+    }
+  },
+  "group_by_fields": [
     { "field": "workload", "type": "string" },
     { "field": "return_code", "type": "string" }
   ],
-  "aggregation": { "function": "row_count" }
+  "value_operation": "row_count"
 }
 ```
 
-### Average latency for a specific endpoint
+### Filtering on a trace attribute (e.g. http.method)
+
+Attribute leaves use `"type": "attribute"` and `ARRAY_MAP`:
 
 ```json
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "queryType": "instant",
-  "filters": "workload = 'api-server' AND subtype = 'GET' AND clustered_resource = '/api/v1/users'",
-  "aggregation": {
-    "function": "avg",
-    "fields": [{ "field": "duration", "type": "float" }]
-  }
+  "query_type": "instant",
+  "filters": {
+    "type": "advanced",
+    "adv_filters": {
+      "operation": "AND",
+      "children": [
+        { "field": "workload", "operation": "EQ", "values": ["api-server"], "type": "", "field_type": "string" },
+        { "field": "http.method", "operation": "ARRAY_MAP", "values": ["GET"], "type": "attribute", "field_type": "string" }
+      ]
+    }
+  },
+  "value_operation": "avg",
+  "fields": [{ "field": "duration", "type": "float" }]
 }
 ```
+
+### Series cap on range queries
+
+`analyze-traces` with `query_type=range` returns the top 20 series by max value (after dropping all-zero series). The response includes `total_series` and `truncated`. Pass `"limit": <N>` to change the cap.
 
 ## Duration Units
 
@@ -129,11 +186,7 @@ get-trace-or-log-fields  →  search-traces / analyze-traces
 - `"range"` — time-series values over the given window (for trends)
 - `"instant"` — single point-in-time snapshot (for totals/counts)
 
-## Time Ranges
-
-All tools require `from_time` and `to_time` as ISO 8601 strings. Start narrow (15–30 min) and widen if needed.
-
-## Aggregation Functions
+## Aggregation Functions (`value_operation`)
 
 | Function                          | Fields Required       | Description               |
 | --------------------------------- | --------------------- | ------------------------- |
@@ -142,25 +195,10 @@ All tools require `from_time` and `to_time` as ISO 8601 strings. Start narrow (1
 | `avg`, `sum`, `min`, `max`        | Yes (float only)      | Numeric aggregations      |
 | `p99`, `p95`, `p90`, `p75`, `p50` | Yes (float only)      | Percentile calculations   |
 
-## Filters
+## Filters (UnifiedFilter)
 
-The `filters` parameter accepts a SQL-like WHERE clause.
+`filters` is a structured tree, not a SQL string. See the top-level [SKILL.md](../SKILL.md#filters-unifiedfilter) for the full reference. Key reminders for traces:
 
-| Operator          | Example                            | Notes                                              |
-| ----------------- | ---------------------------------- | -------------------------------------------------- |
-| `=`               | `status = 'error'`                 | Exact match                                        |
-| `!=`              | `status != 'ok'`                   | Not equal                                          |
-| `>` `<` `>=` `<=` | `duration > 1000000`               | Comparisons; use unquoted numbers for float fields |
-| `IN`              | `return_code IN ('500', '502')`    | Matches any value in list                          |
-| `NOT IN`          | `namespace NOT IN ('kube-system')` | Excludes values in list                            |
-| `LIKE`            | `workload LIKE '%api%'`            | `%` is wildcard                                    |
-| `NOT LIKE`        | `pod_name NOT LIKE '%debug%'`      | Negative pattern match                             |
-
-Combine with `AND` / `OR` (use parentheses for grouping):
-
-```
-status = 'error' AND (workload = 'api-server' OR workload = 'auth-service')
-```
-
-- **Strings** — always single-quoted: `workload = 'my-service'`
-- **Numbers** — unquoted: `duration > 5000000`
+- Top-level columns → standard operators (`EQ`, `IN`, `LIKE`, comparisons, ...)
+- Trace attributes (`"type": "attribute"`) → **`ARRAY_MAP*` operators only**
+- Always check the field's `allowed_operators` returned by discovery, or clone the discovery `example` leaf

@@ -14,76 +14,113 @@ Queries are keyed by short labels (`A`, `B`, `C`, etc.):
 
 ```json
 {
-  "from_time": "...",
-  "to_time": "...",
-  "queryType": "range",
+  "from_time": "2026-04-23T10:00:00Z",
+  "to_time": "2026-04-23T10:30:00Z",
+  "query_type": "range",
   "queries": {
-    "A": { "datasource": "logs", ... },
-    "B": { "datasource": "traces", ... },
-    "C": { "datasource": "formula", "expression": "(A / B) * 100" }
+    "A": { "selectedMode": "logs",    "value_operation": "row_count", "filters": { ... } },
+    "B": { "selectedMode": "traces",  "value_operation": "row_count", "filters": { ... } },
+    "C": { "query_type": "formula", "expression": "(A / B) * 100" }
   }
 }
 ```
 
-## Datasource Query Shapes
+Top-level `from_time` / `to_time` / `query_type` apply to every non-formula sub-query — do **not** repeat them inside each sub-query.
 
-**logs / traces** — same as `analyze-logs` / `analyze-traces` plus a `datasource` field:
+## Sub-Query Shapes
+
+### logs / traces
+
+Same shape as `analyze-logs` / `analyze-traces`, minus `from_time`/`to_time`/`query_type` (which live at the top level). Use `selectedMode` (not `datasource`) to pick the backend:
 
 ```json
 {
-  "datasource": "logs",
-  "filters": "level = 'ERROR'",
-  "groupBy": [{ "field": "workload", "type": "string" }],
-  "aggregation": { "function": "row_count" }
+  "selectedMode": "logs",
+  "filters": {
+    "type": "advanced",
+    "adv_filters": {
+      "operation": "AND",
+      "children": [
+        { "field": "level", "operation": "EQ", "values": ["ERROR"], "type": "", "field_type": "string" }
+      ]
+    }
+  },
+  "group_by_fields": [{ "field": "workload", "type": "string" }],
+  "value_operation": "row_count"
 }
 ```
 
-**metrics**:
+### metrics
 
 ```json
 {
-  "datasource": "metrics",
+  "selectedMode": "metrics",
   "promql": "sum(rate(http_requests_total[5m])) by (service)"
 }
 ```
 
-**formula** — references other query labels:
+### formula
+
+Uses `query_type: "formula"` and references other sub-query labels:
 
 ```json
 {
-  "datasource": "formula",
-  "expression": "(A / B) * 100"
+  "query_type": "formula",
+  "expression": "(A / B) * 100",
+  "label": "error_rate_pct"
 }
 ```
 
-## Example: Error Rate
+## Example: Error Rate by Workload
+
+Count error traces (A) and all traces (B), then compute `(A / B) * 100`:
 
 ```json
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "queryType": "range",
+  "query_type": "range",
   "queries": {
     "A": {
-      "datasource": "traces",
-      "filters": "status = 'error'",
-      "groupBy": [{ "field": "workload", "type": "string" }],
-      "aggregation": { "function": "row_count" }
+      "selectedMode": "traces",
+      "filters": {
+        "type": "advanced",
+        "adv_filters": {
+          "operation": "AND",
+          "children": [
+            { "field": "status", "operation": "EQ", "values": ["error"], "type": "", "field_type": "string" }
+          ]
+        }
+      },
+      "group_by_fields": [{ "field": "workload", "type": "string" }],
+      "value_operation": "row_count"
     },
     "B": {
-      "datasource": "traces",
-      "groupBy": [{ "field": "workload", "type": "string" }],
-      "aggregation": { "function": "row_count" }
+      "selectedMode": "traces",
+      "group_by_fields": [{ "field": "workload", "type": "string" }],
+      "value_operation": "row_count"
     },
     "C": {
-      "datasource": "formula",
-      "expression": "(A / B) * 100"
+      "query_type": "formula",
+      "expression": "(A / B) * 100",
+      "label": "error_rate_pct"
     }
   }
 }
 ```
 
+## Discriminator Reference
+
+| Sub-query type | Discriminator field          | Value                |
+| -------------- | ---------------------------- | -------------------- |
+| logs           | `selectedMode`               | `"logs"`             |
+| traces         | `selectedMode`               | `"traces"`           |
+| metrics        | `selectedMode`               | `"metrics"`          |
+| formula        | `query_type`                 | `"formula"`          |
+
 ## Tips
 
 - Formula queries can only reference labels defined in the same request
-- Use matching `groupBy` fields across queries in a formula — mismatched groups produce unexpected results
+- Use matching `group_by_fields` across queries in a formula — mismatched groups produce unexpected results
+- Validate any logs/traces filter against the discovery `allowed_operators` (especially trace attributes, which only accept `ARRAY_MAP*`)
+- Sub-queries inherit `from_time`/`to_time`/`query_type` from the top level
