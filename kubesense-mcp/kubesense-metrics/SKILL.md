@@ -35,6 +35,8 @@ All keywords are AND-matched (case-insensitive):
 { "search_keywords": ["request", "duration"] }
 ```
 
+Discovery defaults to the last hour. Pass `from_time` / `to_time` (RFC3339) to widen the window if the metric is sparse. Pass `"limit": <N>` to cap the returned list.
+
 ## Step 2: Get Labels
 
 ```json
@@ -51,7 +53,7 @@ Returns label names like `namespace`, `pod`, `container`. Use these in PromQL se
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "queryType": "range",
+  "query_type": "range",
   "promql": "sum(rate(container_cpu_usage_seconds_total[5m])) by (namespace)"
 }
 ```
@@ -62,7 +64,7 @@ Returns label names like `namespace`, `pod`, `container`. Use these in PromQL se
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "queryType": "instant",
+  "query_type": "instant",
   "promql": "sum(container_memory_usage_bytes{namespace='production'}) by (pod)"
 }
 ```
@@ -73,7 +75,7 @@ Returns label names like `namespace`, `pod`, `container`. Use these in PromQL se
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "queryType": "range",
+  "query_type": "range",
   "promql": "sum(rate(http_requests_total[5m])) by (service)"
 }
 ```
@@ -97,10 +99,11 @@ Returns label names like `namespace`, `pod`, `container`. Use these in PromQL se
 
 ## Time Ranges
 
-All tools require `from_time` and `to_time` as ISO 8601 strings. Start narrow (15–30 min) and widen if needed.
+All tools accept `from_time` and `to_time` as RFC3339 strings. For `analyze-metrics`, both are required. For discovery tools they're optional (defaults to the last hour). Start narrow (15–30 min) and widen if needed.
 
 ## Tips
 
-- Always use `get-available-metrics` first — don't guess metric names
-- Use `get-metric-labels` before writing label filters in PromQL
+- Always call `get-available-metrics` first — don't guess metric names
+- Call `get-metric-labels` before writing label filters in PromQL
 - Use `[5m]` in `rate()` for general use; `[1m]` for high-resolution, `[15m]` for smoother results
+- `analyze-metrics` does NOT use `UnifiedFilter` — labels are filtered inside the PromQL string itself
