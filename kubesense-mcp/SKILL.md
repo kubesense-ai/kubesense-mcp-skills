@@ -1,11 +1,24 @@
 ---
 name: kubesense-mcp
-description: How to use KubeSense MCP tools to query logs, traces, and metrics from Kubernetes clusters. Covers tool selection, the discovery-first workflow, the UnifiedFilter format, and links to datasource-specific skills.
+description: How to use KubeSense MCP tools to query logs, traces, and metrics from Kubernetes clusters. Covers tool selection, the discovery-first workflow, the WHERE-clause filter syntax, and links to datasource-specific skills.
 ---
 
 # KubeSense MCP
 
 KubeSense MCP provides observability tools for querying logs, traces, and metrics from Kubernetes clusters.
+
+## Two Hard Rules (always)
+
+> **1. Discover before querying.** Always call `get-trace-or-log-fields` (or `get-available-metrics` / `get-metric-labels` for metrics) BEFORE every `search-*` or `analyze-*` call. Field names, attribute keys, and metric names vary by deployment and by time window — never guess, never reuse from a different window without re-discovering.
+
+> **2. Write `where` with field labels, never raw storage names.** Use the `field` value EXACTLY as discovery returned it — that's the catalog label, the same string the explorer's UI shows. Don't substitute synonyms or "what it's called in the DB":
+> - logs: write `type = ERROR`, NOT `level = ERROR`
+> - pods: write `instance = my-pod-xxxx`, NOT `pod_name = my-pod-xxxx`
+> - traces: write `service = checkout`, NOT `app_service = checkout`; `protocol = HTTP`, NOT `protocol_type = HTTP`; `role = server`, NOT `kind = server`; `method = GET`, NOT `subtype = GET`; `status_code = 500`, NOT `return_code = 500`; `resource = "/api/v1/users"`, NOT `clustered_resource = ...`
+>
+> Writing labels means the `where` string round-trips into "View in Explorer" verbatim — no translation needed at the call site, no divergence between MCP and UI.
+
+If you're unsure of a field's label, paste the discovery `example` snippet — it always uses the correct label.
 
 ## Tools
 
@@ -21,16 +34,14 @@ KubeSense MCP provides observability tools for querying logs, traces, and metric
 | `analyze-metrics`         | Execute PromQL queries on metrics             |
 | `analyze-telemetry`       | Multi-datasource queries with formula support |
 
-## Discovery-First Rule
-
-**Always discover before querying.** Never guess field names, attribute keys, or metric names — they vary by deployment.
+## Discovery Flow
 
 ```
 logs/traces:  get-trace-or-log-fields  →  search-logs / search-traces / analyze-logs / analyze-traces
 metrics:      get-available-metrics    →  get-metric-labels  →  analyze-metrics
 ```
 
-The discovery response gives each field's `allowed_operators` and an `example` filter leaf you can copy directly into your query.
+Each field in the discovery response carries its `allowed_operators` and an `example` WHERE snippet — the snippet is always written with the correct label, so pasting it is the safest way to start.
 
 ## Choosing the Right Tool
 
@@ -58,88 +69,90 @@ All tools require `from_time` and `to_time` as RFC3339 strings, e.g.:
 
 Start narrow (15–30 min) and widen if needed. Discovery responses for attributes are window-scoped — pass the SAME window you'll use for the follow-up search/analyze call.
 
-## Filters (UnifiedFilter)
+## Filters (WHERE clause)
 
-Filter parameters in `search-logs`, `search-traces`, `analyze-logs`, and `analyze-traces` use a **structured tree**, not a SQL string. The shape is called `UnifiedFilter`.
+`search-logs`, `search-traces`, `analyze-logs`, and `analyze-traces` take a single `where` string — the same SQL-style syntax the explorer's advanced-query mode uses. The server parses it into the internal filter tree, so the LLM never has to assemble JSON operator trees.
+
+Empty / missing `where` matches every row in the window.
 
 ### Basic shape
 
-```json
-{
-  "type": "advanced",
-  "adv_filters": {
-    "operation": "AND",
-    "children": [
-      {
-        "field": "level",
-        "operation": "EQ",
-        "values": ["ERROR"],
-        "type": "",
-        "field_type": "string"
-      }
-    ]
-  }
-}
+```
+where = "<field> <op> <value>"
 ```
 
-- Group nodes set `operation` to `AND` / `OR` / `NOT` and provide `children[]`.
-- Leaf nodes set `field`, `operation`, `values[]`, `type` (`""` for top-level columns, `"attribute"` for dynamic attributes), and `field_type`.
-- `NOT` groups take exactly one child. `AND` / `OR` groups take two or more.
+Combine leaves with `AND`, `OR`, and `NOT`, group with parentheses.
+
+```json
+"where": "type = ERROR AND namespace = production"
+```
+
+```json
+"where": "status = error AND (service = checkout-api OR service = auth-api)"
+```
 
 ### Operators
 
-The exact operators allowed depend on the signal + field kind. Always check the field's `allowed_operators` in the discovery response. Common ones:
+| Operator        | Use                            | Example                                  |
+| --------------- | ------------------------------ | ---------------------------------------- |
+| `=`             | Exact match                    | `type = ERROR`                           |
+| `!=`            | Not equal                      | `status != ok`                           |
+| `<` `>` `<=` `>=` | Numeric comparisons          | `duration > 1000`, `status_code >= 500`  |
+| `IN`            | Match any value in a list      | `type IN (ERROR, WARN)`                  |
+| `NOT IN`        | Exclude values in a list       | `namespace NOT IN (kube-system, default)`|
+| `LIKE`          | Case-sensitive wildcard (`%`)  | `body LIKE "%timeout%"`                  |
+| `ILIKE`         | Case-insensitive wildcard      | `service ILIKE "%api%"`                  |
+| `SUBSTR_ILIKE`  | Case-insensitive substring     | `body SUBSTR_ILIKE timeout`              |
 
-| Operator       | Use                            | Notes                                                |
-| -------------- | ------------------------------ | ---------------------------------------------------- |
-| `EQ`           | `field = value`                | Exact match                                          |
-| `NEQ`          | `field != value`               | Not equal                                            |
-| `IN`           | `field IN (a, b, c)`           | Matches any value in `values[]`                      |
-| `NIN`          | `field NOT IN (a, b, c)`       | Excludes values in `values[]`                        |
-| `LT` `GT` `LTE` `GTE` | Comparisons             | Use unquoted numbers in `values[]` for float fields  |
-| `LIKE`         | Case-sensitive pattern match   | `%` wildcard                                         |
-| `ILIKE`        | Case-insensitive pattern match | `%` wildcard                                         |
-| `EXIST`        | Field is present               | No `values[]`                                        |
-| `NOT_EXIST`    | Field is absent                | No `values[]`                                        |
-| `ARRAY_MAP`    | Trace-attribute equality       | **Only operator allowed on trace attributes**        |
+Check the field's `allowed_operators` in the discovery response — not every operator is allowed on every field.
 
-**Trace attributes are special.** They're stored as parallel arrays, so they reject `EQ`/`LIKE` and only accept `ARRAY_MAP*` operators. Trying `EQ` on a trace attribute fails validation with a path-pointed error.
+### Attributes use the `@` prefix
 
-### Combining conditions
+Dynamic attribute keys (log attributes, trace attributes) carry an `@` prefix in the WHERE clause:
 
-Nest groups for `AND` / `OR` mixing. Example: `status = 'error' AND (workload = 'api' OR workload = 'auth')`:
-
-```json
-{
-  "type": "advanced",
-  "adv_filters": {
-    "operation": "AND",
-    "children": [
-      { "field": "status", "operation": "EQ", "values": ["error"], "type": "", "field_type": "string" },
-      {
-        "operation": "OR",
-        "children": [
-          { "field": "workload", "operation": "EQ", "values": ["api"], "type": "", "field_type": "string" },
-          { "field": "workload", "operation": "EQ", "values": ["auth"], "type": "", "field_type": "string" }
-        ]
-      }
-    ]
-  }
-}
 ```
+@http.method = GET
+@db.system = postgresql
+@user.id = "abc-123"
+```
+
+**Trace attributes are special** — they're stored as parallel arrays internally. You still write them with `@` and `=` / `IN` / `LIKE`; the server remaps them to the internal `ARRAY_MAP*` operators automatically. You no longer write `ARRAY_MAP` by hand.
+
+### Quoting values
+
+- Identifier-shaped values (`error`, `production`, `api-server`, `200`) can be **bare**.
+- Values with spaces, punctuation, or wildcards must be **double-quoted**: `body ILIKE "%db timeout%"`.
+- Single quotes are accepted but double quotes are preferred for consistency with the explorer UI.
+
+### Common label translations
+
+Discovery returns the catalog labels (the names the explorer's advanced-query mode accepts). A few common ones differ from the raw storage column names you may have seen elsewhere:
+
+| Catalog label (write this) | Concept              | Notes                                            |
+| -------------------------- | -------------------- | ------------------------------------------------ |
+| `instance`                 | Pod name             | Storage column is `pod_name` — write `instance`. |
+| `type` *(logs)*            | Log level            | Storage column is `level` — write `type`.        |
+| `node` *(logs)*            | Host / node name     | Storage column is `host` — write `node`.         |
+| `protocol` *(traces)*      | Protocol kind        | Storage column is `protocol_type`.               |
+| `role` *(traces)*          | client / server      | Storage column is `kind`.                        |
+| `method` *(traces)*        | HTTP / RPC method    | Storage column is `subtype`.                     |
+| `status_code` *(traces)*   | HTTP / RPC code      | Storage column is `return_code`.                 |
+| `service` *(traces)*       | App service name     | Storage column is `app_service`.                 |
+| `resource` *(traces)*      | Resource path        | Storage column is `clustered_resource`.          |
+| `container`                | Container name       | Storage column is `container_name`.              |
+
+When in doubt, copy the discovery `example` snippet verbatim — it always uses the right label.
 
 ### Tip: clone the example from discovery
 
-`get-trace-or-log-fields` returns an `example` leaf for every field, pre-filled with the right `operation` and `type`. Copy it and just swap your value in:
+`get-trace-or-log-fields` returns an `example` snippet for every field, pre-formatted with the right prefix, operator, and a representative value. Paste it into your `where` string and tweak:
 
 ```json
-"example": {
-  "field": "namespace",
-  "operation": "EQ",
-  "values": ["example"],
-  "type": "",
-  "field_type": "string"
-}
+"example": "@http.method = GET"
+```
+
+```json
+"where": "type = ERROR AND @http.method = POST"
 ```
 
 ## Datasource Skills

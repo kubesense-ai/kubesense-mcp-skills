@@ -1,6 +1,6 @@
 ---
 name: kubesense-logs
-description: Query and analyze logs from Kubernetes clusters using KubeSense MCP tools. Covers field discovery, raw log search, aggregation analysis, and the UnifiedFilter syntax.
+description: Query and analyze logs from Kubernetes clusters using KubeSense MCP tools. Covers field discovery, raw log search, aggregation analysis, and the WHERE-clause filter syntax.
 ---
 
 # KubeSense Logs
@@ -15,9 +15,11 @@ Tools for querying and analyzing logs from Kubernetes clusters.
 | `search-logs`             | Browse raw log records (default 10 rows)    |
 | `analyze-logs`            | Run aggregated analysis on logs             |
 
-## Discovery-First Rule
+## Two Hard Rules (always)
 
-**Always discover before querying.** Never guess field names. Attribute keys are window-scoped — pass the same `from_time`/`to_time` to discovery that you'll use for the follow-up search/analyze call.
+> **1. Discover before querying.** Call `get-trace-or-log-fields` BEFORE every `search-logs` / `analyze-logs`. Attribute keys are window-scoped — pass the same `from_time`/`to_time` you'll use for the follow-up call.
+>
+> **2. Write `where` with field labels, never raw storage names.** Use the `field` value exactly as discovery returned it: `type = ERROR` (not `level`), `instance = my-pod-xxxx` (not `pod_name`), `node = ...` (not `host`), `container = ...` (not `container_name`).
 
 ```
 get-trace-or-log-fields  →  search-logs / analyze-logs
@@ -39,23 +41,26 @@ get-trace-or-log-fields  →  search-logs / analyze-logs
 - `search` — optional case-insensitive substring filter on field names (e.g. `"namespace"`)
 - `limit` — optional cap on returned fields (0 = no cap)
 
-Each returned field includes its `field_type`, `is_attribute`, `allowed_operators`, and an `example` filter leaf you can clone.
+Each returned field includes its `field_type`, `is_attribute`, `allowed_operators`, and an `example` WHERE snippet you can paste straight into the `where` argument.
 
 ### Built-in Log Fields
 
-| Field            | Type   | Values                                        |
-| ---------------- | ------ | --------------------------------------------- |
-| `workload`       | string | Kubernetes workload name                      |
-| `namespace`      | string | Kubernetes namespace                          |
-| `cluster`        | string | Cluster name                                  |
-| `pod_name`       | string | Pod name                                      |
-| `container_name` | string | Container name                                |
-| `node_name`      | string | Node name                                     |
-| `level`          | string | INFO, WARN, ERROR, DEBUG, TRACE, FATAL, PANIC |
-| `format`         | string | json, klog, nginx                             |
-| `body_length`    | float  | Log body length in characters                 |
+| Field         | Type   | Notes                                          |
+| ------------- | ------ | ---------------------------------------------- |
+| `workload`    | string | Kubernetes workload name                       |
+| `namespace`   | string | Kubernetes namespace                           |
+| `cluster`     | string | Cluster name                                   |
+| `instance`    | string | Pod instance (storage column: `pod_name`)      |
+| `container`   | string | Container name                                 |
+| `node`        | string | Node / host name                               |
+| `type`        | string | Log level: ERROR, WARN, INFO, DEBUG, TRACE, FATAL, PANIC |
+| `format`      | string | json, klog, nginx                              |
+| `source`      | string | Log source                                     |
+| `region`      | string | Region                                         |
+| `app_version` | string | App version                                    |
+| `env_type`    | string | Environment type                               |
 
-Custom log attribute keys are returned alongside these (set `"type": "attribute"` on attribute leaves).
+Custom log attribute keys are returned alongside these — reference them with an `@` prefix in the WHERE clause (e.g. `@request.id = "abc-123"`).
 
 ## Step 2: Search Raw Logs
 
@@ -63,27 +68,19 @@ Custom log attribute keys are returned alongside these (set `"type": "attribute"
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "filters": {
-    "type": "advanced",
-    "adv_filters": {
-      "operation": "AND",
-      "children": [
-        { "field": "level", "operation": "EQ", "values": ["ERROR"], "type": "", "field_type": "string" },
-        { "field": "namespace", "operation": "EQ", "values": ["production"], "type": "", "field_type": "string" }
-      ]
-    }
-  },
+  "where": "type = ERROR AND namespace = production",
   "required_fields": [
-    { "field": "level", "type": "string" },
+    { "field": "type", "type": "string" },
     { "field": "workload", "type": "string" },
-    { "field": "pod_name", "type": "string" }
+    { "field": "instance", "type": "string" }
   ],
   "page_size": 10
 }
 ```
 
-- `required_fields` is the projection — which columns to include in returned rows
-- `page_size` defaults to 10
+- `where` is a single SQL-style WHERE-clause string. Empty / omitted = match every row in the window.
+- `required_fields` is the projection — which columns to include in returned rows.
+- `page_size` defaults to 10.
 
 ## Step 3: Analyze Logs
 
@@ -94,15 +91,7 @@ Custom log attribute keys are returned alongside these (set `"type": "attribute"
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
   "query_type": "range",
-  "filters": {
-    "type": "advanced",
-    "adv_filters": {
-      "operation": "AND",
-      "children": [
-        { "field": "level", "operation": "EQ", "values": ["ERROR"], "type": "", "field_type": "string" }
-      ]
-    }
-  },
+  "where": "type = ERROR",
   "group_by_fields": [{ "field": "workload", "type": "string" }],
   "value_operation": "row_count"
 }
@@ -115,17 +104,23 @@ Custom log attribute keys are returned alongside these (set `"type": "attribute"
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
   "query_type": "instant",
-  "filters": {
-    "type": "advanced",
-    "adv_filters": {
-      "operation": "AND",
-      "children": [
-        { "field": "level", "operation": "EQ", "values": ["ERROR"], "type": "", "field_type": "string" }
-      ]
-    }
-  },
+  "where": "type = ERROR",
   "value_operation": "unique_count",
-  "fields": [{ "field": "pod_name", "type": "string" }]
+  "fields": [{ "field": "instance", "type": "string" }]
+}
+```
+
+### Filter on a log attribute
+
+Attributes use the `@` prefix:
+
+```json
+{
+  "from_time": "2026-04-23T10:00:00Z",
+  "to_time": "2026-04-23T10:30:00Z",
+  "query_type": "instant",
+  "where": "type = ERROR AND @request.id = \"abc-123\"",
+  "value_operation": "row_count"
 }
 ```
 
@@ -149,25 +144,26 @@ Custom log attribute keys are returned alongside these (set `"type": "attribute"
 
 For aggregations that need operand fields, pass them in the top-level `fields` array.
 
-## Filters (UnifiedFilter)
+## Filters (WHERE clause)
 
-`filters` is a structured tree, not a SQL string. See the top-level [SKILL.md](../SKILL.md#filters-unifiedfilter) for the full reference. Quick rules:
+`where` is a SQL-style string, not a JSON tree. See the top-level [SKILL.md](../SKILL.md#filters-where-clause) for the full reference. Quick rules:
 
-- Group nodes: `operation` ∈ {`AND`, `OR`, `NOT`} + `children[]`
-- Leaf nodes: `field`, `operation`, `values[]`, `type` (`""` for columns, `"attribute"` for log attributes), `field_type`
-- Always use operators from the field's `allowed_operators` (returned by discovery)
+- Combine leaves with `AND`, `OR`, `NOT`; group with parentheses.
+- Use the field name as discovery returned it: `type = ERROR`, `instance = my-pod-xxxx`.
+- Log attributes use the `@` prefix: `@request.id = "abc-123"`.
+- Identifier-shaped values can be bare; anything with spaces or wildcards must be double-quoted: `body ILIKE "%timeout%"`.
 
 ### Common log operators
 
-| Operator | Example values | Notes |
-| -------- | -------------- | ----- |
-| `EQ` | `["ERROR"]` | Exact match |
-| `NEQ` | `["ok"]` | Not equal |
-| `IN` | `["ERROR", "WARN"]` | Any of |
-| `NIN` | `["kube-system"]` | None of |
-| `LT` / `GT` / `LTE` / `GTE` | `[500]` | Numeric comparisons |
-| `LIKE` | `["%api%"]` | Wildcard match (`%`) |
-| `ILIKE` | `["%api%"]` | Case-insensitive wildcard |
-| `EXIST` / `NOT_EXIST` | (none) | Presence check, no `values` |
+| Operator      | Example                              |
+| ------------- | ------------------------------------ |
+| `=`           | `type = ERROR`                       |
+| `!=`          | `type != INFO`                       |
+| `IN`          | `type IN (ERROR, WARN, FATAL)`       |
+| `NOT IN`      | `namespace NOT IN (kube-system)`     |
+| `<` `>` `<=` `>=` | numeric comparisons              |
+| `LIKE`        | `body LIKE "%error%"`                |
+| `ILIKE`       | `workload ILIKE "%api%"`             |
+| `SUBSTR_ILIKE`| `body SUBSTR_ILIKE timeout`          |
 
-Log attributes (with `"type": "attribute"`) accept the same standard operators — they're stored in attribute maps, not parallel arrays.
+Always check the field's `allowed_operators` in the discovery response — not every operator is valid on every field.

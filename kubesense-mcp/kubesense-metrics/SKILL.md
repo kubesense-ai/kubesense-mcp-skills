@@ -106,4 +106,4 @@ All tools accept `from_time` and `to_time` as RFC3339 strings. For `analyze-metr
 - Always call `get-available-metrics` first — don't guess metric names
 - Call `get-metric-labels` before writing label filters in PromQL
 - Use `[5m]` in `rate()` for general use; `[1m]` for high-resolution, `[15m]` for smoother results
-- `analyze-metrics` does NOT use `UnifiedFilter` — labels are filtered inside the PromQL string itself
+- `analyze-metrics` does NOT take a `where` clause — labels are filtered inside the PromQL string itself

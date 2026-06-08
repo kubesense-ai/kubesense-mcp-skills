@@ -1,6 +1,6 @@
 ---
 name: kubesense-apm
-description: Query and analyze distributed traces (APM) from Kubernetes clusters using KubeSense MCP tools. Covers field discovery, raw span search, latency/error analysis, and the UnifiedFilter syntax — including the ARRAY_MAP rule for trace attributes.
+description: Query and analyze distributed traces (APM) from Kubernetes clusters using KubeSense MCP tools. Covers field discovery, raw span search, latency/error analysis, and the WHERE-clause filter syntax — including how trace-attribute filters are auto-remapped.
 ---
 
 # KubeSense APM (Traces)
@@ -15,30 +15,38 @@ Tools for querying distributed traces and spans from Kubernetes clusters.
 | `search-traces`           | Browse raw trace/span records (default 10 rows) |
 | `analyze-traces`          | Run aggregated analysis on traces            |
 
-## Discovery-First Rule
+## Two Hard Rules (always)
 
-**Always discover before querying.** Trace attribute keys vary by deployment and are window-scoped — pass the same `from_time`/`to_time` to discovery that you'll use for the follow-up call.
+> **1. Discover before querying.** Call `get-trace-or-log-fields` BEFORE every `search-traces` / `analyze-traces`. Trace attribute keys vary by deployment and are window-scoped — pass the same `from_time`/`to_time` you'll use for the follow-up call.
+>
+> **2. Write `where` with field labels, never raw storage names.** Use the `field` value exactly as discovery returned it:
+> - `service = checkout-api` (not `app_service`)
+> - `instance = my-pod-xxxx` (not `pod_name`)
+> - `protocol = HTTP` (not `protocol_type`)
+> - `role = server` (not `kind`)
+> - `method = POST` (not `subtype`)
+> - `status_code = 500` (not `return_code`)
+> - `resource = "/api/v1/users"` (not `clustered_resource`)
+> - `container = ...` (not `container_name`)
 
 ```
 get-trace-or-log-fields  →  search-traces / analyze-traces
 ```
 
-## Trace Attributes Are Special
+## Trace Attributes
 
-Trace attributes are stored as parallel `attribute_names[]` / `attribute_values[]` arrays. They reject standard operators like `EQ` or `LIKE`. **Use only `ARRAY_MAP*` operators** on any leaf where `"type": "attribute"`:
+Trace attributes are stored as parallel `attribute_names[]` / `attribute_values[]` arrays internally, but in the WHERE clause **you write them with the same syntax as everything else** — just carry an `@` prefix:
 
-| Operator             | Use                                        |
-| -------------------- | ------------------------------------------ |
-| `ARRAY_MAP`          | attribute equals one of the given values   |
-| `NOT_ARRAY_MAP`      | attribute does not equal any given value   |
-| `ARRAY_MAP_LIKE`     | wildcard match against attribute values    |
-| `NOT_ARRAY_MAP_LIKE` | negated wildcard                           |
-| `ARRAY_MAP_ILIKE`    | case-insensitive wildcard                  |
-| `NOT_ARRAY_MAP_ILIKE`| negated case-insensitive wildcard          |
+```
+@http.method = GET
+@db.system = postgresql
+@user.id IN ("abc-123", "def-456")
+@http.target LIKE "/api/v1/%"
+```
 
-Trying `EQ` on a trace attribute will fail validation with a path-pointed error like `adv_filters.children[1]: operator "EQ" not allowed for traces attribute field "http.method"`. The `example` leaf returned by discovery already uses `ARRAY_MAP` for trace attributes — just clone it.
+The server transparently remaps these to the internal `ARRAY_MAP*` operators. You no longer need to know about `ARRAY_MAP`, `ARRAY_MAP_LIKE`, or any of the parallel-array machinery.
 
-Top-level trace columns (`workload`, `namespace`, `duration`, etc.) keep using the standard operators.
+Top-level trace columns (`workload`, `namespace`, `duration`, etc.) use the bare name without `@`.
 
 ## Step 1: Discover Fields
 
@@ -54,26 +62,28 @@ Top-level trace columns (`workload`, `namespace`, `duration`, etc.) keep using t
 
 ### Built-in Trace Fields
 
-| Field                | Type   | Values                                             |
-| -------------------- | ------ | -------------------------------------------------- |
-| `status`             | string | ok, error                                          |
-| `protocol_type`      | string | HTTP, gRPC, TCP, MongoDB, Redis, MySQL, PostgreSQL |
-| `duration`           | float  | Span duration in **microseconds**                  |
-| `workload`           | string | Kubernetes workload name                           |
-| `namespace`          | string | Kubernetes namespace                               |
-| `cluster`            | string | Cluster name                                       |
-| `pod_name`           | string | Pod name                                           |
-| `node_name`          | string | Node name                                          |
-| `role`               | string | client, server                                     |
-| `subtype`            | string | GET, POST, PUT, DELETE, PATCH, etc.                |
-| `return_code`        | string | 200, 400, 401, 403, 404, 500, 502, 503, 504        |
-| `server`             | string | Server workload name                               |
-| `client`             | string | Client workload name                               |
-| `operation_name`     | string | Span operation name                                |
-| `clustered_resource` | string | Resource path (e.g. `/api/v1/users`)               |
-| `source`             | string | Trace source (eBPF, OTel)                          |
+| Field            | Type   | Notes                                                |
+| ---------------- | ------ | ---------------------------------------------------- |
+| `status`         | string | `error`, `ok`                                        |
+| `protocol`       | string | HTTP, gRPC, TCP, MongoDB, Redis, MySQL, PostgreSQL   |
+| `duration`       | int    | Span duration in microseconds                        |
+| `workload`       | string | Kubernetes workload name                             |
+| `namespace`      | string | Kubernetes namespace                                 |
+| `cluster`        | string | Cluster name                                         |
+| `instance`       | string | Pod instance (storage column: `pod_name`)            |
+| `container`      | string | Container name                                       |
+| `role`           | string | `client`, `server` (storage column: `kind`)          |
+| `method`         | string | GET, POST, PUT, DELETE, PATCH, … (storage: `subtype`)|
+| `status_code`    | int    | HTTP/RPC return code (storage: `return_code`)        |
+| `service`        | string | App service name (storage: `app_service`)            |
+| `server`         | string | Server workload name                                 |
+| `client`         | string | Client workload name                                 |
+| `operation_name` | string | Span operation name                                  |
+| `resource`       | string | Resource path, e.g. `/api/v1/users` (storage: `clustered_resource`) |
+| `source`         | string | Trace source (`eBPF`, `OTel`)                        |
+| `request_type`   | bool   | External vs internal (storage: `is_external`)        |
 
-Custom trace attribute keys (e.g. `http.method`, `db.statement`) are returned alongside these and must use `ARRAY_MAP*` operators.
+Custom trace attribute keys (e.g. `http.method`, `db.statement`) are returned alongside these — reference them with `@http.method = GET` in the WHERE clause.
 
 ## Step 2: Search Raw Traces
 
@@ -81,21 +91,12 @@ Custom trace attribute keys (e.g. `http.method`, `db.statement`) are returned al
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
-  "filters": {
-    "type": "advanced",
-    "adv_filters": {
-      "operation": "AND",
-      "children": [
-        { "field": "status", "operation": "EQ", "values": ["error"], "type": "", "field_type": "string" },
-        { "field": "protocol_type", "operation": "EQ", "values": ["HTTP"], "type": "", "field_type": "string" }
-      ]
-    }
-  },
+  "where": "status = error AND protocol = HTTP",
   "required_fields": [
     { "field": "workload", "type": "string" },
     { "field": "operation_name", "type": "string" },
     { "field": "duration", "type": "float" },
-    { "field": "return_code", "type": "string" }
+    { "field": "status_code", "type": "string" }
   ],
   "page_size": 10
 }
@@ -110,18 +111,25 @@ Custom trace attribute keys (e.g. `http.method`, `db.statement`) are returned al
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
   "query_type": "range",
-  "filters": {
-    "type": "advanced",
-    "adv_filters": {
-      "operation": "AND",
-      "children": [
-        { "field": "protocol_type", "operation": "EQ", "values": ["HTTP"], "type": "", "field_type": "string" }
-      ]
-    }
-  },
+  "where": "protocol = HTTP",
   "group_by_fields": [{ "field": "workload", "type": "string" }],
   "value_operation": "p99",
   "fields": [{ "field": "duration", "type": "float" }]
+}
+```
+
+### Top 5 services by error count (instant)
+
+```json
+{
+  "from_time": "2026-04-23T10:00:00Z",
+  "to_time": "2026-04-23T10:30:00Z",
+  "query_type": "instant",
+  "where": "status = error",
+  "group_by_fields": [{ "field": "service", "type": "string" }],
+  "value_operation": "row_count",
+  "sort_direction": "DESC",
+  "limit": 5
 }
 ```
 
@@ -132,18 +140,10 @@ Custom trace attribute keys (e.g. `http.method`, `db.statement`) are returned al
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
   "query_type": "instant",
-  "filters": {
-    "type": "advanced",
-    "adv_filters": {
-      "operation": "AND",
-      "children": [
-        { "field": "status", "operation": "EQ", "values": ["error"], "type": "", "field_type": "string" }
-      ]
-    }
-  },
+  "where": "status = error",
   "group_by_fields": [
-    { "field": "workload", "type": "string" },
-    { "field": "return_code", "type": "string" }
+    { "field": "service", "type": "string" },
+    { "field": "status_code", "type": "string" }
   ],
   "value_operation": "row_count"
 }
@@ -151,23 +151,14 @@ Custom trace attribute keys (e.g. `http.method`, `db.statement`) are returned al
 
 ### Filtering on a trace attribute (e.g. http.method)
 
-Attribute leaves use `"type": "attribute"` and `ARRAY_MAP`:
+Attributes use the `@` prefix and the same operators as columns — the server handles the array-map remap:
 
 ```json
 {
   "from_time": "2026-04-23T10:00:00Z",
   "to_time": "2026-04-23T10:30:00Z",
   "query_type": "instant",
-  "filters": {
-    "type": "advanced",
-    "adv_filters": {
-      "operation": "AND",
-      "children": [
-        { "field": "workload", "operation": "EQ", "values": ["api-server"], "type": "", "field_type": "string" },
-        { "field": "http.method", "operation": "ARRAY_MAP", "values": ["GET"], "type": "attribute", "field_type": "string" }
-      ]
-    }
-  },
+  "where": "workload = api-server AND @http.method = GET",
   "value_operation": "avg",
   "fields": [{ "field": "duration", "type": "float" }]
 }
@@ -195,10 +186,11 @@ Attribute leaves use `"type": "attribute"` and `ARRAY_MAP`:
 | `avg`, `sum`, `min`, `max`        | Yes (float only)      | Numeric aggregations      |
 | `p99`, `p95`, `p90`, `p75`, `p50` | Yes (float only)      | Percentile calculations   |
 
-## Filters (UnifiedFilter)
+## Filters (WHERE clause)
 
-`filters` is a structured tree, not a SQL string. See the top-level [SKILL.md](../SKILL.md#filters-unifiedfilter) for the full reference. Key reminders for traces:
+`where` is a SQL-style string. See the top-level [SKILL.md](../SKILL.md#filters-where-clause) for the full reference. Key reminders for traces:
 
-- Top-level columns → standard operators (`EQ`, `IN`, `LIKE`, comparisons, ...)
-- Trace attributes (`"type": "attribute"`) → **`ARRAY_MAP*` operators only**
-- Always check the field's `allowed_operators` returned by discovery, or clone the discovery `example` leaf
+- Top-level columns use the catalog labels: `status = error`, `service = checkout-api`, `instance = my-pod-xxxx`, `role = server`, `method = POST`.
+- Trace attributes use the `@` prefix: `@http.method = POST`, `@db.statement ILIKE "%select%"`. The server remaps these to the internal `ARRAY_MAP*` operators automatically.
+- Identifier-shaped values can be bare; anything with spaces, quotes, or wildcards must be double-quoted: `@http.target LIKE "/api/v1/%"`.
+- Always check the field's `allowed_operators` returned by discovery, or copy the discovery `example` snippet verbatim.

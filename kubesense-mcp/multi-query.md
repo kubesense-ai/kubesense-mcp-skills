@@ -18,8 +18,8 @@ Queries are keyed by short labels (`A`, `B`, `C`, etc.):
   "to_time": "2026-04-23T10:30:00Z",
   "query_type": "range",
   "queries": {
-    "A": { "selectedMode": "logs",    "value_operation": "row_count", "filters": { ... } },
-    "B": { "selectedMode": "traces",  "value_operation": "row_count", "filters": { ... } },
+    "A": { "selectedMode": "logs",    "value_operation": "row_count", "where": "type = ERROR" },
+    "B": { "selectedMode": "traces",  "value_operation": "row_count", "where": "status = error" },
     "C": { "query_type": "formula", "expression": "(A / B) * 100" }
   }
 }
@@ -31,20 +31,12 @@ Top-level `from_time` / `to_time` / `query_type` apply to every non-formula sub-
 
 ### logs / traces
 
-Same shape as `analyze-logs` / `analyze-traces`, minus `from_time`/`to_time`/`query_type` (which live at the top level). Use `selectedMode` (not `datasource`) to pick the backend:
+Same shape as `analyze-logs` / `analyze-traces`, minus `from_time`/`to_time`/`query_type` (which live at the top level). Use `selectedMode` (not `datasource`) to pick the backend, and pass filters as a `where` string:
 
 ```json
 {
   "selectedMode": "logs",
-  "filters": {
-    "type": "advanced",
-    "adv_filters": {
-      "operation": "AND",
-      "children": [
-        { "field": "level", "operation": "EQ", "values": ["ERROR"], "type": "", "field_type": "string" }
-      ]
-    }
-  },
+  "where": "type = ERROR",
   "group_by_fields": [{ "field": "workload", "type": "string" }],
   "value_operation": "row_count"
 }
@@ -83,15 +75,7 @@ Count error traces (A) and all traces (B), then compute `(A / B) * 100`:
   "queries": {
     "A": {
       "selectedMode": "traces",
-      "filters": {
-        "type": "advanced",
-        "adv_filters": {
-          "operation": "AND",
-          "children": [
-            { "field": "status", "operation": "EQ", "values": ["error"], "type": "", "field_type": "string" }
-          ]
-        }
-      },
+      "where": "status = error",
       "group_by_fields": [{ "field": "workload", "type": "string" }],
       "value_operation": "row_count"
     },
@@ -122,5 +106,5 @@ Count error traces (A) and all traces (B), then compute `(A / B) * 100`:
 
 - Formula queries can only reference labels defined in the same request
 - Use matching `group_by_fields` across queries in a formula — mismatched groups produce unexpected results
-- Validate any logs/traces filter against the discovery `allowed_operators` (especially trace attributes, which only accept `ARRAY_MAP*`)
+- Validate any logs/traces `where` clause against the discovery `allowed_operators` (trace attributes use the `@` prefix; the server auto-remaps them to `ARRAY_MAP*`)
 - Sub-queries inherit `from_time`/`to_time`/`query_type` from the top level
