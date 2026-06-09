@@ -15,11 +15,11 @@ Tools for querying distributed traces and spans from Kubernetes clusters.
 | `search-traces`           | Browse raw trace/span records (default 10 rows) |
 | `analyze-traces`          | Run aggregated analysis on traces            |
 
-## Two Hard Rules (always)
+## Three Hard Rules (always)
 
 > **1. Discover before querying.** Call `get-trace-or-log-fields` BEFORE every `search-traces` / `analyze-traces`. Trace attribute keys vary by deployment and are window-scoped — pass the same `from_time`/`to_time` you'll use for the follow-up call.
 >
-> **2. Write `where` with field labels, never raw storage names.** Use the `field` value exactly as discovery returned it:
+> **2. Write `where`, `group_by_fields`, `fields`, `required_fields`, and `sort_by` with catalog labels, never raw storage names.** Use the `field` value exactly as discovery returned it. Sending a storage column gets you a "use the catalog label 'X' instead" error.
 > - `service = checkout-api` (not `app_service`)
 > - `instance = my-pod-xxxx` (not `pod_name`)
 > - `protocol = HTTP` (not `protocol_type`)
@@ -28,6 +28,8 @@ Tools for querying distributed traces and spans from Kubernetes clusters.
 > - `status_code = 500` (not `return_code`)
 > - `resource = "/api/v1/users"` (not `clustered_resource`)
 > - `container = ...` (not `container_name`)
+>
+> **3. For app identity, group by `service` — not `workload`.** `service` is cross-platform (k8s, docker, legacy) and is always populated. `workload` is K8s-specific. Use `workload` ONLY when the user explicitly asks about K8s topology ("group by deployment", "errors per statefulset"). For *any* "top services", "errors by app", "P99 by service", "which microservice…" question — group by `service`.
 
 ```
 get-trace-or-log-fields  →  search-traces / analyze-traces
@@ -67,7 +69,8 @@ Top-level trace columns (`workload`, `namespace`, `duration`, etc.) use the bare
 | `status`         | string | `error`, `ok`                                        |
 | `protocol`       | string | HTTP, gRPC, TCP, MongoDB, Redis, MySQL, PostgreSQL   |
 | `duration`       | int    | Span duration in microseconds                        |
-| `workload`       | string | Kubernetes workload name                             |
+| `service`        | string | **PREFERRED for app identity** — cross-platform (k8s, docker, legacy). Use this for "top services", "errors by app", "P99 by service". (storage: `app_service`) |
+| `workload`       | string | Kubernetes workload name. Use ONLY when the question is explicitly about K8s topology (deployment/statefulset). For app identity, prefer `service`. |
 | `namespace`      | string | Kubernetes namespace                                 |
 | `cluster`        | string | Cluster name                                         |
 | `instance`       | string | Pod instance (storage column: `pod_name`)            |
@@ -75,7 +78,6 @@ Top-level trace columns (`workload`, `namespace`, `duration`, etc.) use the bare
 | `role`           | string | `client`, `server` (storage column: `kind`)          |
 | `method`         | string | GET, POST, PUT, DELETE, PATCH, … (storage: `subtype`)|
 | `status_code`    | int    | HTTP/RPC return code (storage: `return_code`)        |
-| `service`        | string | App service name (storage: `app_service`)            |
 | `server`         | string | Server workload name                                 |
 | `client`         | string | Client workload name                                 |
 | `operation_name` | string | Span operation name                                  |

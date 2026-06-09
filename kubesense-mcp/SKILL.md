@@ -43,13 +43,33 @@ metrics:      get-available-metrics    →  get-metric-labels  →  analyze-metr
 
 Each field in the discovery response carries its `allowed_operators` and an `example` WHERE snippet — the snippet is always written with the correct label, so pasting it is the safest way to start.
 
+## Choosing the Right Signal (decide FIRST)
+
+> **Hard Rule.** Before any search/analyze call, decide which signal the question is about. The user's vocabulary tells you. Picking the wrong signal wastes the call — every field name will be wrong and discovery has to be redone.
+
+| The user says…                                                                                                  | Signal      | Tools                              |
+| --------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------- |
+| request, response, span, **latency**, p99 / p95 / p50, HTTP method, status code, endpoint, resource, downstream call, service-to-service | **traces**  | `search-traces`, `analyze-traces`  |
+| log line, error message, body, panic, stack trace, log level, **WARN / INFO / DEBUG**, log format               | **logs**    | `search-logs`, `analyze-logs`      |
+| CPU, memory, disk, RPS, time-series labels, PromQL, scrape                                                       | **metrics** | `analyze-metrics`                  |
+| error **rate** (count ÷ total), ratio across two datasources                                                     | mixed       | `analyze-telemetry` with a formula |
+
+When the user changes phrasing mid-conversation ("now show me requests…"), re-decide signal — don't carry forward the last one.
+
 ## Choosing the Right Tool
 
 - **Show me recent logs** → `search-logs`
 - **How many errors in the last hour?** → `analyze-logs` with `row_count` + error filter
 - **P99 latency for a service** → `analyze-traces` with `p99` aggregation on `duration`
+- **Top services by errors / requests** → `analyze-traces` (NOT logs)
 - **CPU / memory usage** → `get-available-metrics` → `analyze-metrics`
 - **Error rate as a percentage** → `analyze-telemetry` with a formula query
+
+## Service vs Workload (traces)
+
+> **Prefer `service` over `workload` for app identity.** `service` is the cross-platform identifier — it's present in K8s, Docker, and legacy deployments. `workload` is K8s-specific (deployment / statefulset / daemonset name) and is empty for non-K8s sources.
+>
+> Use `workload` ONLY when the user explicitly asks about K8s topology ("group by deployment", "errors per statefulset"). For *any* question about a "service", an "app", a "microservice", or the top-N by traffic / errors / latency — group by `service`.
 
 ## Query Types
 
@@ -162,7 +182,4 @@ For detailed field references, examples, and query patterns, read the datasource
 - **[kubesense-logs](./kubesense-logs/SKILL.md)** — Discover fields, search raw logs, aggregate with counts/percentiles
 - **[kubesense-apm](./kubesense-apm/SKILL.md)** — Discover fields, search raw spans, analyze latency and errors
 - **[kubesense-metrics](./kubesense-metrics/SKILL.md)** — Discover metrics, get labels, write PromQL queries
-
-## Multi-Query Reference
-
-- [multi-query.md](multi-query.md) — Multi-datasource queries and formula expressions with `analyze-telemetry`
+- **[kubesense-multi-query](./kubesense-multi-query/SKILL.md)** — Run correlated queries across logs/traces/metrics and compute derived values (error rate, ratios) with `analyze-telemetry`
