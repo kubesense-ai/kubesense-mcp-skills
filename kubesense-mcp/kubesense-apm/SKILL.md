@@ -9,11 +9,11 @@ Tools for querying distributed traces and spans from Kubernetes clusters.
 
 ## Tools
 
-| Tool                      | Purpose                                      |
-| ------------------------- | -------------------------------------------- |
-| `get-trace-or-log-fields` | Discover available fields for traces         |
-| `search-traces`           | Browse raw trace/span records (max 10 rows)  |
-| `analyze-traces`          | Run aggregated analysis on traces            |
+| Tool                      | Purpose                                     |
+| ------------------------- | ------------------------------------------- |
+| `get-trace-or-log-fields` | Discover available fields for traces        |
+| `search-traces`           | Browse raw trace/span records (max 10 rows) |
+| `analyze-traces`          | Run aggregated analysis on traces           |
 
 ## Discovery-First Rule
 
