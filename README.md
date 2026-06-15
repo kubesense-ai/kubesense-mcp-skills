@@ -4,3 +4,9 @@ Install these skills via [skills.sh](https://skills.sh/) into your choice of cod
 ```sh
 npx skills add kubesense-ai/kubesense-mcp-skills
 ```
+
+## Install dashboard skill only
+
+```sh
+npx skills add kubesense-ai/kubesense-mcp-skills --skill kubesense-dashboards
+```
