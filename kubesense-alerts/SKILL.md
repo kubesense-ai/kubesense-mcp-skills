@@ -250,6 +250,28 @@ ns threshold, `unit: "ns"`):
 
 (Exported rules import the same way — so "tweak this rule" = Export → edit JSON → Import.)
 
+## Multiple alerts → ONE array (bulk import)
+
+When you generate **more than one rule** — e.g. migrating several Datadog monitors,
+or a `warning`+`critical` split, or one rule per service — output a **single JSON
+array**, not separate per-rule snippets:
+
+```json
+[
+  { "name": "…", "query_type": "traces",  "query_config": [ … ], "threshold_operator": "greater_than", "threshold_value": 500000000, … },
+  { "name": "…", "query_type": "metrics", "query_config": [ … ], "threshold_operator": "greater_than_or_equal", "threshold_value": 0.8, … }
+]
+```
+
+- Each element is the **exact same object shape** as a single rule (above) — just listed in an array.
+- The user **bulk-imports** the array: it's validated server-side, returns a **dry-run
+  review** (per-rule valid / field problems), then creates the valid ones — invalid
+  rules are reported, not silently dropped.
+- Field validation is the same as a single rule, so the same EXACT field names apply
+  to every element (a wrong group-by field is rejected up front, per rule).
+- Emit **one** array even for two rules. Only emit a bare object when there is exactly
+  one rule.
+
 ## Datadog migration
 
 To convert a Datadog monitor, read **[datadog-migration.md](./datadog-migration.md)**.
@@ -257,7 +279,7 @@ To convert a Datadog monitor, read **[datadog-migration.md](./datadog-migration.
 ## Rules
 
 1. **Discover first** — validate every metric/field/group-by name via MCP before emitting.
-2. Output the **import/export shape** (flat fields, plain durations, `notification_channel_ids`), in a single JSON code block.
+2. Output the **import/export shape** (flat fields, plain durations, `notification_channel_ids`). **One rule → a single JSON object; multiple rules → ONE JSON array** `[ {…}, {…} ]` (see "Multiple alerts → ONE array"). One code block either way — never separate per-rule snippets.
 3. Each query needs a unique `label`; formula `expression` references labels (`(B/A)*100`).
 4. `metric_query_label` = the thresholded query (single → its label; formula → formula label).
 5. Logs use `level`/`pod_name`/`container_name`; traces use `status`/`pod`/`container`. Give logs/traces filters as BOTH `raw_filters` and `filters`.
@@ -267,3 +289,4 @@ To convert a Datadog monitor, read **[datadog-migration.md](./datadog-migration.
 9. `notification_channel_ids` are real ids from the channels endpoint; leave `[]` if unspecified.
 10. Prefer **starting from an exported reference rule** for unfamiliar shapes — it guarantees the `query_config` is valid.
 11. Tell the user to import via the UI and review before creating — never claim the alert was created.
+12. **Multiple alerts (incl. Datadog bulk migration) → emit ONE JSON array of rule objects**, not N separate snippets, so they bulk-import in one pass.
