@@ -1,5 +1,5 @@
 ---
-title: KubeSense Alert Rule Generator
+title: kubesense-alerts
 description: Generate KubeSense alert rule JSON (the import/export format) from user requirements over metrics, logs, and traces — threshold, change, and no-data conditions — for import-and-review in the Alerts UI, and translate Datadog monitors into equivalent KubeSense alerts.
 ---
 
