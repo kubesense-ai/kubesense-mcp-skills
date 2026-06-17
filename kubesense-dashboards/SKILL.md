@@ -16,6 +16,23 @@ User asks to:
 - "Build a dashboard with panels for..."
 - "Generate a dashboard preset"
 
+## Discover Fields First (KubeSense MCP)
+
+If the KubeSense MCP server is available, use it to discover the real fields,
+metrics, and labels before writing queries — never guess field names used for
+grouping (`groupBy`), filtering (`filters`), or aggregation.
+
+| To find...                                  | MCP tool                  |
+| ------------------------------------------- | ------------------------- |
+| Log/trace fields for `groupBy` & `filters`  | `get-trace-or-log-fields` |
+| Available metric names (`selectedMetric`)   | `get-available-metrics`   |
+| Labels of a metric (for `by` aggregations)  | `get-metric-labels`       |
+
+Use the discovered field names verbatim (including whether a field is an
+attribute — set `is_attribute` accordingly). If the MCP server is **not**
+available, fall back to the user-provided field names and note that they should
+be verified against the live datasource.
+
 ## Output Format
 
 Always output the complete dashboard JSON in this structure:
@@ -24,15 +41,29 @@ Always output the complete dashboard JSON in this structure:
 {
   "name": "<dashboard name>",
   "description": "<description>",
-  "preset": {
-    "gridLayout": [],
-    "panels": [],
-    "variables": [],
-    "subGrids": [],
-    "subGridLayout": []
-  }
+  "preset": "<stringified JSON of the preset object>"
 }
 ```
+
+> [!IMPORTANT]
+> `preset` is a **JSON string**, NOT a nested object. The import validator
+> defines `preset: z.string()` and only runs the preset schema check after
+> `JSON.parse(preset)`. If you emit `preset` as a raw object, import fails with
+> _"does not match the dashboard preset schema"_.
+>
+> The object that gets stringified has this shape:
+>
+> ```json
+> {
+>   "gridLayout": [],
+>   "panels": [],
+>   "variables": [],
+>   "subGrids": [],
+>   "subGridLayout": []
+> }
+> ```
+>
+> Only `gridLayout` and `panels` are required; the rest default to `[]`.
 
 ## Schema Reference
 
@@ -59,7 +90,6 @@ Always output the complete dashboard JSON in this structure:
   "showLabel": false,
   "showPercentageChange": false,
   "percentageChangeColorMode": "standard",
-  "mergeTables": false,
   "legendVisibility": true,
   "legendPlacement": "bottom",
   "tooltipMode": "single",
@@ -71,6 +101,11 @@ Always output the complete dashboard JSON in this structure:
   "colorPalette": "default"
 }
 ```
+
+> [!NOTE]
+> `mergeTables` accepts only the literal value `true` (`z.literal(true)`). Omit
+> it entirely unless you are merging multiple table queries on a shared group-by
+> key — in that case set `"mergeTables": true`. Never emit `"mergeTables": false`.
 
 ### Metrics Query
 
@@ -120,6 +155,13 @@ Always output the complete dashboard JSON in this structure:
   "fieldConfig": {}
 }
 ```
+
+> [!NOTE]
+> `chart_type` is a query-level field with its own enum, separate from the
+> panel-level `panelType`. Valid values: `table`, `bar`, `pie`, `topList`,
+> `timeseries` (lowercase). It does **not** accept `stat` or `timeSeries` — use
+> `panelType` for those distinctions and set `chart_type` to one of the values
+> above (e.g. `timeseries` for a `timeSeries` panel, `table` for a `stat` panel).
 
 ### Formula Query
 
@@ -211,17 +253,73 @@ Always output the complete dashboard JSON in this structure:
 - `w`: 1-12
 - `h`: height in 100px units
 
-### Variable
+### Variable (`dashboardVariableSchema`)
+
+A variable has a top-level `name` + `description` and a `meta` object that is a
+**discriminated union on `meta.variableType`**. There is no `id`, `label`, or
+`multiSelect` field.
 
 ```json
 {
-  "id": "uuid",
-  "name": "variable_name",
-  "label": "Display Label",
-  "variableType": "textbox | custom | traces | logs | metrics",
-  "multiSelect": false
+  "name": "service",
+  "description": "",
+  "meta": { "variableType": "...", "...": "..." }
 }
 ```
+
+- `name`: required, non-empty, max 20 chars, must match `^[a-zA-Z_][a-zA-Z0-9_]*$`.
+- `description`: required string (use `""` if none — it is NOT optional).
+- `meta`: required; shape depends on `variableType`.
+
+`selectType` (where present) is `"single"` or `"multiple"`.
+
+**Textbox** (`variableType: "textbox"`):
+
+```json
+{ "variableType": "textbox", "defaultValue": "", "value": "" }
+```
+
+**Static / custom list** (`variableType: "custom"`):
+
+```json
+{
+  "variableType": "custom",
+  "options": ["a", "b"],
+  "value": [],
+  "selectType": "multiple"
+}
+```
+
+`options` is required and must have at least 1 entry.
+
+**Traces / Logs** (`variableType: "traces"` or `"logs"`):
+
+```json
+{
+  "variableType": "traces",
+  "fieldMeta": { "field": "service", "type": "string", "is_attribute": false },
+  "value": [],
+  "selectType": "single",
+  "filters": {},
+  "filterMode": "MFD"
+}
+```
+
+`fieldMeta.field` is required. `filterMode` is `"MFD"` or `"ADVANCED_QUERY"`.
+
+**Metrics** (`variableType: "metrics"`):
+
+```json
+{
+  "variableType": "metrics",
+  "metric": "metric_name",
+  "fieldMeta": { "field": "service", "type": "string", "is_attribute": false },
+  "value": [],
+  "selectType": "single"
+}
+```
+
+`metric` and `fieldMeta` are both required.
 
 ### Sub-Grid (Row)
 
@@ -266,4 +364,8 @@ Always output the complete dashboard JSON in this structure:
 7. Include `config` on every panel with defaults unless user specifies otherwise
 8. For time series panels, typically use `rate()` + aggregation as first two functions
 9. Empty `filters: {}` is valid — no need to populate unless user specifies filters
-10. Generate UUIDs for variable IDs and sub-grid IDs
+10. Generate UUIDs for sub-grid IDs (`subGrids[].id`). Variables have no `id`.
+11. `preset` MUST be a stringified JSON string in the final output, not a nested object
+12. `chart_type` (query-level) is one of `table | bar | pie | topList | timeseries` — never `stat`/`timeSeries`
+13. Only set `mergeTables: true` when merging table queries; otherwise omit it
+14. When the KubeSense MCP server is available, discover fields/metrics/labels with `get-trace-or-log-fields`, `get-available-metrics`, and `get-metric-labels` before writing queries — don't guess grouping/filtering field names
