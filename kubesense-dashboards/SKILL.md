@@ -94,18 +94,70 @@ Always output the complete dashboard JSON in this structure:
   "legendPlacement": "bottom",
   "tooltipMode": "single",
   "yAxisLabelFormatter": "auto",
+  "yAxisMin": null,
+  "yAxisMax": null,
+  "yAxisIncludeZero": false,
   "step": "auto",
-  "thresholds": [],
-  "enableThresholds": true,
+  "thresholds": [{ "threshold": "-Infinity", "color": "#56a64b", "isDefault": true }],
+  "thresholdDisplayMode": "off",
   "valueOptions": { "show": "calculate", "calculation": "last" },
-  "colorPalette": "default"
+  "colorScheme": { "type": "palette", "palette": "default" },
+  "tableSettings": { "columnWidths": {} },
+  "alignColumns": []
 }
 ```
+
+Field notes:
+
+- `yAxisMin` / `yAxisMax`: hard axis bounds (`number | null`). `null` = auto.
+- `yAxisIncludeZero`: force the Y-axis to include zero even if the data doesn't cross it.
+- `thresholdDisplayMode`: how thresholds render — `off`, `lines`, `lines_dashed`,
+  `filled_regions`, `filled_regions_and_lines`, `filled_regions_and_lines_dashed`.
+- `colorScheme`: see [Color Scheme](#color-scheme-colorscheme) below.
+- `tableSettings.columnWidths`: per-column pixel widths, keyed by column id.
+- `alignColumns`: maps dimension columns across queries so merged-table rows align
+  (e.g. `namespace` ↔ `k8s_namespace_name`). Each entry:
+  `{ "id": "...", "displayName": "...", "mappings": [{ "queryLabel": "A", "field": "namespace", "is_attribute": false }] }`.
 
 > [!NOTE]
 > `mergeTables` accepts only the literal value `true` (`z.literal(true)`). Omit
 > it entirely unless you are merging multiple table queries on a shared group-by
 > key — in that case set `"mergeTables": true`. Never emit `"mergeTables": false`.
+
+> [!NOTE]
+> The legacy keys `colorPalette` (string) and `enableThresholds` (boolean) are
+> still accepted on import — a migration rewrites `colorPalette` → `colorScheme`
+> and `enableThresholds` → `thresholdDisplayMode` (`true` → `lines_dashed`,
+> `false` → `off`). **Emit the new keys** (`colorScheme`, `thresholdDisplayMode`)
+> so the full range of options is available; the legacy forms are binary-only and
+> a `colorPalette` value outside the allowed palette keys silently reverts to
+> `default`.
+
+### Color Scheme (`colorScheme`)
+
+`colorScheme` is a discriminated union on `type`:
+
+```json
+// Named palette (default)
+{ "type": "palette", "palette": "default" }
+
+// Single solid color (hex)
+{ "type": "single", "color": "#5B61E2" }
+
+// Shades of one color (hex)
+{ "type": "shades", "color": "#5B61E2" }
+
+// Color by threshold buckets, reduced per series
+{ "type": "thresholds", "seriesReducer": "last" }
+
+// Explicit per-series colors, applied in order (hex only)
+{ "type": "custom", "colors": ["#ff4d4f", "#56a64b"] }
+```
+
+- `palette` must be one of the [Color Palette Keys](#color-palette-keys).
+- `seriesReducer` is one of `last`, `min`, `max`.
+- `custom.colors` must be hex codes (`#rgb`, `#rrggbb`, `#rgba`, or `#rrggbbaa`),
+  at least one entry. Useful for semantic colors (e.g. alert severity).
 
 ### Metrics Query
 
@@ -115,6 +167,7 @@ Always output the complete dashboard JSON in this structure:
   "label": "A",
   "selectedMetric": "metric_name",
   "functions": [],
+  "promql": "",
   "filters": {},
   "queryMode": "builder",
   "visible": true,
@@ -124,6 +177,11 @@ Always output the complete dashboard JSON in this structure:
   "fieldConfig": {}
 }
 ```
+
+> [!NOTE]
+> `promql` is the raw PromQL string. Leave it `""` when using the `builder`
+> `queryMode` (the builder derives PromQL from `selectedMetric` + `functions`).
+> Set it only when `queryMode` is `"code"`.
 
 ### Logs/Traces Query
 
@@ -198,7 +256,7 @@ Always output the complete dashboard JSON in this structure:
 }
 ```
 
-**Top/Bottom:**
+**Top/Bottom:** (`by` is one of `max | min | avg | median | last`)
 
 ```json
 {
@@ -221,7 +279,7 @@ Always output the complete dashboard JSON in this structure:
 }
 ```
 
-**Comparison:**
+**Comparison:** (`arg_name` is `than` or `to`)
 
 ```json
 {
@@ -335,7 +393,22 @@ A variable has a top-level `name` + `description` and a `meta` object that is a
 
 ## Y-Axis Formatter Options
 
-`auto`, `bytes`, `seconds`, `milliseconds`, `percent`, `percent_unit`, `ops`, `bps`, `short`, `celsius`, `fahrenheit`, `none`
+`yAxisLabelFormatter` accepts the leaf `value` of any unit in the Y-axis unit
+picker (`Y_AXIS_UNIT_CASCADER_OPTIONS`) — a large set covering data, time,
+throughput, currency, and scientific units. Common values:
+
+- **General:** `auto`, `number`, `raw`, `percentage`
+- **Data (size):** `bytes_iec`, `bytes_si`, `bits_iec`, `bits_si` (and specific
+  units like `kibibytes`, `mebibytes`, `gibibytes`, `kilobytes`, `megabytes`, …)
+- **Throughput:** `bytes_per_sec_iec`, `bytes_per_sec_si`, `bits_per_sec_iec`,
+  `bits_per_sec_si` (and specific rates like `megabytes_per_sec`, `gigabits_per_sec`, …)
+- **Time:** `nanoseconds`, `microseconds`, `milliseconds`, `seconds`, `minutes`,
+  `hours`, `days`
+
+> [!NOTE]
+> These are the leaf `value` strings, not display labels. There is no `bytes`,
+> `percent`, `bps`, `short`, or `none` — use `bytes_iec`, `percentage`,
+> `bits_per_sec_si`, `number`, and `auto` respectively.
 
 ## Rollup Time Ranges
 
@@ -347,11 +420,14 @@ A variable has a top-level `name` + `description` and a `meta` object that is a
 
 ## Color Palette Keys
 
-`default`, `classic`, `warm`, `cool`, `vivid`, `muted`
+Used as `colorScheme.palette` (`type: "palette"`): `default`, `success`,
+`warning`, `error`.
 
 ## Threshold Colors
 
-`green`, `yellow`, `orange`, `red`, `blue`, `purple`
+The `color` on a threshold is a string; the built-in values are **hex codes**:
+`#56a64b` (green), `#e24d42` (red), `#ef843c` (orange). The default threshold
+color is `#56a64b`. Any hex string is accepted.
 
 ## Rules
 
