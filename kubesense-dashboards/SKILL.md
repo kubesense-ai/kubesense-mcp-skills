@@ -1,5 +1,5 @@
 ---
-title: KubeSense Dashboard JSON Generator
+title: kubesense-dashboards
 description: Generate complete KubeSense dashboard JSON configurations (preset format) based on user requirements for panels, metrics, logs, traces, variables, and grid layouts.
 ---
 
