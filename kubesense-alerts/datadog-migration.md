@@ -46,6 +46,7 @@ avg(last_5m) : avg:system.cpu.user{env:prod} by {host} > 80
 | `{env:prod}` (scope) | filters → PromQL label matcher `{env="prod"}` or `raw_filters`/`filters` |
 | `by {host}` | `groupBy` → PromQL `by (host)` (verify the KubeSense label name, often `node`/`host`) |
 | `> 80` | `threshold_operator: "greater_than"`, `threshold_value: 80` |
+| `http.status_code:40*` / `http.status_class:4xx` (status-code class or wildcard) | an **advanced-query** filter, NOT an enumerated list: `40*` → `return_code LIKE "40_"`; `4xx`/`status_class:4xx` → `return_code LIKE "4__"`; `5xx` → `"5__"`. See "Advanced-query filters" in [SKILL.md](./SKILL.md). |
 
 ### Operators
 

@@ -104,7 +104,7 @@ Note the **flat** fields (`threshold_operator`/`threshold_value`, not a nested
 | `route_by_labels` | `false` route by listed channels; `true` route via each channel's label matchers |
 | `no_data_state` | `normal` resolve (default) \| `firing` fire when no data (metric vanished) \| `previous` hold state |
 | `include_samples` / `sample_limit` | LOGS rules only — attach up to N matching rows to notifications |
-| `unit` | display only (never affects evaluation): `percent`, `percent_unit`, `ns` (trace duration), `ms`, `bytes`, `short`, … |
+| `unit` | display only (never affects evaluation) — but **set it to match the value** so the chart/notifications read correctly: `ns` for trace duration/latency · `bytes` for byte metrics (memory/disk/network) · `percent` for ratios & error-rates (a formula `×100`) · `percent_unit` for 0–1 fractions (e.g. CPU usage) · `ms` for millisecond latencies · `short` or `""` for plain counts. |
 | `enabled` | `true` |
 
 ## Query objects (`query_config[]`)
@@ -239,6 +239,28 @@ ns threshold, `unit: "ns"`):
 }
 ```
 
+### Advanced-query filters (ranges, wildcards, OR)
+
+`raw_filters` matches EXACT values, so a Datadog status *class* like
+`http.status_class:4xx` turns into a brittle enumeration (`["400","401",…]`) that
+misses codes. Instead use the **advanced-query** filter mode — a single SQL-like
+WHERE string under the `advanced_query` key (logs and traces):
+
+```json
+"raw_filters": { "advanced_query": ["app_service = \"flights\" AND clustered_resource = \"/app/v1/listings\" AND subtype = \"POST\" AND return_code LIKE \"4__\""] },
+"filters":     { "advanced_query": ["app_service = \"flights\" AND clustered_resource = \"/app/v1/listings\" AND subtype = \"POST\" AND return_code LIKE \"4__\""] }
+```
+
+- Use the **storage field names**: `return_code`, `clustered_resource`, `subtype`,
+  `app_service`, `kind`, `protocol_type`, `node_name`, `pod_name`, `container_name`
+  (the advanced-query editor and engine key by these).
+- Operators: `=`, `!=`, `<` `>` `<=` `>=`, `IN (...)`, `LIKE`/`ILIKE` (`_` = one
+  char, `%` = any). So `return_code LIKE "4__"` = any 4xx, `"5__"` = any 5xx.
+  Combine with `AND`/`OR`, group with `()`.
+- Double-quote values with `/`, spaces, or wildcards.
+- **Prefer this over enumerating status codes** — exact coverage, survives new codes.
+- Put the SAME string in both `raw_filters` and `filters`.
+
 ### Formula (ratio / error-rate)
 
 ```json
@@ -309,3 +331,5 @@ To convert a Datadog monitor, read **[datadog-migration.md](./datadog-migration.
 10. Prefer **starting from an exported reference rule** for unfamiliar shapes — it guarantees the `query_config` is valid.
 11. Tell the user to import via the UI and review before creating — never claim the alert was created.
 12. **Multiple alerts (incl. Datadog bulk migration) → emit ONE JSON array of rule objects**, not N separate snippets, so they bulk-import in one pass.
+13. **Set `unit` to match the value** — `ns` for trace duration/latency, `bytes` for byte metrics, `percent` for ratio/error-rate formulas, `percent_unit` for 0–1 fractions, `ms`/`short` otherwise.
+14. For a status/code **class** (4xx, 5xx) or any range, use an **advanced-query** filter (`return_code LIKE "4__"`), not an enumerated `raw_filters` list.
