@@ -66,7 +66,7 @@ The `filters` parameter in `search-logs`, `search-traces`, `analyze-logs`, and `
 | ----------------- | ---------------------------------- | -------------------------------------------------- |
 | `=`               | `level = 'ERROR'`                  | Exact match                                        |
 | `!=`              | `status != 'ok'`                   | Not equal                                          |
-| `>` `<` `>=` `<=` | `duration > 1000000`               | Comparisons; use unquoted numbers for float fields |
+| `>` `<` `>=` `<=` | `duration_ms > 500`                | Comparisons; use unquoted numbers for float fields. Filter trace latency via `duration_ms` (ms), not the ns `duration` field |
 | `IN`              | `level IN ('ERROR', 'WARN')`       | Matches any value in list                          |
 | `NOT IN`          | `namespace NOT IN ('kube-system')` | Excludes values in list                            |
 | `LIKE`            | `workload LIKE '%api%'`            | `%` is wildcard                                    |
@@ -85,7 +85,7 @@ status = 'error' AND (workload = 'api-server' OR workload = 'auth-service')
 ### Value Types
 
 - **Strings** — always single-quoted: `workload = 'my-service'`
-- **Numbers** — unquoted: `duration > 5000000`
+- **Numbers** — unquoted: `duration_ms > 500` (filter trace latency in ms via `duration_ms`)
 
 ### Examples
 
@@ -98,7 +98,7 @@ status = 'error' AND protocol_type = 'HTTP' AND return_code = '500'
 ```
 
 ```
-duration > 5000000 AND workload = 'checkout-service'
+duration_ms > 500 AND workload = 'checkout-service'
 ```
 
 ## Datasource Skills

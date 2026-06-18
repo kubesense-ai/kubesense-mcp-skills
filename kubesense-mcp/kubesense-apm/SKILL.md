@@ -40,7 +40,8 @@ get-trace-or-log-fields  →  search-traces / analyze-traces
 | -------------------- | ------ | -------------------------------------------------- |
 | `status`             | string | ok, error                                          |
 | `protocol_type`      | string | HTTP, gRPC, TCP, MongoDB, Redis, MySQL, PostgreSQL |
-| `duration`           | float  | Span duration in **microseconds**                  |
+| `duration`           | float  | Span duration in **nanoseconds**. Use for **aggregations** (`p99`/`p95`/`avg`/…), NOT for filtering |
+| `duration_ms`        | float  | Span duration in **milliseconds**. Use this for **filter comparisons** (`duration_ms > 500`). Not returned by field discovery |
 | `workload`           | string | Kubernetes workload name                           |
 | `namespace`          | string | Kubernetes namespace                               |
 | `cluster`            | string | Cluster name                                       |
@@ -122,7 +123,10 @@ get-trace-or-log-fields  →  search-traces / analyze-traces
 
 ## Duration Units
 
-`duration` is in **microseconds**. Divide by 1,000 for ms, by 1,000,000 for seconds.
+There are **two** duration fields, and which you use depends on the operation:
+
+- **`duration`** — span duration in **nanoseconds** (`uint64`). Use in **aggregations** (`p99`/`p95`/`p90`/`p75`/`p50`/`avg`/`sum`/`min`/`max`) and `groupBy`/return `fields`. To convert: divide by 1,000,000 for ms, by 1,000,000,000 for seconds.
+- **`duration_ms`** — span duration in **milliseconds**. Use in **filter comparisons** — e.g. `duration_ms > 500` (500ms), `duration_ms >= 1000` (1s). Do NOT filter on the raw `duration` field. `duration_ms` is **not returned by `get-trace-or-log-fields`** (field discovery), but it is filterable — use it verbatim.
 
 ## Query Types
 
@@ -150,7 +154,7 @@ The `filters` parameter accepts a SQL-like WHERE clause.
 | ----------------- | ---------------------------------- | -------------------------------------------------- |
 | `=`               | `status = 'error'`                 | Exact match                                        |
 | `!=`              | `status != 'ok'`                   | Not equal                                          |
-| `>` `<` `>=` `<=` | `duration > 1000000`               | Comparisons; use unquoted numbers for float fields |
+| `>` `<` `>=` `<=` | `duration_ms > 500`                | Comparisons; use unquoted numbers for float fields. Filter latency via `duration_ms` (ms), not `duration` |
 | `IN`              | `return_code IN ('500', '502')`    | Matches any value in list                          |
 | `NOT IN`          | `namespace NOT IN ('kube-system')` | Excludes values in list                            |
 | `LIKE`            | `workload LIKE '%api%'`            | `%` is wildcard                                    |
@@ -163,4 +167,4 @@ status = 'error' AND (workload = 'api-server' OR workload = 'auth-service')
 ```
 
 - **Strings** — always single-quoted: `workload = 'my-service'`
-- **Numbers** — unquoted: `duration > 5000000`
+- **Numbers** — unquoted: `duration_ms > 500` (filter latency in ms via `duration_ms`)
