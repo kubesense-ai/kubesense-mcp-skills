@@ -239,39 +239,22 @@ ns threshold, `unit: "ns"`):
 }
 ```
 
-### Advanced-query filters (ranges, wildcards, OR)
-
-`raw_filters` matches EXACT values, so a Datadog status *class* like
-`http.status_class:4xx` turns into a brittle enumeration (`["400","401",…]`) that
-misses codes. Instead use the **advanced-query** filter mode — a single SQL-like
-WHERE string under the `advanced_query` key (logs and traces):
-
-```json
-"raw_filters": { "advanced_query": ["app_service = \"flights\" AND clustered_resource = \"/app/v1/listings\" AND subtype = \"POST\" AND return_code LIKE \"4__\""] },
-"filters":     { "advanced_query": ["app_service = \"flights\" AND clustered_resource = \"/app/v1/listings\" AND subtype = \"POST\" AND return_code LIKE \"4__\""] }
-```
-
-- Use the **storage field names**: `return_code`, `clustered_resource`, `subtype`,
-  `app_service`, `kind`, `protocol_type`, `node_name`, `pod_name`, `container_name`
-  (the advanced-query editor and engine key by these).
-- Operators: `=`, `!=`, `<` `>` `<=` `>=`, `IN (...)`, `LIKE`/`ILIKE` (`_` = one
-  char, `%` = any). So `return_code LIKE "4__"` = any 4xx, `"5__"` = any 5xx.
-  Combine with `AND`/`OR`, group with `()`.
-- Double-quote values with `/`, spaces, or wildcards.
-- **Prefer this over enumerating status codes** — exact coverage, survives new codes.
-- Put the SAME string in both `raw_filters` and `filters`.
-
 ### Formula (ratio / error-rate)
 
 ```json
 "query_config": [
-  { "label": "A", "selectedMode": "logs", "value_operation": "row_count", "visible": true },
-  { "label": "B", "selectedMode": "logs", "value_operation": "row_count", "raw_filters": {"level":["ERROR"]}, "filters": {"level":["ERROR"]}, "visible": true },
+  { "label": "A", "selectedMode": "logs", "value_operation": "row_count", "visible": false },
+  { "label": "B", "selectedMode": "logs", "value_operation": "row_count", "raw_filters": {"level":["ERROR"]}, "filters": {"level":["ERROR"]}, "visible": false },
   { "label": "C", "selectedMode": "formula", "expression": "(B/A)*100", "visible": true }
 ]
 ```
 
 - `metric_query_label`: `"C"`. `unit`: `"percent"`.
+- **Show only the evaluated query on the chart.** Set `visible: true` on the
+  `metric_query_label` query (here `C`, the error rate) and `visible: false` on the
+  helper queries (`A`, `B`). They're still **executed** (the formula needs them) and
+  the engine ignores `visible` for evaluation — it only hides their raw-count series
+  from the graph, so the chart shows the error-rate line alone, not the two counts.
 
 ## Condition types
 
@@ -333,3 +316,4 @@ To convert a Datadog monitor, read **[datadog-migration.md](./datadog-migration.
 12. **Multiple alerts (incl. Datadog bulk migration) → emit ONE JSON array of rule objects**, not N separate snippets, so they bulk-import in one pass.
 13. **Set `unit` to match the value** — `ns` for trace duration/latency, `bytes` for byte metrics, `percent` for ratio/error-rate formulas, `percent_unit` for 0–1 fractions, `ms`/`short` otherwise.
 14. For a status/code **class** (4xx, 5xx) or any range, use an **advanced-query** filter (`return_code LIKE "4__"`), not an enumerated `raw_filters` list.
+15. **Chart shows only the evaluated query.** `visible: true` on the `metric_query_label` query; `visible: false` on every other query (e.g. the formula's helper counts). Helpers still run; this only hides their series from the graph.
