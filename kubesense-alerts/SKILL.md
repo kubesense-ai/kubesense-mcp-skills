@@ -156,16 +156,35 @@ Each query has a `label` (A, B, C…), `selectedMode`, and `visible: true`.
   "raw_filters": { "status": ["error"] }, "filters": { "status": ["error"] } }
 ```
 
-- **Trace field names** — use these EXACT strings (intersection of the webapp's
-  `TRACE_COLUMNS` and the engine's `TraceAllowedColumns`; anything else freezes the
-  rule). Write the **catalog name**, not the underlying storage column:
-  - grouping / scope: `workload`, `app_service`, `namespace`, `cluster`, `node`,
-    `pod`, `container`, `instance`, `server`, `client`, `server_namespace`,
+- ⚠️ **Trace FILTER keys and GROUP-BY fields use DIFFERENT names** — the webapp has
+  two trace catalogs. Get this wrong and the editor silently drops the field.
+  - **`raw_filters` / `filters` keys → use the STORAGE name** (the trace filter
+    dropdown is keyed by storage columns; the engine accepts them):
+
+    | intent | filter key |
+    |---|---|
+    | service | `app_service` |
+    | resource / endpoint | `clustered_resource` |
+    | HTTP method | `subtype` |
+    | HTTP status code | `return_code` |
+    | role (client/server) | `kind` |
+    | protocol | `protocol_type` |
+    | node | `node_name` |
+    | pod / instance | `pod_name` |
+    | container | `container_name` |
+    | status (ok/error), workload, namespace, cluster, source, region, app_version, server, client, *_namespace, operation_name, partner_cluster | same name |
+
+  - **`groupBy[].field` → use the CATALOG name** (the engine strictly validates
+    group-by against `TraceAllowedColumns`): `workload`, `app_service`, `namespace`,
+    `cluster`, `node`, `pod`, `container`, `server`, `client`, `server_namespace`,
     `client_namespace`, `source`, `region`, `app_version`, `operation_name`,
-    `partner_cluster`, `customer_identifier`
-  - request attrs: `status`, `protocol`, `role`, `method`, `resource`,
-    `status_code` (alias `return_code`)
-  - value: `duration`
+    `partner_cluster`, `customer_identifier`, `status`, `protocol`, `role`, `method`,
+    `resource`.
+  - **value field**: `duration`.
+  - Do NOT use `status_code`, `resource`, `method` as *filter* keys (editor drops
+    them — use `return_code`, `clustered_resource`, `subtype`). Do NOT use
+    `clustered_resource`/`subtype` as *group-by* fields (engine freezes — use
+    `resource`/`method`).
 - **For APM "by service"**, either `app_service` (the instrumented service name)
   or `workload` (the k8s workload) works. Note: on aggregated windows (≥60s, which
   latency/count rules always use) `app_service` resolves to the `app_name` rollup
