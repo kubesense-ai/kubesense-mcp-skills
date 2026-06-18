@@ -335,7 +335,9 @@ A variable has a top-level `name` + `description` and a `meta` object that is a
 
 ## Y-Axis Formatter Options
 
-`auto`, `bytes`, `seconds`, `milliseconds`, `percent`, `percent_unit`, `ops`, `bps`, `short`, `celsius`, `fahrenheit`, `none`
+`auto`, `bytes`, `nanoseconds`, `microseconds`, `milliseconds`, `seconds`, `percent`, `percent_unit`, `ops`, `bps`, `short`, `celsius`, `fahrenheit`, `none`
+
+Use `nanoseconds` for any panel aggregating over trace `duration` (it auto-scales ns → µs/ms/s).
 
 ## Rollup Time Ranges
 
@@ -344,6 +346,22 @@ A variable has a top-level `name` + `description` and a `meta` object that is a
 ## Aggregation Functions (logs/traces)
 
 `row_count`, `unique_count`, `avg`, `sum`, `max`, `min`, `p99`, `p95`, `p90`, `p75`, `p50`
+
+## Trace Duration Fields
+
+Traces expose **two** duration fields — pick by operation:
+
+- **`duration`** — span duration in **nanoseconds**. Use in panel `aggregation.fields`
+  (latency `p99`/`p95`/`avg`/…) and in `groupBy`. This is the field returned by
+  `get-trace-or-log-fields`. The aggregated value is in **nanoseconds**, so set the
+  panel's `config.yAxisLabelFormatter: "nanoseconds"` — the formatter auto-scales
+  ns → µs/ms/s for display. (Don't use a formula to pre-convert; just pick the
+  `nanoseconds` unit.)
+- **`duration_ms`** — span duration in **milliseconds**. Use when **filtering** by
+  latency. `duration_ms` is **not returned by field discovery** — use it verbatim
+  with `is_attribute: false`. Because MFD filters are equality-based, express a
+  latency threshold with `filterMode: "ADVANCED_QUERY"` and a `query` like
+  `duration_ms > 500`. Never filter on the raw ns `duration` field.
 
 ## Color Palette Keys
 
