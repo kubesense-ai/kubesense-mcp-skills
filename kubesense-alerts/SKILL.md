@@ -145,6 +145,8 @@ Each query has a `label` (A, B, C…), `selectedMode`, and `visible: true`.
   but absent from `LogsAllowedColumns`, so they freeze a rule): `env_type` and the
   log body. Stick to the list above.
 - Provide BOTH `raw_filters` and `filters` with the same `{ field: [values] }` map.
+  For the filter format itself (the `{ field: [values] }` membership map and how it
+  relates to the MCP/dashboard formats), see **[filtering.md](./filtering.md)** → §3.
 
 ### Traces (count / latency)
 

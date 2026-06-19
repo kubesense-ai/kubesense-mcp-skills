@@ -33,6 +33,14 @@ attribute — set `is_attribute` accordingly). If the MCP server is **not**
 available, fall back to the user-provided field names and note that they should
 be verified against the live datasource.
 
+## Filtering
+
+For how to populate the query/variable `filters` object and `filterMode` (the
+`MFD` value-map form, the `ADVANCED_QUERY` WHERE-string form, attributes via the
+`@_@` key prefix, and latency filtering with `duration_ms`), read
+**[filtering.md](./filtering.md)** → §2 _Dashboard presets_. Empty `filters: {}`
+with the default `MFD` mode means no filtering.
+
 ## Output Format
 
 Always output the complete dashboard JSON in this structure:

@@ -150,6 +150,10 @@ All tools require `from_time` and `to_time` as ISO 8601 strings. Start narrow (1
 
 The `filters` parameter accepts a SQL-like WHERE clause.
 
+> See **[filtering.md](../filtering.md)** for the full cross-surface filtering
+> reference (operators, attributes, latency, and how this WHERE string relates to
+> dashboard/alert filter formats).
+
 | Operator          | Example                            | Notes                                              |
 | ----------------- | ---------------------------------- | -------------------------------------------------- |
 | `=`               | `status = 'error'`                 | Exact match                                        |

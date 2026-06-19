@@ -112,3 +112,7 @@ For detailed field references, examples, and query patterns, read the datasource
 ## Multi-Query Reference
 
 - [multi-query.md](multi-query.md) — Multi-datasource queries and formula expressions with `analyze-telemetry`
+
+## Filtering Reference
+
+- [filtering.md](./filtering.md) — Cross-surface filter formats (MCP WHERE strings, dashboard `filterMode`, alert maps), operators, attributes, and latency filtering
