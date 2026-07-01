@@ -38,17 +38,18 @@ Use `search` to filter by field name (e.g. `"search": "namespace"`). Pass `""` t
 
 ### Built-in Log Fields
 
-| Field            | Type   | Values                                        |
-| ---------------- | ------ | --------------------------------------------- |
-| `workload`       | string | Kubernetes workload name                      |
-| `namespace`      | string | Kubernetes namespace                          |
-| `cluster`        | string | Cluster name                                  |
-| `pod_name`       | string | Pod name                                      |
-| `container_name` | string | Container name                                |
-| `node_name`      | string | Node name                                     |
-| `level`          | string | INFO, WARN, ERROR, DEBUG, TRACE, FATAL, PANIC |
-| `format`         | string | json, klog, nginx                             |
-| `body_length`    | float  | Log body length in characters                 |
+| Field            | Type    | Values                                        |
+| ---------------- | ------- | --------------------------------------------- |
+| `workload`       | string  | Kubernetes workload name                      |
+| `namespace`      | string  | Kubernetes namespace                          |
+| `cluster`        | string  | Cluster name                                  |
+| `pod_name`       | string  | Pod name                                      |
+| `container_name` | string  | Container name                                |
+| `node_name`      | string  | Node name                                     |
+| `level`          | string  | INFO, WARN, ERROR, DEBUG, TRACE, FATAL, PANIC |
+| `format`         | string  | json, klog, nginx                             |
+| `body_length`    | float   | Log body length in characters                 |
+| `body`           | string  | Log body                                      |
 
 Custom attribute fields may be returned by the API alongside these.
 
@@ -69,6 +70,51 @@ Custom attribute fields may be returned by the API alongside these.
 
 - `fields` is required — use names from discovery
 - Returns max 10 rows, sorted by timestamp descending
+
+### Search log body for a keyword
+
+```json
+{
+  "from_time": "2026-04-23T10:00:00Z",
+  "to_time": "2026-04-23T10:30:00Z",
+  "filters": "body LIKE '%connection refused%'",
+  "fields": [
+    { "field": "body", "type": "string" },
+    { "field": "workload", "type": "string" },
+    { "field": "pod_name", "type": "string" }
+  ]
+}
+```
+
+### Search log body excluding noisy patterns
+
+```json
+{
+  "from_time": "2026-04-23T10:00:00Z",
+  "to_time": "2026-04-23T10:30:00Z",
+  "filters": "body LIKE '%timeout%' AND body NOT LIKE '%healthcheck%'",
+  "fields": [
+    { "field": "body", "type": "string" },
+    { "field": "level", "type": "string" },
+    { "field": "workload", "type": "string" }
+  ]
+}
+```
+
+### Find unusually large log lines
+
+```json
+{
+  "from_time": "2026-04-23T10:00:00Z",
+  "to_time": "2026-04-23T10:30:00Z",
+  "filters": "body_length > 2000 AND namespace = 'production'",
+  "fields": [
+    { "field": "body", "type": "string" },
+    { "field": "body_length", "type": "float" },
+    { "field": "pod_name", "type": "string" }
+  ]
+}
+```
 
 ## Step 3: Analyze Logs
 
@@ -96,6 +142,34 @@ Custom attribute fields may be returned by the API alongside these.
   "aggregation": {
     "function": "unique_count",
     "fields": [{ "field": "pod_name", "type": "string" }]
+  }
+}
+```
+
+### Count logs matching a body pattern, by workload (time-series)
+
+```json
+{
+  "from_time": "2026-04-23T10:00:00Z",
+  "to_time": "2026-04-23T10:30:00Z",
+  "queryType": "range",
+  "filters": "body LIKE '%OOMKilled%'",
+  "groupBy": [{ "field": "workload", "type": "string" }],
+  "aggregation": { "function": "row_count" }
+}
+```
+
+### Average body length by namespace (instant)
+
+```json
+{
+  "from_time": "2026-04-23T10:00:00Z",
+  "to_time": "2026-04-23T10:30:00Z",
+  "queryType": "instant",
+  "groupBy": [{ "field": "namespace", "type": "string" }],
+  "aggregation": {
+    "function": "avg",
+    "fields": [{ "field": "body_length", "type": "float" }]
   }
 }
 ```
