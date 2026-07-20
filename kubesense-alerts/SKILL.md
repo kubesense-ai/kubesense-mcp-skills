@@ -36,7 +36,7 @@ User asks to:
    |---|---|
    | A metric name | `get-available-metrics` → `get-metric-labels` |
    | Log/trace fields, group-by keys, filter values | `get-trace-or-log-fields` |
-   | Channel ids for `notification_channel_ids` | `GET /api/alerts/notification-channels` |
+   | Channel ids for `notification_channel_ids` | a channel-listing MCP tool if one is available (e.g. `list-notification-channels`); otherwise `GET /api/alerts/notification-channels` (ask the user to paste it) |
 
    **If the MCP tools aren't connected**, you may still generate logs/traces rules
    using the verified field catalogs in this skill (see the Logs and Traces query
@@ -141,10 +141,48 @@ Each query has a `label` (A, B, C…), `selectedMode`, and `visible: true`.
 - Logs use the **storage names** `pod_name`/`container_name` (NOT `pod`/`container`)
   and `host` for the node (NOT `node`/`node_name`). `level` is the severity field
   (traces use `status`).
-- ⚠️ **Not accepted by the alert engine — do NOT use** (selectable in the explorer
-  but absent from `LogsAllowedColumns`, so they freeze a rule): `env_type` and the
-  log body. Stick to the list above.
-- Provide BOTH `raw_filters` and `filters` with the same `{ field: [values] }` map.
+- ⚠️ **`env_type` is a FILTER-only field** — it evaluates fine as a `raw_filters`
+  key (`{ "env_type": ["prod"] }`) but **freezes the rule as a group-by** (absent
+  from `LogsAllowedColumns`). Never put it in `groupBy`.
+- **Filtering on the log body needs a text operator, not the `{ field: [values] }`
+  map.** A plain `raw_filters: { "body": [...] }` is exact-match and won't do
+  substring/token search. `body` is **filter-only** — never a group-by (it doesn't
+  exist on the rollup tables). The engine evaluates a body filter only as a
+  **structured filter** with an explicit `operation`:
+
+  ```json
+  "unified_filter": {
+    "type": "common",
+    "common_filter": [
+      { "field": "body", "operation": "HAS_ANY_TOKENS", "values": ["timeout","refused"] }
+    ]
+  }
+  ```
+
+  (or `"type": "advanced"` with an `adv_filters` `{ operation, children[] }` tree to
+  combine a body filter with column filters). Operators:
+
+  | Operator | Meaning |
+  |---|---|
+  | `HAS_ANY_TOKENS` | any of the listed whole words present |
+  | `HAS_ALL_TOKENS` | all of the listed whole words present |
+  | `MULTI_SEARCH_ANY` | substring match (matches inside larger words) |
+  | `SUBSTR_ILIKE` / `ILIKE` | case-insensitive substring / `%wildcard%` |
+
+  Token operators match whole words split on non-alphanumerics — `HAS_ALL_TOKENS`
+  of `node-agent` matches a line with `node` and `agent` anywhere, not the literal
+  adjacent string; use `MULTI_SEARCH_ANY`/`SUBSTR_ILIKE` for an exact substring.
+
+  ⚠️ **Prefer building body/text search in the UI, then Export.** The exact filter
+  shape the import editor round-trips for a text operator is fiddly (the advanced-query
+  editor stores it differently from what the engine reads), and a body filter that
+  fails to bind is silent — the rule then matches **every** log, not none. So build
+  the body condition in the logs Explorer's advanced-query editor, attach it in the
+  alert editor, and **verify on the condition chart** that the count reflects the
+  filter before Create. Hand-write the `unified_filter` above only when you can't use
+  the UI, and always tell the user to confirm it on the chart.
+- Provide BOTH `raw_filters` and `filters` with the same `{ field: [values] }` map
+  for column filters (body/text search uses the structured `unified_filter` above).
 
 ### Traces (count / latency)
 
@@ -185,11 +223,13 @@ Each query has a `label` (A, B, C…), `selectedMode`, and `visible: true`.
     them — use `return_code`, `clustered_resource`, `subtype`). Do NOT use
     `clustered_resource`/`subtype` as *group-by* fields (engine freezes — use
     `resource`/`method`).
-- **For APM "by service"**, either `app_service` (the instrumented service name)
-  or `workload` (the k8s workload) works. Note: on aggregated windows (≥60s, which
-  latency/count rules always use) `app_service` resolves to the `app_name` rollup
-  column — so service grouping is by `app_name` there. Both are reliable; pick
-  `app_service` for service-name semantics, `workload` for k8s-object semantics.
+- **For APM "by service", group by `workload`** (the k8s workload). It's populated
+  on ~every span, so per-service alerts fire reliably. **Avoid `app_service` for
+  grouping**: on aggregated windows (≥60s, which every latency/count rule uses) it
+  resolves to the `app_name` rollup column, which is populated only for
+  SDK-instrumented services and is often empty — grouping by it yields empty or
+  single-blank-series alerts. Only use `app_service` if you've confirmed via
+  `get-trace-or-log-fields` that it's populated for the services you care about.
 - Traces use `status` for outcome (logs use `level`), `pod`/`container` (not
   `pod_name`); there is no trace body field.
 - ⚠️ **Trace `duration` is stored in NANOSECONDS** (`uint64`); p50/p95/p99 are
@@ -309,11 +349,11 @@ To convert a Datadog monitor, read **[datadog-migration.md](./datadog-migration.
 5. Logs use `level`/`pod_name`/`container_name`; traces use `status`/`pod`/`container`. Give logs/traces filters as BOTH `raw_filters` and `filters`.
 6. Durations are plain strings (`30s`,`1m`,`5m`,`1h`,`1d`) — NOT `*_prometheus_format`.
 7. `more_than_once` needs `breaches_count` (≥2) and usually `breach_counting_window`.
-8. `include_samples` is logs-only; `no_data_state: "firing"` only when metric disappearance is the incident.
+8. `include_samples` is logs-only; `no_data_state: "firing"` only when metric disappearance is the incident (a gauge/heartbeat). **Never `firing` for a count/rate/change alert** — a healthy window returns an empty result (not 0), so `firing` misfires at value 0; use `normal`.
 9. `notification_channel_ids` are real ids from the channels endpoint; leave `[]` if unspecified.
 10. Prefer **starting from an exported reference rule** for unfamiliar shapes — it guarantees the `query_config` is valid.
 11. Tell the user to import via the UI and review before creating — never claim the alert was created.
 12. **Multiple alerts (incl. Datadog bulk migration) → emit ONE JSON array of rule objects**, not N separate snippets, so they bulk-import in one pass.
 13. **Set `unit` to match the value** — `ns` for trace duration/latency, `bytes` for byte metrics, `percent` for ratio/error-rate formulas, `percent_unit` for 0–1 fractions, `ms`/`short` otherwise.
-14. For a status/code **class** (4xx, 5xx) or any range, use an **advanced-query** filter (`return_code LIKE "4__"`), not an enumerated `raw_filters` list.
+14. For a status/code **class** (4xx, 5xx) or any range, use a structured `LIKE` filter, not an enumerated `raw_filters` list — a `unified_filter` `common_filter` entry `{ "field": "return_code", "operation": "LIKE", "values": ["4__"] }` (`_` = one char: `4__`=4xx, `5__`=5xx, `40_`=40x). As with body filters, the reliable path is to build it in the UI's advanced-query editor and Export; verify the match on the condition chart.
 15. **Chart shows only the evaluated query.** `visible: true` on the `metric_query_label` query; `visible: false` on every other query (e.g. the formula's helper counts). Helpers still run; this only hides their series from the graph.
