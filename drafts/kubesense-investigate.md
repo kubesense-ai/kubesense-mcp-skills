@@ -10,6 +10,10 @@ metadata:
 
 # KubeSense Incident Investigation
 
+> [!NOTE]
+> **Draft — not installable.** This file is intentionally not named `SKILL.md`, so the
+> installer does not discover it. See [README.md](./README.md) for how to promote it.
+
 A workflow, not a tool reference. It orders the available signals **cheapest and most
 diagnostic first**, so most incidents resolve in three or four calls instead of a telemetry
 fishing expedition.

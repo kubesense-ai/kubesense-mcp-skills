@@ -23,7 +23,6 @@ each have to redefine it.
 | CPU, memory, disk, PromQL | [kubesense-metrics](../kubesense-metrics/SKILL.md) |
 | what's running, pod restarts, what changed | [kubesense-infra](../kubesense-infra/SKILL.md) |
 | alerts — list, investigate, create | [kubesense-alerts](../kubesense-alerts/SKILL.md) |
-| an alert fired, root-cause it | [kubesense-investigate](../kubesense-investigate/SKILL.md) |
 
 ## Connection
 

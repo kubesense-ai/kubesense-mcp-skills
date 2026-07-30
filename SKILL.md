@@ -1,6 +1,6 @@
 ---
 name: kubesense-skills
-description: KubeSense observability skills for AI agents — query logs, traces, and metrics from Kubernetes clusters, inspect cluster inventory, investigate incidents, and generate alert and dashboard configuration.
+description: KubeSense observability skills for AI agents — query logs, traces, and metrics from Kubernetes clusters, inspect cluster inventory, and generate alert and dashboard configuration.
 metadata:
   version: "2.0.0"
   author: kubesense
@@ -23,7 +23,6 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | **kubesense-infra** | Cluster inventory: clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List, investigate, and create alert rules; generate import JSON; migrate Datadog monitors |
 | **kubesense-dashboards** | Generate dashboard preset JSON |
-| **kubesense-investigate** | End-to-end incident workflow across all of the above |
 
 ## Routing
 
@@ -35,7 +34,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | "what's running / why is this pod restarting / what changed" | kubesense-infra |
 | "alert me when… / what's firing / convert this Datadog monitor" | kubesense-alerts |
 | "build me a dashboard" | kubesense-dashboards |
-| "this alert fired — what's wrong?" | kubesense-investigate |
+| "this alert fired — what's wrong?" | kubesense-alerts, then kubesense-infra |
 | a tool returned a field-name or WHERE error | kubesense-mcp |
 
 ## Prerequisites

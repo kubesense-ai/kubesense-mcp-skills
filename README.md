@@ -17,7 +17,6 @@ skill for the tool layer they share.
 | **kubesense-infra** | Clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List/investigate/create alerts, generate import JSON, migrate Datadog monitors |
 | **kubesense-dashboards** | Generate dashboard preset JSON |
-| **kubesense-investigate** | End-to-end incident workflow across all of the above |
 
 ## Install
 
@@ -38,7 +37,6 @@ npx skills add kubesense-ai/kubesense-mcp-skills \
   --skill kubesense-infra \
   --skill kubesense-alerts \
   --skill kubesense-dashboards \
-  --skill kubesense-investigate \
   --full-depth -y
 ```
 
@@ -90,7 +88,7 @@ Access is scoped by the same RBAC as the UI: `logs`, `traces`, `infrastructure`,
 | "what's running", "why is this pod restarting", "did we deploy" | kubesense-infra |
 | "alert me when 5xx > 1%", "what's firing", "port this Datadog monitor" | kubesense-alerts |
 | "build a dashboard for the payments service" | kubesense-dashboards |
-| "this alert fired, what's wrong?" | kubesense-investigate |
+| "this alert fired, what's wrong?" | kubesense-alerts, then kubesense-infra |
 
 ## Field Names: The One Thing To Know
 
@@ -116,27 +114,30 @@ The **alert engine accepts a different set** from the query engine. See
 ## Repository Layout
 
 ```
-SKILL.md                      umbrella index (installable on its own)
-kubesense-mcp/                hub: connection, tools, query contract
-  references/
-kubesense-logs/
-  references/
-kubesense-traces/
-  references/
-kubesense-metrics/
+SKILL.md                          umbrella index (installable on its own)
+kubesense-mcp/SKILL.md            hub: connection, tools, query contract
+  references/field-catalog.md
+  references/multi-query.md
+kubesense-logs/SKILL.md
+kubesense-traces/SKILL.md
+kubesense-metrics/SKILL.md
   references/metric-catalog.md
-kubesense-infra/
-kubesense-alerts/
-  references/
-kubesense-dashboards/
-  references/
-kubesense-investigate/
+kubesense-infra/SKILL.md
+kubesense-alerts/SKILL.md
+  references/import-json.md
+  references/datadog-migration.md
+kubesense-dashboards/SKILL.md
+  references/panel-config.md
+drafts/                           not installable — see drafts/README.md
 ```
 
-Each top-level directory is an independently installable skill with its own
-frontmatter `name`. Skills cross-reference each other by relative path but **degrade
-gracefully** — every skill states its own hard facts rather than depending on a sibling
-being installed.
+Each top-level directory containing a `SKILL.md` is an independently installable skill
+with its own frontmatter `name`. Skills cross-reference each other by relative path but
+**degrade gracefully** — every skill states its own hard facts rather than depending on a
+sibling being installed.
+
+`drafts/` holds work-in-progress skills. Nothing in it has a `SKILL.md`, so the installer
+does not discover it and `--list` will not show it.
 
 ## License
 

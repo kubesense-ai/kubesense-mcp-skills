@@ -22,7 +22,7 @@ Two distinct jobs, don't confuse them:
 |---|---|
 | "what's firing right now?" | `list-active-alerts` |
 | "what alerts exist / did I create any?" | `list-alert-rules` (+ `get-current-user` for `created_by`) |
-| "this alert fired — what broke?" | `get-alert-details`, then [kubesense-investigate](../kubesense-investigate/SKILL.md) |
+| "this alert fired — what broke?" | `get-alert-details` for the scope, then [kubesense-infra](../kubesense-infra/SKILL.md) for changes and infra failures |
 | "is this flapping or new?" | `get-alert-history` |
 | "has this been root-caused before?" | `find-investigation-for-alert` |
 | "create an alert when…" (one rule, agent applies it) | `create-alert` MCP tool |
