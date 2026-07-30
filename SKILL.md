@@ -69,4 +69,12 @@ See [kubesense-mcp](./kubesense-mcp/SKILL.md) for auth alternatives and verifica
 npx skills add kubesense-ai/kubesense-mcp-skills --full-depth -y
 ```
 
-Or pick individual skills — see the [README](./README.md).
+> [!IMPORTANT]
+> **`--full-depth` is required.** Without it the installer stops at this root `SKILL.md`
+> and installs only this index — 1 skill instead of 8 — with no warning.
+>
+> If you are reading this as the *only* installed KubeSense skill, that is what happened.
+> Re-run the command above with `--full-depth`.
+
+Verify with `npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth`, which
+should report 8 skills. Or pick individual skills — see the [README](./README.md).

@@ -20,6 +20,14 @@ skill for the tool layer they share.
 
 ## Install
 
+> [!IMPORTANT]
+> **Always pass `--full-depth`.** This repo has a root `SKILL.md` (the umbrella index), and
+> the installer stops there unless told to search deeper — so without the flag it finds
+> **1** skill instead of **8**, and does so *silently*. Every command below includes it.
+>
+> `references/` directories are **not** the reason for the flag. They are copied
+> automatically as part of a skill, nested subdirectories included.
+
 ### All skills
 
 ```bash
@@ -40,15 +48,22 @@ npx skills add kubesense-ai/kubesense-mcp-skills \
   --full-depth -y
 ```
 
-`--full-depth` matters: each skill carries a `references/` directory with the detailed
-field catalogs and JSON schemas. Without it you get the SKILL.md but not the references
-it points at.
-
 Just the dashboard generator:
 
 ```bash
 npx skills add kubesense-ai/kubesense-mcp-skills --skill kubesense-dashboards --full-depth -y
 ```
+
+### Verify
+
+```bash
+npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth
+```
+
+Should report **8 skills**. If it says 1, the `--full-depth` flag is missing.
+
+Other useful flags: `-g` installs globally (user-level) instead of project-level;
+`--copy` copies files instead of symlinking; `-a claude-code` targets a specific agent.
 
 ## Connect the MCP Server
 
