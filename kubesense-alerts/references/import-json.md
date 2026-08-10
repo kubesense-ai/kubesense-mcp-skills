@@ -12,6 +12,12 @@ is written until the user confirms.
 > `*_prometheus_format`, renaming `notification_channel_ids` → `notificationChannels`). You
 > write the flat form documented here.
 
+> [!IMPORTANT]
+> Run every document you build through **`validate-alert-json`** before handing it over.
+> It checks this exact shape and reports each problem as a JSON Pointer plus a reason, so
+> a rule that comes back `valid=true` is one the importer accepts. Everything documented
+> below is a rule that check enforces for you.
+
 ## Top-Level Fields
 
 ```json

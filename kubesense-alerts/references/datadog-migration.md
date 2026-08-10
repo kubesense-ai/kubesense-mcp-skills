@@ -200,6 +200,16 @@ error counts), the same `notify_no_data: true` would map to `"normal"`.
 Since this produces two rules (critical + warning), emit them as **one JSON array** so they
 bulk-import in a single pass.
 
+## Validate Every Converted Rule
+
+Run each translated rule through **`validate-alert-json`** before presenting it. A ported
+monitor is assembled by hand from a foreign schema, which is exactly the case that goes
+wrong quietly — a legal-looking value that is not one of the eight the enum permits, or a
+`metric_query_label` pointing at a query the conversion renamed.
+
+It costs nothing and it is the difference between "here are 40 rules" and "here are 40
+rules that import".
+
 ## Always Tell the User
 
 - Which Datadog options had **no equivalent** (`evaluation_delay`, anomaly/forecast types,

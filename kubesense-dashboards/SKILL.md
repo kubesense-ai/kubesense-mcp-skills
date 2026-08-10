@@ -1,24 +1,54 @@
 ---
 name: kubesense-dashboards
-description: Generate KubeSense dashboard JSON (the preset import/export format) for panels over metrics, logs, and traces — with the exact zod-validated schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring.
+description: Create KubeSense dashboards over metrics, logs, and traces — either directly with the create-dashboard MCP tool or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization
 ---
 
-# KubeSense Dashboard Generator
+# KubeSense Dashboards
 
-Generate a dashboard as JSON that the user imports through the Dashboards UI. This is the
-same shape the **Export** button produces, so an exported dashboard can be edited and
-re-imported.
+Build a dashboard preset — the same shape the **Export** button produces, so an exported
+dashboard can be edited and re-imported.
+
+Two ways to deliver it:
+
+| | `create-dashboard` MCP tool | Preset JSON |
+|---|---|---|
+| Applied by | the agent (write tool, needs approval) | the user, via Dashboards → Import |
+| Use when | the user asked you to *create* one | they asked for the JSON, or want to review first |
+| Shape to emit | the preset object itself | the import envelope, with `preset` **stringified** |
+
+Both go through the same server-side schema check, so a preset that passes
+`validate-dashboard-json` is one that both paths accept.
 
 ## When to Use
 
-- "Create a dashboard for…" / "Build a dashboard with panels for…"
-- "Give me the dashboard JSON for…"
-- "Generate a dashboard preset"
+- "Create a dashboard for…" / "Build a dashboard with panels for…" → `create-dashboard`
+- "Give me the dashboard JSON for…" → preset JSON
+- "Generate a dashboard preset" → preset JSON
+
+## Always Validate Before You Finish
+
+Call **`validate-dashboard-json`** on the preset before creating it or handing it over.
+It stores nothing, so call it as often as you need.
+
+```
+# valid=false findings=2
+path                              rule   message
+/panels/0/queries/0/selectedMode  shape  value must be one of 'logs', 'metrics', 'traces', 'formula'
+/gridLayout/0                     shape  must have required property 'h'
+```
+
+Each `path` is a JSON Pointer to the exact value to fix. Repeat until `valid=true`.
+
+Pass the **preset object** as `document` — not the import envelope with the stringified
+`preset` field. Same for `create-dashboard`'s `preset` argument.
+
+Validation checks *shape*, not whether the data exists. A query against a metric nobody
+collects is well-formed and will render empty, so discover names first.
 
 ## Discover Fields First
 
@@ -49,10 +79,14 @@ Without MCP, fall back to user-provided names and say they need verifying.
 ```
 
 > [!IMPORTANT]
-> **`preset` is a JSON *string*, not a nested object.** The validator declares
-> `preset: z.string()` and only runs the preset schema after `JSON.parse(preset)`. Emitting
-> an object fails with *"Preset must be a valid JSON string that matches the dashboard
-> preset schema"*.
+> **In this envelope, `preset` is a JSON *string*, not a nested object.** The validator
+> declares `preset: z.string()` and only runs the preset schema after `JSON.parse(preset)`.
+> Emitting an object fails with *"Preset must be a valid JSON string that matches the
+> dashboard preset schema"*.
+>
+> This applies to the **import envelope only**. `create-dashboard` and
+> `validate-dashboard-json` take the preset object itself — passing a stringified blob to
+> them works too, but do not wrap it in this envelope.
 
 `name` is required and non-empty. `description` is optional.
 
@@ -376,36 +410,55 @@ computed value. Row order comes from `y`.
 A sub-grid's inner `gridLayout` is optional-chained with fallbacks, so it may be shorter
 than its `panels` — unlike the top-level one.
 
-## How the User Applies It
+## Delivering It
+
+### Creating it directly
+
+```
+validate-dashboard-json  →  valid=true  →  create-dashboard
+```
+
+`create-dashboard` takes `name`, `preset` (the object, or a JSON string containing it) and
+an optional `description`. It returns the dashboard id and its UI path — quote that path so
+the user can open it.
+
+It is a **write tool**: only call it when the user has clearly asked for a dashboard to be
+created, and say what you are about to create before calling. If it refuses, the response
+names the JSON Pointer for every problem; fix them and retry rather than falling back to
+handing over JSON.
+
+### Handing over JSON to import
 
 1. Copy the JSON to a `.json` file (the import UI requires `application/json`).
 2. KubeSense → **Dashboards → Import**.
 3. Upload and review, then save.
 
-Never claim the dashboard was created — the user imports and confirms it.
+On this path never claim the dashboard was created — the user imports and confirms it.
 
 ## Rules
 
-1. `preset` **must** be a stringified JSON string in the final output, never a nested
-   object.
-2. `gridLayout` must be at least as long as `panels`, in the same order — matching is
+1. Validate with `validate-dashboard-json` before creating or handing over. Everything
+   below is a rule this check enforces for you.
+2. `preset` **must** be a stringified JSON string in the import envelope — but the plain
+   object when passed to `create-dashboard` or `validate-dashboard-json`.
+3. `gridLayout` must be at least as long as `panels`, in the same order — matching is
    positional and a short layout crashes at render.
-3. Every logs/traces query needs `columnFields`, even if `[]`.
-4. Panel `name` and top-level `name` must be non-empty.
-5. Numeric aggregations need `fields[].type: "float"` exactly, or they silently become
+4. Every logs/traces query needs `columnFields`, even if `[]`.
+5. Panel `name` and top-level `name` must be non-empty.
+6. Numeric aggregations need `fields[].type: "float"` exactly, or they silently become
    `row_count`.
-6. `chart_type` is lowercase `timeseries`; `panelType` is camelCase `timeSeries`.
-7. Formula expressions: uppercase, no decimals, single-letter labels, placed **after** the
+7. `chart_type` is lowercase `timeseries`; `panelType` is camelCase `timeSeries`.
+8. Formula expressions: uppercase, no decimals, single-letter labels, placed **after** the
    queries they reference.
-8. `rollup.over` only accepts `30s`/`1m`/`5m`/`30m`/`1h`/`1d`; a bad value wipes all
+9. `rollup.over` only accepts `30s`/`1m`/`5m`/`30m`/`1h`/`1d`; a bad value wipes all
    `functions`.
-9. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
-   variable deletes them all.
-10. Prefer omitting optional fields to guessing them: an omitted field takes its default, a
+10. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
+    variable deletes them all.
+11. Prefer omitting optional fields to guessing them: an omitted field takes its default, a
     wrong one can reset its siblings.
-11. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
+12. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
     `topListValue` — none exist in the current schema.
-12. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
+13. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
     silently become `auto`.
-13. Discover metric/field names with MCP before writing queries; tell the user to verify on
+14. Discover metric/field names with MCP before writing queries; tell the user to verify on
     the panel preview.

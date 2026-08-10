@@ -16,7 +16,7 @@ skill for the tool layer they share.
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes and infrastructure metrics |
 | **kubesense-infra** | Clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List/investigate/create alerts, generate import JSON, migrate Datadog monitors |
-| **kubesense-dashboards** | Generate dashboard preset JSON |
+| **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
 
 ## Install
 
@@ -68,7 +68,8 @@ Other useful flags: `-g` installs globally (user-level) instead of project-level
 ## Connect the MCP Server
 
 Every skill except `kubesense-dashboards` and `kubesense-alerts` needs the KubeSense MCP
-server. It is served by kubeapi at **`/mcp`** over Streamable HTTP, outside the `/api`
+server — those two work offline for generating JSON, but need it to validate, create, or
+discover real field names. It is served by kubeapi at **`/mcp`** over Streamable HTTP, outside the `/api`
 group, and authenticates with the same credentials as the REST API.
 
 **API key** (recommended for agents — does not expire):

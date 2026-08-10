@@ -22,7 +22,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes and infrastructure metrics |
 | **kubesense-infra** | Cluster inventory: clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List, investigate, and create alert rules; generate import JSON; migrate Datadog monitors |
-| **kubesense-dashboards** | Generate dashboard preset JSON |
+| **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
 
 ## Routing
 
@@ -40,7 +40,9 @@ Observability skills for KubeSense, grouped by telemetry surface.
 ## Prerequisites
 
 Every skill except `kubesense-dashboards` and `kubesense-alerts` (which can generate
-JSON offline) needs the **KubeSense MCP server** connected. It is served by kubeapi at
+JSON offline) needs the **KubeSense MCP server** connected. Those two need it for their
+validate and create tools, and for discovering real metric and field names — offline they
+fall back to JSON built from names the user supplies. It is served by kubeapi at
 `/mcp` over Streamable HTTP and authenticates with the same credentials as the REST API.
 
 ```bash

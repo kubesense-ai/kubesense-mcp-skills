@@ -1,8 +1,8 @@
 ---
 name: kubesense-alerts
-description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors.
+description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes validate-alert-json for checking hand-built rule JSON, the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors.
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels
@@ -28,6 +28,7 @@ Two distinct jobs, don't confuse them:
 | "create an alert when…" (one rule, agent applies it) | `create-alert` MCP tool |
 | "give me the alert JSON for…" / several rules / migrating | import JSON → [references/import-json.md](./references/import-json.md) |
 | "port these Datadog monitors" | [references/datadog-migration.md](./references/datadog-migration.md) |
+| you hand-built rule JSON and want it checked | `validate-alert-json` before handing it over |
 
 ## Reading Alerts
 
@@ -40,6 +41,25 @@ Two distinct jobs, don't confuse them:
 | `get-alert-history` | Triggered/resolved transitions, newest first — tells you chronic vs new. |
 | `find-investigation-for-alert` | The most recent *concluded* AI investigation and its root cause. `found=false` is normal, not an error. |
 | `list-notification-channels` | Enabled channels only: `id`, `name`, `type`. |
+
+## Checking Hand-Built Rule JSON
+
+Whenever you assemble a rule document yourself — import JSON, a ported Datadog monitor, an
+edited export — run it through **`validate-alert-json`** before handing it to the user. It
+stores nothing and reports every problem at once:
+
+```
+# valid=false findings=2
+path                        rule                 message
+/query_config/0/queryMode   shape                value must be one of 'builder', 'code'
+/metric_query_label         metric_query_label   names query "A", but the rule's queries are labelled "B"
+```
+
+Each `path` is a JSON Pointer to the value to fix. Repeat until `valid=true`.
+
+It validates the **wire document** — the export/import shape with `query_config`,
+`threshold_operator` and `frequency_type`. It is *not* for `create-alert`'s arguments;
+that tool validates its own input and rejects with the same findings.
 
 > [!IMPORTANT]
 > **"Which alerts did I create?"** — call `get-current-user` and pass its **`username`** as

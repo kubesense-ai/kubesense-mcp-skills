@@ -91,10 +91,22 @@ the global log level.
 `username` and `email` are frequently **different**; ownership fields such as
 `list-alert-rules`' `created_by` match on **username**.
 
+**Validation — checks a document, stores nothing**
+
+`validate-alert-json` · `validate-dashboard-json`
+
+Both take a `document` (a JSON object, or a string containing one) and report every
+schema problem at once as `path` / `rule` / `message`, where `path` is a JSON Pointer to
+the value to fix. Read-only and free to call repeatedly. Run whatever you assembled by
+hand through the matching one before creating it or handing it over.
+
 **Write — mutates state**
 
-`create-alert` — the only write tool. Carries write annotations and expects user
-approval. State exactly what you are about to create before calling it.
+`create-alert` · `create-dashboard`
+
+Both carry write annotations and expect user approval. State exactly what you are about
+to create before calling. Each validates against the same schema as the tool above and
+refuses with the same findings, so validating first turns a refusal into a fix.
 
 ## Discovery-First Rule
 
