@@ -31,8 +31,12 @@ skill for the tool layer they share.
 ### All skills
 
 ```bash
-npx skills add kubesense-ai/kubesense-mcp-skills --full-depth -y
+npx skills add kubesense-ai/kubesense-mcp-skills --full-depth
 ```
+
+You will be asked which agents to install to and whether to install **project** (current
+directory) or **global** (home directory, available everywhere). Pick global if you want
+the skills in every repo you work in.
 
 ### Individual skills
 
@@ -45,13 +49,13 @@ npx skills add kubesense-ai/kubesense-mcp-skills \
   --skill kubesense-infra \
   --skill kubesense-alerts \
   --skill kubesense-dashboards \
-  --full-depth -y
+  --full-depth
 ```
 
 Just the dashboard generator:
 
 ```bash
-npx skills add kubesense-ai/kubesense-mcp-skills --skill kubesense-dashboards --full-depth -y
+npx skills add kubesense-ai/kubesense-mcp-skills --skill kubesense-dashboards --full-depth
 ```
 
 ### Verify
@@ -62,8 +66,22 @@ npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth
 
 Should report **8 skills**. If it says 1, the `--full-depth` flag is missing.
 
-Other useful flags: `-g` installs globally (user-level) instead of project-level;
-`--copy` copies files instead of symlinking; `-a claude-code` targets a specific agent.
+### Unattended installs
+
+`-y` skips every prompt, and the scope it falls back to is **project**, not a smart
+default — so `-y` alone always installs into the current directory. Pair it with `-g`
+for a global install:
+
+```bash
+npx skills add kubesense-ai/kubesense-mcp-skills --full-depth -g -y
+```
+
+Coding agents (Claude Code, Cursor, …) are detected and run non-interactively whether or
+not you pass `-y`, so an agent installing on your behalf also lands project-scoped unless
+it passes `-g`.
+
+Other useful flags: `--copy` copies files instead of symlinking; `-a claude-code` targets
+a specific agent.
 
 ## Connect the MCP Server
 
