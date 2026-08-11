@@ -2,7 +2,7 @@
 name: kubesense-alerts
 description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes validate-alert-json for checking hand-built rule JSON, the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors.
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels
@@ -113,7 +113,10 @@ monitors.
 - Required: `name`, `threshold_operator`, `threshold_value`, `notification_channels`.
 - Defaults: `severity=warning`, `threshold_frequency=at_least_once`,
   `evaluation_interval=1m`, `time_window=5m`.
-- `threshold_operator` also accepts `above`/`below` here (it does **not** in import JSON).
+- `threshold_operator` also accepts `above`/`below` here (it does **not** in import
+  JSON). They are **normalised** before the rule is built — `above` is stored as
+  `greater_than`, `below` as `less_than` — so the rule reads back with the canonical
+  value, not the one you sent. Prefer the canonical names when you know them.
 
 > [!WARNING]
 > **Call `list-notification-channels` first.** `notification_channels` is required and must
@@ -122,6 +125,22 @@ monitors.
 > silently, because it would fire and page nobody.
 
 This is a **write tool**. State exactly what you are about to create before calling it.
+
+### When It Refuses
+
+The rule is checked against the wire contract before it is stored, so a refusal names
+the exact field:
+
+```
+invalid alert: /query_config/0/queryMode: value must be one of 'builder', 'code'
+```
+
+Each finding is a JSON Pointer into the rule the tool built plus what is wrong with it.
+Fix and call again — that is a cheaper round trip than it looks, and far cheaper than a
+rule that stores cleanly and then evaluates nothing.
+
+Two kinds of failure read differently. `invalid alert: …` is yours to correct. `failed to
+create alert rule: …` is a server problem — report it rather than retrying.
 
 ## Field Names — A Different Vocabulary
 
