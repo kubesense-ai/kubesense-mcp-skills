@@ -64,7 +64,7 @@ is written until the user confirms.
 | `time_window` | How far back the query looks. Plain string. |
 | `frequency_type` | `at_least_once` \| `more_than_once` \| `always`. See the `always` trap below. |
 | `breaches_count` | Integer ≥ 2 — only with `more_than_once`. |
-| `breach_counting_window_prometheus_format` | Optional window to count breaches over. **Note the name** — see round-trip trap. |
+| `breach_counting_window_prometheus_format` | Optional window. With `more_than_once`, the span the breaches are counted over; with `always`, the span the condition must hold across. Ignored for `at_least_once`. Omitted → the engine falls back to `time_window`. **Note the name** — see round-trip trap. |
 | `severity` | `critical` \| `error` \| `warning` \| `info`. (The MCP tool allows only critical/warning/info.) |
 | `labels` | `{"team": "infra"}` |
 | `notification_channel_ids` | Array of **integer** channel ids from `list-notification-channels`. **`[]` blocks a single-rule import.** |
@@ -105,11 +105,21 @@ Import maps only `more_than_once` specially; **everything else becomes
 
 Export emits only `frequency_type`, so `always` silently downgrades on a round-trip.
 
+An `always` rule also honours `breach_counting_window_prometheus_format` — the condition
+must hold across that whole span, and without one the engine falls back to `time_window`.
+Set it whenever the "must hold for N minutes" part is the point of the rule; leave it out
+when `time_window` already is that span.
+
 ### The `breach_counting_window` trap
 
 Import reads **`breach_counting_window_prometheus_format`**; export writes
 `breach_counting_window`. The round-trip is broken for this one field — re-add the
 `_prometheus_format` name when re-importing an exported rule that used it.
+
+**Send both keys.** webapp#2081 (open against `dev` as of 2026-08-13) flips import to read
+the plain `breach_counting_window`, which fixes the round-trip but inverts this trap. A
+document carrying both names imports correctly before and after that change; the unread key
+is ignored either way.
 
 ## `query_config[]`
 
