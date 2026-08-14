@@ -32,6 +32,7 @@ the default. Unknown keys are stripped.
 | `colorScheme` | 5-variant union, see below | `{type:"palette",palette:"default"}` |
 | `tableSettings` | `{columnWidths: Record<string, number>}` | `{columnWidths:{}}` |
 | `alignColumns` | array, see below | `[]` |
+| `columnFormatting` | array, see below | `[]` |
 
 `step` must be an *integer* — `60.5` silently becomes `"auto"`.
 
@@ -110,6 +111,93 @@ mean | standard_deviation | sum | max | min | median | last | first | range | mi
 ```
 
 Used to align columns across queries in a table panel.
+
+## `columnFormatting[]`
+
+Per-column overrides for a **table** panel — display name, visibility, cell rendering, and
+colouring. One entry per column you want to change; a column with no entry renders with its
+default name and a plain numeric cell. Ignored by non-table panels.
+
+```json
+{
+  "id": "b1e2…",
+  "columnId": "count-a",
+  "cellType": "number",
+  "colorMode": "conditions",
+  "conditions": [ { "operator": ">", "value": 100, "style": "red-background" } ],
+  "range": { "palette": "green", "scale": "logarithmic", "min": null, "max": null },
+  "displayName": "Requests",
+  "hidden": false,
+  "width": 120
+}
+```
+
+| Field | Type / allowed values | Default |
+|---|---|---|
+| `id` | string — a uuid, the array key | required |
+| `columnId` | string — the rendered column id this applies to | required |
+| `cellType` | `number` \| `trend` \| `bar` | `number` |
+| `colorMode` | `conditions` \| `range` | `conditions` |
+| `conditions` | array of condition objects, see below | `[]` |
+| `range` | object, see below | omitted |
+| `trend` | object, see below | omitted |
+| `displayName` | string | omitted |
+| `hidden` | boolean | omitted |
+| `width` | positive number (px) | omitted |
+
+`columnId` is the id the renderer assigns, which differs by table shape: a merged dimension
+column is its metric key (`service`, `@service`), a merged value column is the kebab-cased
+query label (`a`, `count-a`), and an SPL/SQL column is `<name>-<index>`. A `columnId` matching
+nothing currently rendered is **not** an error — the entry simply does not apply, which is
+what lets a saved panel survive a query edit.
+
+`displayName` is the outermost of the column-naming layers and wins over
+`alignColumns[].displayName`, `columnFields[].alias`, and the field-catalog label. An empty or
+whitespace-only value counts as absent (the derived name shows instead).
+
+**`conditions[]`** — first match wins, in list order (not most-specific, not last):
+
+| Field | Type | Notes |
+|---|---|---|
+| `operator` | `>` \| `>=` \| `<` \| `<=` \| `=` \| `!=` | required |
+| `value` | number | required |
+| `style` | see list below | `red-background` on a bad value |
+| `color` | string (hex) | read only for `custom-background` / `custom-text` |
+
+`style` values: `red-background`, `yellow-background`, `green-background`,
+`light-red-background`, `light-yellow-background`, `light-green-background`, `red-text`,
+`yellow-text`, `green-text`, `custom-background`, `custom-text`.
+
+**`range`** — continuous colouring, read when `colorMode` is `range`:
+
+| Field | Type | Default |
+|---|---|---|
+| `palette` | see list below | `green` |
+| `scale` | `linear` \| `logarithmic` | `logarithmic` |
+| `min` | number \| null (`null` = derive from data) | `null` |
+| `max` | number \| null (`null` = derive from data) | `null` |
+
+`palette` values: `green`, `orange`, `red`, `blue`, `red-green`, `red-blue`, `solid-green`,
+`solid-orange`, `solid-red`, `solid-blue`, `solid-red-green`, `solid-red-blue`. Gradient
+palettes go transparent→colour; two-hue ramps name their direction (`red-green` = red at the
+minimum, green at the maximum).
+
+**`trend`** — sparkline settings, read only when `cellType` is `trend`:
+
+| Field | Type | Default |
+|---|---|---|
+| `uniformYAxes` | boolean (shared y-range across rows) | `true` |
+| `display` | `area` \| `bar` \| `line` | `line` |
+
+> [!NOTE]
+> The webapp currently colours **`bar`** cells by `conditions` only (the bar length carries
+> the magnitude) and hides the **`trend`** cell type until per-row time series are fetched.
+> The import schema still accepts `range` on any cell type and the full `trend` object, so
+> presets are forward-compatible.
+>
+> `columnFormatting` ships with the panel field-overrides release. A server that predates it
+> strips the key (like any unknown field), so the panel renders unformatted rather than
+> failing import.
 
 ## `yAxisLabelFormatter` — all 199 values
 
