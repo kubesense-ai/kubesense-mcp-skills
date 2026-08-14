@@ -136,11 +136,10 @@ default name and a plain numeric cell. Ignored by non-table panels.
 |---|---|---|
 | `id` | string — a uuid, the array key | required |
 | `columnId` | string — the rendered column id this applies to | required |
-| `cellType` | `number` \| `trend` \| `bar` | `number` |
+| `cellType` | `number` \| `bar` | `number` |
 | `colorMode` | `conditions` \| `range` | `conditions` |
 | `conditions` | array of condition objects, see below | `[]` |
 | `range` | object, see below | omitted |
-| `trend` | object, see below | omitted |
 | `displayName` | string | omitted |
 | `hidden` | boolean | omitted |
 | `width` | positive number (px) | omitted |
@@ -182,18 +181,9 @@ whitespace-only value counts as absent (the derived name shows instead).
 palettes go transparent→colour; two-hue ramps name their direction (`red-green` = red at the
 minimum, green at the maximum).
 
-**`trend`** — sparkline settings, read only when `cellType` is `trend`:
-
-| Field | Type | Default |
-|---|---|---|
-| `uniformYAxes` | boolean (shared y-range across rows) | `true` |
-| `display` | `area` \| `bar` \| `line` | `line` |
-
 > [!NOTE]
-> The webapp currently colours **`bar`** cells by `conditions` only (the bar length carries
-> the magnitude) and hides the **`trend`** cell type until per-row time series are fetched.
-> The import schema still accepts `range` on any cell type and the full `trend` object, so
-> presets are forward-compatible.
+> **`bar`** cells are always coloured by `conditions` — the bar length carries the
+> magnitude, so `range` applies to `number` cells only.
 >
 > `columnFormatting` ships with the panel field-overrides release. A server that predates it
 > strips the key (like any unknown field), so the panel renders unformatted rather than
