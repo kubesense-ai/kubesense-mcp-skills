@@ -2,7 +2,7 @@
 name: kubesense-dashboards
 description: Create KubeSense dashboards over metrics, logs, and traces — either directly with the create-dashboard MCP tool or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization
@@ -183,8 +183,11 @@ omitted field takes the default; a wrong one can take out its siblings.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
-`thresholds` / `alignColumns` shapes, read
+`thresholds` / `alignColumns` / `columnFormatting` shapes, read
 **[references/panel-config.md](./references/panel-config.md)**.
+
+For a **table** panel, per-column display names, visibility, cell type (`number` / `bar`),
+and threshold/range colouring go in `config.columnFormatting[]` — see the reference.
 
 Three config fields the old format got wrong:
 
