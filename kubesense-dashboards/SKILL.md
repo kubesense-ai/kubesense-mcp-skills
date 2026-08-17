@@ -183,11 +183,17 @@ omitted field takes the default; a wrong one can take out its siblings.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
-`thresholds` / `alignColumns` / `columnFormatting` shapes, read
+`thresholds` / `alignColumns` / `columnFormatting` / `visualFormattingRules` shapes, read
 **[references/panel-config.md](./references/panel-config.md)**.
 
 For a **table** panel, per-column display names, visibility, cell type (`number` / `bar`),
 and threshold/range colouring go in `config.columnFormatting[]` — see the reference.
+
+For a **top-list** panel, `config.topListDisplayMode` is `flat` (default) or `stacked`, and
+`stacked` needs **two or more `groupBy` entries** — the first is the row, the rest are the
+blocks stacked inside it. With one dimension the renderer draws flat whatever the field
+says. Value-driven colouring goes in `config.visualFormattingRules[]`, which **supersedes
+`thresholds` for this panel type**. Both are in the reference.
 
 Three config fields the old format got wrong:
 
@@ -460,7 +466,9 @@ On this path never claim the dashboard was created — the user imports and conf
 11. Prefer omitting optional fields to guessing them: an omitted field takes its default, a
     wrong one can reset its siblings.
 12. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
-    `topListValue` — none exist in the current schema.
+    `topListValue` — none exist in the current schema. On a **top list**, reach for
+    `visualFormattingRules` rather than `thresholds`: it is what that panel type renders,
+    and its styles are the light backgrounds plus `custom-background` only.
 13. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
     silently become `auto`.
 14. Discover metric/field names with MCP before writing queries; tell the user to verify on
