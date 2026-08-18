@@ -33,6 +33,8 @@ the default. Unknown keys are stripped.
 | `tableSettings` | `{columnWidths: Record<string, number>}` | `{columnWidths:{}}` |
 | `alignColumns` | array, see below | `[]` |
 | `columnFormatting` | array, see below | `[]` |
+| `topListDisplayMode` | `flat` \| `stacked` | `flat` |
+| `visualFormattingRules` | array, see below | `[]` |
 
 `step` must be an *integer* — `60.5` silently becomes `"auto"`.
 
@@ -154,7 +156,9 @@ what lets a saved panel survive a query edit.
 `alignColumns[].displayName`, `columnFields[].alias`, and the field-catalog label. An empty or
 whitespace-only value counts as absent (the derived name shows instead).
 
-**`conditions[]`** — first match wins, in list order (not most-specific, not last):
+**`conditions[]`** — **last** match wins, in list order (not first, not most-specific).
+A threshold list reads as escalating, so `> 10 green` above `> 15 red` paints 58 red; put
+the most specific rule at the bottom:
 
 | Field | Type | Notes |
 |---|---|---|
@@ -188,6 +192,78 @@ minimum, green at the maximum).
 > `columnFormatting` ships with the panel field-overrides release. A server that predates it
 > strips the key (like any unknown field), so the panel renders unformatted rather than
 > failing import.
+
+## `topListDisplayMode` and `visualFormattingRules[]`
+
+Both are **top-list only**. Other panel types ignore them.
+
+### `topListDisplayMode`
+
+`flat` (default) draws one block per row. `stacked` splits each row's bar by the group-bys
+**after the first**: the first group-by becomes the row, the rest become the blocks inside
+it, with a legend underneath.
+
+Stacking therefore needs **two or more `groupBy` entries** (or, for SPL/SQL panels, two or
+more entries in the query's `list`). With one dimension the renderer falls back to `flat`
+whatever this says — so `stacked` on a single-group-by panel is stale rather than broken,
+and removing a group-by from a stacked panel cannot break it.
+
+```json
+{
+  "panelType": "topList",
+  "queries": [ { "selectedMode": "traces", "label": "A",
+    "groupBy": [ {"field": "service", "type": "string", "is_attribute": false},
+                 {"field": "status",  "type": "string", "is_attribute": false} ],
+    "aggregation": {"function": "row_count"} } ],
+  "config": { "topListDisplayMode": "stacked" }
+}
+```
+
+### `visualFormattingRules[]`
+
+Value-driven block colouring. **Supersedes `thresholds` on top-list panels** — the editor
+no longer offers a Thresholds section there. Nothing rewrites `thresholds`, so a panel
+saved with them keeps that colouring until its rule list is non-empty; the first rule takes
+over.
+
+```json
+{ "id": "0c8f…", "operator": ">", "value": 1000, "style": "light-red-background" }
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string — a uuid, the array key | required |
+| `operator` | `>` \| `>=` \| `<` \| `<=` \| `=` \| `!=` | required |
+| `value` | number | required |
+| `style` | see below | `light-red-background` on a bad value |
+| `color` | string (hex) | read only for `custom-background` |
+
+`style` values — **light backgrounds and custom only**, a narrower set than
+`columnFormatting`'s conditions: `light-red-background`, `light-yellow-background`,
+`light-green-background`, `custom-background`. A solid or `*-text` style is repaired to
+`light-red-background`.
+
+**Last** match wins, as with `columnFormatting[].conditions`.
+
+Three behaviours worth knowing before writing rules:
+
+- Every **block** is judged by its OWN value, not the row's. On a stacked row the rule marks
+  the block that breached; on a flat row the single block is worth the row total, so the two
+  agree.
+- Once **any** rule exists, colour stops encoding the series and starts encoding the value:
+  every block matching no rule collapses to one neutral colour, and the legend's swatches
+  collapse with it. Remove every rule and the palette returns.
+- `custom-background` with no `color` is **inert** — the rule paints nothing rather than
+  failing import. The editor seeds a colour when you pick it; a hand-written preset has to
+  supply one.
+
+Colouring with no rules at all: a single group-by paints every row the same colour, and
+multiple group-bys use the palette per series.
+
+> [!NOTE]
+> `topListDisplayMode` and `visualFormattingRules` ship with the top-list stacking release.
+> A server that predates them strips the keys (like any unknown field), so the panel renders
+> flat and unformatted rather than failing import.
 
 ## `yAxisLabelFormatter` — all 199 values
 
