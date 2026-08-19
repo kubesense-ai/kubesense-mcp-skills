@@ -183,11 +183,17 @@ omitted field takes the default; a wrong one can take out its siblings.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
-`thresholds` / `alignColumns` / `columnFormatting` shapes, read
+`thresholds` / `alignColumns` / `columnFormatting` / `visualFormattingRules` shapes, read
 **[references/panel-config.md](./references/panel-config.md)**.
 
 For a **table** panel, per-column display names, visibility, cell type (`number` / `bar`),
 and threshold/range colouring go in `config.columnFormatting[]` — see the reference.
+
+For a **top-list** panel, `config.topListDisplayMode` is `flat` (default) or `stacked`, and
+`stacked` needs **two or more `groupBy` entries** — the first is the row, the rest are the
+blocks stacked inside it. With one dimension the renderer draws flat whatever the field
+says. Value-driven colouring goes in `config.visualFormattingRules[]`, which **supersedes
+`thresholds` for this panel type**. Both are in the reference.
 
 Three config fields the old format got wrong:
 
@@ -424,7 +430,8 @@ is not a working dashboard — check these by hand before you hand it over.
 6. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
    become `auto`.
 7. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
-   `topListValue` — none exist, and unknown keys are stripped without comment.
+   `topListValue` — none exist, and unknown keys are stripped without comment. On a **top
+   list**, value colouring goes in `visualFormattingRules`, not `thresholds`.
 8. Prefer omitting an optional field to guessing it: an omitted field takes its default, a
    wrong one can reset its siblings.
 9. Validation checks shape, not existence. Discover metric and field names with MCP before
@@ -432,3 +439,4 @@ is not a working dashboard — check these by hand before you hand it over.
 
 The one rule that spans both: `preset` is a stringified JSON string in the import envelope,
 but the plain object when passed to `create-dashboard` or `validate-dashboard-json`.
+
