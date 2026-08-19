@@ -2,7 +2,7 @@
 name: kubesense-dashboards
 description: Create KubeSense dashboards over metrics, logs, and traces — either directly with the create-dashboard MCP tool or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization
@@ -208,17 +208,16 @@ Three config fields the old format got wrong:
 
 ### Y-axis units
 
-`yAxisLabelFormatter` accepts **199 values** (the same enum as `fieldConfig.unit`).
+`yAxisLabelFormatter` accepts **199 values** — the same enum as `fieldConfig.unit`. Common
+ones: `auto`, `number`, `percentage`, `bytes`, `bytes/sec`, `nanoseconds`, `milliseconds`,
+`seconds`, `mCPU`, `CPU`. Use `nanoseconds` for any panel aggregating trace `duration` —
+the formatter auto-scales ns → µs/ms/s. Full list in
+[references/panel-config.md](./references/panel-config.md).
 
 > [!WARNING]
 > `percent`, `percent_unit`, `short`, `ops`, `bps`, `celsius`, `fahrenheit`, and `none`
 > **do not exist** and silently become `auto`. Use `percentage`, `CPU` / `mCPU`,
 > `bytes/sec`, `number` instead.
-
-Common ones: `auto`, `number`, `percentage`, `bytes`, `bytes/sec`, `nanoseconds`,
-`microseconds`, `milliseconds`, `seconds`, `mCPU`, `CPU`, `dollars`. Use `nanoseconds` for
-any panel aggregating trace `duration` — the formatter auto-scales ns → µs/ms/s. Full list
-in [references/panel-config.md](./references/panel-config.md).
 
 ## Queries
 
@@ -342,11 +341,7 @@ argument counts are exact tuples — so build these carefully.
 | `top_bottom` | `top`, `bottom` | `[{arg_name:"k",arg_value:5},{arg_name:"by",arg_value:"max"}]` — `by` ∈ `max\|min\|avg\|median\|last` |
 | `rollup` | `avg_over_time`, `sum_over_time`, `max_over_time`, `min_over_time`, `count_over_time`, `last_over_time`, `absent_over_time`, `present_over_time`, `increases_over_time`, `range_over_time`, `quantile_over_time` | `[{arg_name:"over", arg_value:"5m"}]` — **restricted to `30s\|1m\|5m\|30m\|1h\|1d`** |
 | `comparison` | `greater`, `lesser`, `greater_than_or_equal`, `less_than_or_equal`, `equal`, `not_equal` | `[{arg_name:"than"\|"to", arg_value:100}]` |
-| `transform` | `abs`, `clamp`, `clamp_max`, `clamp_min`, `round`, `histogram_quantile`, `sort`, `sort_desc` | variable length, but the `arguments` key is **still required** — use `[]` for zero-arg |
-
-`transform` argument names: `clamp` → `min`+`max`, `clamp_max` → `max`, `clamp_min` →
-`min`, `round` → `to_nearest`, `histogram_quantile` → `quantile`; `abs`/`sort`/`sort_desc`
-take none (but still need `"arguments": []`).
+| `transform` | `clamp` (`min`+`max`), `clamp_max` (`max`), `clamp_min` (`min`), `round` (`to_nearest`), `histogram_quantile` (`quantile`), `abs` / `sort` / `sort_desc` (none) | arg names in parens; the `arguments` key is **still required** — use `[]` for the zero-arg ones |
 
 > [!WARNING]
 > `range.over` accepts any string, but **`rollup.over` only accepts
@@ -376,48 +371,16 @@ validated — `w: 99` is accepted and renders broken.
 - `i`: the array index as a string. **Matching is positional**, so keep `gridLayout` in the
   same order as `panels`, and at least as long.
 
-## Variables
+## Variables and Rows
 
-```json
-{
-  "name": "service",
-  "description": "",
-  "meta": { "variableType": "custom", "options": ["api", "web"], "value": [], "selectType": "multiple" }
-}
-```
+Both are optional and most dashboards need neither — omit `variables`, `subGrids`, and
+`subGridLayout` and they default to `[]`.
 
-- `name`: required, non-empty, **max 20 chars**, must match `^[a-zA-Z_][a-zA-Z0-9_]*$`.
-- `description`: **required** — use `""`. It is not optional.
-- `meta`: discriminated union on `variableType`. There is no `id`, `label`, or
-  `multiSelect`.
-- `selectType`: `"single"` or `"multiple"`.
-
-| variableType | required in `meta` |
-|---|---|
-| `textbox` | — (`defaultValue`, `value` default to `""`) |
-| `custom` | `options: string[]` with ≥ 1 entry |
-| `logs` / `traces` | `fieldMeta: {field, type, is_attribute}` — all three; optional `filters`, `filterMode` (`MFD`\|`ADVANCED_QUERY`) |
-| `metrics` | `metric` (non-empty) **and** `fieldMeta`; **no `filterMode`** |
-
-`fieldMeta.type` and `fieldMeta.is_attribute` have no defaults — both must be present.
-
-> [!WARNING]
-> **One invalid variable silently deletes every variable** with no import error. Double-check
-> `description: ""` is present and the name matches the regex.
-
-## Sub-Grids (Rows)
-
-```json
-"subGrids": [ { "id": "row-1", "title": "Payments", "collapsed": false, "panels": [], "gridLayout": [] } ],
-"subGridLayout": [ { "i": "sg-row-1", "x": 0, "y": 0, "w": 12, "h": 1 } ]
-```
-
-`id` and `title` are required on a sub-grid. In `subGridLayout`, `i` **must** be
-`` `sg-${id}` `` — and only `y` is honoured; `x`, `w`, `h` are forced to `0`, `12`, and a
-computed value. Row order comes from `y`.
-
-A sub-grid's inner `gridLayout` is optional-chained with fallbacks, so it may be shorter
-than its `panels` — unlike the top-level one.
+If the dashboard needs a **template variable** (a dropdown feeding `$name` into query
+filters) or **rows** (collapsible panel groups), read
+**[references/variables-and-rows.md](./references/variables-and-rows.md)** for the schemas.
+Two things to carry into that file: a variable's `description` is required (use `""`), and
+one invalid variable silently deletes every variable.
 
 ## Delivering It
 
@@ -446,30 +409,34 @@ On this path never claim the dashboard was created — the user imports and conf
 
 ## Rules
 
-1. Validate with `validate-dashboard-json` before creating or handing over. Everything
-   below is a rule this check enforces for you.
-2. `preset` **must** be a stringified JSON string in the import envelope — but the plain
-   object when passed to `create-dashboard` or `validate-dashboard-json`.
-3. `gridLayout` must be at least as long as `panels`, in the same order — matching is
-   positional and a short layout crashes at render.
-4. Every logs/traces query needs `columnFields`, even if `[]`.
-5. Panel `name` and top-level `name` must be non-empty.
-6. Numeric aggregations need `fields[].type: "float"` exactly, or they silently become
-   `row_count`.
-7. `chart_type` is lowercase `timeseries`; `panelType` is camelCase `timeSeries`.
-8. Formula expressions: uppercase, no decimals, single-letter labels, placed **after** the
-   queries they reference.
-9. `rollup.over` only accepts `30s`/`1m`/`5m`/`30m`/`1h`/`1d`; a bad value wipes all
-   `functions`.
-10. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
-    variable deletes them all.
-11. Prefer omitting optional fields to guessing them: an omitted field takes its default, a
-    wrong one can reset its siblings.
-12. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
-    `topListValue` — none exist in the current schema. On a **top list**, reach for
-    `visualFormattingRules` rather than `thresholds`: it is what that panel type renders,
-    and its styles are the light backgrounds plus `custom-background` only.
-13. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
-    silently become `auto`.
-14. Discover metric/field names with MCP before writing queries; tell the user to verify on
-    the panel preview.
+Rule 0: run `validate-dashboard-json` before creating or handing over, and fix what it
+reports. Everything in [What Hard-Fails Import](#what-hard-fails-import) is machine-checked
+— the validator names the JSON Pointer, so it needs no checklist here.
+
+**This checklist is for what the validator is blind to.** Every rule below **passes
+validation** and then silently discards your data or crashes at render. A green validation
+is not a working dashboard — check these by hand before you hand it over.
+
+1. `gridLayout` must be at least as long as `panels`, in the same order — matching is
+   positional, and a short layout throws a TypeError when the dashboard renders.
+2. Numeric aggregations need `fields[].type: "float"` exactly, or the whole aggregation
+   resets to `row_count` — a row count where you asked for a percentile.
+3. `chart_type` is lowercase `timeseries`; `panelType` is camelCase `timeSeries`. Each
+   resets to its own default (`table` / `timeSeries`) on a mismatch.
+4. `rollup.over` only accepts `30s`/`1m`/`5m`/`30m`/`1h`/`1d`; a bad value wipes every
+   function on that query.
+5. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
+   variable deletes them all.
+6. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
+   become `auto`.
+7. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
+   `topListValue` — none exist, and unknown keys are stripped without comment. On a **top
+   list**, value colouring goes in `visualFormattingRules`, not `thresholds`.
+8. Prefer omitting an optional field to guessing it: an omitted field takes its default, a
+   wrong one can reset its siblings.
+9. Validation checks shape, not existence. Discover metric and field names with MCP before
+   writing queries, and tell the user to confirm on the panel preview.
+
+The one rule that spans both: `preset` is a stringified JSON string in the import envelope,
+but the plain object when passed to `create-dashboard` or `validate-dashboard-json`.
+
