@@ -5,7 +5,7 @@ metadata:
   version: "2.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,observability,kubernetes,logs,traces,metrics,alerts,dashboards,mcp
+  tags: kubesense,observability,kubernetes,logs,traces,metrics,alerts,dashboards,mcp,cloud,aws,gcp,azure
 ---
 
 # KubeSense Skills
@@ -19,7 +19,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | **kubesense-mcp** | The tool layer — connection, auth, the full tool inventory, the WHERE/field-name contract every query skill inherits. Start here. |
 | **kubesense-logs** | Search and aggregate logs |
 | **kubesense-traces** | Spans, latency percentiles, error rates, distributed-trace waterfalls |
-| **kubesense-metrics** | PromQL/MetricsQL over Kubernetes and infrastructure metrics |
+| **kubesense-metrics** | PromQL/MetricsQL over Kubernetes, infrastructure and cloud-provider (AWS/GCP/Azure/Atlas/Confluent/Kong) metrics |
 | **kubesense-infra** | Cluster inventory: clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List, investigate, and create alert rules; generate import JSON; migrate Datadog monitors |
 | **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
@@ -31,6 +31,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | "show me errors / grep the logs" | kubesense-logs |
 | "p99 latency / slow requests / which service is failing" | kubesense-traces |
 | "CPU, memory, disk, saturation, capacity" | kubesense-metrics |
+| "how is my RDS / EC2 / Azure VM / Atlas cluster doing" | kubesense-metrics |
 | "what's running / why is this pod restarting / what changed" | kubesense-infra |
 | "alert me when… / what's firing / convert this Datadog monitor" | kubesense-alerts |
 | "build me a dashboard" | kubesense-dashboards |

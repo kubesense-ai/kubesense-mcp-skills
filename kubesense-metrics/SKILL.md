@@ -1,11 +1,11 @@
 ---
 name: kubesense-metrics
-description: Query Kubernetes and infrastructure metrics from KubeSense with PromQL/MetricsQL — metric discovery, label inspection, the metric families KubeSense actually collects (kube-state-metrics, cAdvisor, node-exporter, OTel hostmetrics, DCGM GPU, JVM), and the label conventions (clusterId) needed to write a query that returns data.
+description: Query Kubernetes, infrastructure and cloud-provider metrics from KubeSense with PromQL/MetricsQL — metric discovery, label inspection, the metric families KubeSense actually collects (kube-state-metrics, cAdvisor, node-exporter, OTel hostmetrics, DCGM GPU, JVM, and AWS/GCP/Azure/MongoDB Atlas/Confluent/Kong cloud resources), and the label conventions (clusterId, kubesense_cloud_resource_metric) needed to write a query that returns data.
 metadata:
   version: "2.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,metrics,promql,metricsql,victoriametrics,prometheus,kube-state-metrics,cadvisor,node-exporter,gpu,jvm
+  tags: kubesense,metrics,promql,metricsql,victoriametrics,prometheus,kube-state-metrics,cadvisor,node-exporter,gpu,jvm,cloud,aws,gcp,azure,cloudwatch,mongodb-atlas,confluent,kong
 ---
 
 # KubeSense Metrics
@@ -70,6 +70,9 @@ metric with `analyze-metrics` and read the series labels off the result.
 The two families exist because a cluster ships telemetry either via
 node-exporter/process-exporter **or** via the OpenTelemetry collector. Run
 `get-metric-labels` to see which convention a given metric follows rather than assuming.
+
+Cloud-provider metrics (AWS/GCP/Azure/Atlas/Confluent/Kong) are a **third** convention
+with none of these labels — see [Cloud Resource Metrics](#cloud-resource-metrics) below.
 
 Process metrics: the exporter family uses `groupname` (formatted `{pid}-{command}`);
 the OTel family splits it into `process_pid`, `process_command_line`, and
@@ -157,6 +160,53 @@ These will not work against a stock Prometheus, but they are correct here.
 For a histogram percentile, always `sum(rate(...)) by (le)` **before**
 `histogram_quantile` — passing raw buckets grouped by other labels produces nonsense.
 
+## Cloud Resource Metrics
+
+Metrics pulled from cloud providers' own monitoring APIs — AWS CloudWatch, Google Cloud
+Monitoring, Azure Monitor, MongoDB Atlas, Confluent Cloud, Kong — are in the same
+VictoriaMetrics instance but follow a **different convention entirely**.
+
+> [!IMPORTANT]
+> Every cloud datapoint, for every provider and resource type, is stored under one
+> series name: **`kubesense_cloud_resource_metric`**. The provider's own metric name is
+> the **`metric_name` label**, not part of the series name. `get-available-metrics`
+> therefore returns exactly one name no matter how many cloud series exist, and
+> searching it for `CPUUtilization` finds nothing.
+
+```promql
+kubesense_cloud_resource_metric{provider="aws",resource_type="Ec2Instance",metric_name="CPUUtilization"}
+```
+
+Fixed labels: `provider` (`aws` | `gcp` | `azure` | `mongodbatlas` | `confluent` |
+`kong`), `account_id`, `resource_id`, `resource_type`, `metric_name`, `unit` — plus
+collector dimensions such as `region`. There is **no `clusterId`, `namespace` or `pod`**,
+so a selector copied from a Kubernetes query matches nothing.
+
+Discovery is a PromQL step, not a tool call, because the values live in labels:
+
+```promql
+count by (resource_type) (kubesense_cloud_resource_metric{provider="aws"})
+count by (metric_name, unit) (kubesense_cloud_resource_metric{resource_type="RdsInstance"})
+```
+
+Three rules that decide whether a cloud query is right or silently wrong:
+
+1. **Never `rate()` them.** The provider's aggregation (CloudWatch `Sum`/`Average`, the
+   Cloud Monitoring aligner, the Azure Monitor aggregation) is already applied at
+   collection time. Use the raw value, or `sum_over_time`/`avg_over_time`/`max_over_time`
+   to roll up buckets.
+2. **Always pin `resource_type` alongside `metric_name`.** `CPUUtilization` alone mixes
+   EC2, RDS, ECS, ElastiCache, DocumentDB, Neptune, OpenSearch and Redshift into one
+   aggregate.
+3. **Collection is a 5-minute tick with a 15-minute forward-fill.** Instant queries work
+   because the newest sample is re-stamped; a series silent for more than 15 minutes is
+   genuinely absent, not zero. Keep windows at or above 10m.
+
+Full label contract, per-provider resource types and their metrics, the AWS types that
+roll up onto a parent (there is no `PerformanceInsights` or `NetworkLoadBalancer`
+resource type), and worked queries:
+**[references/cloud-metric-catalog.md](./references/cloud-metric-catalog.md)**.
+
 ## Choosing Metrics vs Traces vs Infra Tools
 
 - **Resource pressure, saturation, capacity** (CPU, memory, disk, GPU) → metrics.
@@ -172,7 +222,9 @@ Use metrics to *quantify and confirm* a hypothesis the cheaper tools surfaced.
 
 For the metric families KubeSense collects — exact names for pods, containers, nodes,
 workloads, PVCs, network, GPU, JVM, and process metrics — read
-**[references/metric-catalog.md](./references/metric-catalog.md)**.
+**[references/metric-catalog.md](./references/metric-catalog.md)**. For AWS, GCP, Azure,
+MongoDB Atlas, Confluent Cloud and Kong resource metrics, read
+**[references/cloud-metric-catalog.md](./references/cloud-metric-catalog.md)**.
 
 Treat the catalog as *what to expect*, not a substitute for discovery: which families
 are present depends on the cluster's collectors, and application metrics are entirely
@@ -196,3 +248,7 @@ deployment-specific. Always confirm with `get-available-metrics`.
 9. `sum(rate(...)) by (le)` before `histogram_quantile`.
 10. Widen the discovery window for sparse metrics; `get-available-metrics` only looks
     back 1 hour by default.
+11. Cloud-provider metrics are all one series — `kubesense_cloud_resource_metric` — with
+    the provider's metric name in the `metric_name` label. Discover them with
+    `count by (metric_name) (...)`, never `get-available-metrics`.
+12. Never `rate()` a cloud metric, and always pin `resource_type` next to `metric_name`.
