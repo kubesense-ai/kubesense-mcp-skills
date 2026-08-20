@@ -439,4 +439,3 @@ is not a working dashboard — check these by hand before you hand it over.
 
 The one rule that spans both: `preset` is a stringified JSON string in the import envelope,
 but the plain object when passed to `create-dashboard` or `validate-dashboard-json`.
-
