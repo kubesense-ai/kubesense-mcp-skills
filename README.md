@@ -15,6 +15,7 @@ skill for the tool layer they share.
 | **kubesense-traces** | Spans, latency percentiles, error rates, distributed traces |
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes and infrastructure metrics |
 | **kubesense-sql** | Raw ClickHouse SQL over logs and traces — joins, CTEs, window functions |
+| **kubesense-spl** | SPL — the piped log query language, and its inverted field contract |
 | **kubesense-infra** | Clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List/investigate/create alerts, generate import JSON, migrate Datadog monitors |
 | **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
@@ -24,7 +25,7 @@ skill for the tool layer they share.
 > [!IMPORTANT]
 > **Always pass `--full-depth`.** This repo has a root `SKILL.md` (the umbrella index), and
 > the installer stops there unless told to search deeper — so without the flag it finds
-> **1** skill instead of **9**, and does so *silently*. Every command below includes it.
+> **1** skill instead of **10**, and does so *silently*. Every command below includes it.
 >
 > `references/` directories are **not** the reason for the flag. They are copied
 > automatically as part of a skill, nested subdirectories included.
@@ -48,6 +49,7 @@ npx skills add kubesense-ai/kubesense-mcp-skills \
   --skill kubesense-traces \
   --skill kubesense-metrics \
   --skill kubesense-sql \
+  --skill kubesense-spl \
   --skill kubesense-infra \
   --skill kubesense-alerts \
   --skill kubesense-dashboards \
@@ -66,7 +68,7 @@ npx skills add kubesense-ai/kubesense-mcp-skills --skill kubesense-dashboards --
 npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth
 ```
 
-Should report **9 skills**. If it says 1, the `--full-depth` flag is missing.
+Should report **10 skills**. If it says 1, the `--full-depth` flag is missing.
 
 ### Unattended installs
 

@@ -51,7 +51,7 @@ module. `analyze-telemetry` resolves every module its sub-queries touch.
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
 
-## Tools (31)
+## Tools (32)
 
 **Discovery — call before querying**
 
@@ -74,11 +74,17 @@ the global log level.
 | `get-distributed-trace` | Full span tree for one `trace_id` |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |
+| `validate-spl` | Dry-run verdict for an SPL query, plus the SQL it compiles to |
 
 `execute-sql` / `validate-sql` are the escape hatch for what `analyze-*` cannot express —
 joins, CTE chains, window functions, arithmetic across aggregates. They take the same
 catalog labels as everything else, plus a few fields discovery does not list. Refused for
 scope-restricted roles. See [kubesense-sql](../kubesense-sql/SKILL.md).
+
+`validate-spl` checks the Logs explorer's piped SPL language. Note SPL takes STORAGE column names
+(`level`, `pod_name`, `cluster`) — the inverse of the catalog labels every other tool here requires —
+and its parser accepts unknown fields and functions, so validating is the only way to find out a
+query is broken before it is run. See [kubesense-spl](../kubesense-spl/SKILL.md).
 
 **Inventory** — see [kubesense-infra](../kubesense-infra/SKILL.md)
 

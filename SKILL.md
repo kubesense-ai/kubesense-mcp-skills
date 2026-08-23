@@ -20,6 +20,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | **kubesense-logs** | Search and aggregate logs |
 | **kubesense-traces** | Spans, latency percentiles, error rates, distributed-trace waterfalls |
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes and infrastructure metrics |
+| **kubesense-spl** | SPL — the piped log query language, and its inverted field contract |
 | **kubesense-sql** | Raw ClickHouse SQL over logs and traces — joins, CTEs, window functions |
 | **kubesense-infra** | Cluster inventory: clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List, investigate, and create alert rules; generate import JSON; migrate Datadog monitors |
@@ -36,6 +37,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | "alert me when… / what's firing / convert this Datadog monitor" | kubesense-alerts |
 | "build me a dashboard" | kubesense-dashboards |
 | a query needing a join, CTE, or window function | kubesense-sql |
+| "search the logs with a pipeline" / SPL tab | kubesense-spl |
 | "this alert fired — what's wrong?" | kubesense-alerts, then kubesense-infra |
 | a tool returned a field-name or WHERE error | kubesense-mcp |
 
@@ -75,10 +77,10 @@ npx skills add kubesense-ai/kubesense-mcp-skills --full-depth -y
 
 > [!IMPORTANT]
 > **`--full-depth` is required.** Without it the installer stops at this root `SKILL.md`
-> and installs only this index — 1 skill instead of 9 — with no warning.
+> and installs only this index — 1 skill instead of 10 — with no warning.
 >
 > If you are reading this as the *only* installed KubeSense skill, that is what happened.
 > Re-run the command above with `--full-depth`.
 
 Verify with `npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth`, which
-should report 9 skills. Or pick individual skills — see the [README](./README.md).
+should report 10 skills. Or pick individual skills — see the [README](./README.md).
