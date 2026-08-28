@@ -1,6 +1,6 @@
 ---
 name: kubesense-spl
-description: Write and validate KubeSense SPL — the piped log query language — via validate-spl. Covers the storage-name field contract that inverts every other KubeSense surface, log_processed attributes, the command and aggregation vocabulary, and why an SPL query can compile and still fail.
+description: Write, validate and run KubeSense SPL — the piped log query language — via validate-spl and execute-spl. Covers the storage-name field contract that inverts every other KubeSense surface, log_processed attributes, the command and aggregation vocabulary, and why an SPL query can compile and still fail.
 metadata:
   version: "2.0.0"
   author: kubesense
@@ -23,9 +23,16 @@ and auth. Tools here resolve RBAC against the **`logs`** module.
 |---|---|---|
 | `get-trace-or-log-fields` (`signal: "logs"`) | To find dynamic attribute keys — **not** column names, see below | Field catalog for your window |
 | `validate-spl` | Before handing any query over | `valid` + the ClickHouse SQL it compiles to |
+| `execute-spl` | To answer a question yourself | Rows (TSV), capped at 1000 |
 
-There is no `execute-spl`. SPL runs from the Logs explorer's SPL tab; the tools write and check a
-query, a person runs it.
+**Validate before you execute.** SPL's parser accepts an unknown field and an unknown function alike,
+so a wrong name compiles and fails at run time — after the scan has already been paid for.
+`validate-spl` costs no scan, so the pair is cheap in that order and wasteful in the other.
+
+`execute-spl` needs `clusters` and a time window; `validate-spl` needs neither. Prefer `search-logs`
+or `analyze-logs` when they can express the question — they enforce namespace- and workload-level
+access rules the SPL endpoints cannot, which is also why both SPL tools are refused outright for a
+scope-restricted role.
 
 ## Field Names Are the Opposite of Everywhere Else
 
@@ -182,7 +189,8 @@ filter log_processed.duration_ms > 0
 1. Storage names, never catalog labels: `level` not `type`, `pod_name` not `instance`, `cluster` not
    `domain`.
 2. `get-trace-or-log-fields` is for attribute keys only — its column names are wrong for SPL.
-3. Call `validate-spl` before handing a query over, and read the `translated_sql` it returns.
+3. Call `validate-spl` before handing a query over or running it, and read the `translated_sql` it
+   returns.
 4. `perc95(x)`, never `p95(x)`.
 5. Write no time or cluster filter — the server applies both.
 6. A bare quoted search string goes first in the pipeline.
