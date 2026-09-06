@@ -93,8 +93,9 @@ There is **no `colorPalette` field** — it was replaced by `colorScheme`.
 ## `fieldConfig.color` — per query
 
 Not a `config` field: it lives on each **query** next to `fieldConfig.unit`, and applies to
-every series that query yields. Precedence, highest first: threshold colour → the query's
-`fieldConfig.color` → the panel `colorScheme`.
+every series that query yields. Precedence, highest first: threshold colour when
+`colorScheme.type` is `thresholds` → the query's `fieldConfig.color` → threshold colour
+otherwise (stat panels always carry a default base threshold) → the panel `colorScheme`.
 
 ```json
 { "type": "single",  "color": "#4AAD5A" }

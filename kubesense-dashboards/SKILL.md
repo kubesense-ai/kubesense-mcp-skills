@@ -321,8 +321,9 @@ Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggreg
 ### Per-query color
 
 Any query arm (metrics, logs, traces, formula) may carry `fieldConfig.color`. It colours
-every series that query yields and **outranks the panel `colorScheme`**; threshold colours
-still outrank it. Use it whenever the meaning of a query is fixed — errors red, success
+every series that query yields and **outranks the panel `colorScheme`**, including the
+stat panel's default base threshold. Only an explicit `colorScheme` of type `thresholds`
+outranks it. Use it whenever the meaning of a query is fixed — errors red, success
 green — so the colour does not depend on the query's position in the panel.
 
 ```json
