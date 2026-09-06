@@ -90,6 +90,30 @@ Discriminated on `type` — five variants:
 
 There is **no `colorPalette` field** — it was replaced by `colorScheme`.
 
+## `fieldConfig.color` — per query
+
+Not a `config` field: it lives on each **query** next to `fieldConfig.unit`, and applies to
+every series that query yields. Precedence, highest first: threshold colour → the query's
+`fieldConfig.color` → the panel `colorScheme`.
+
+```json
+{ "type": "single",  "color": "#4AAD5A" }
+{ "type": "palette", "palette": "error" }
+{ "type": "palette", "palette": "warning", "offset": 2 }
+```
+
+- `single.color` — same hex pattern as `custom.colors`. One series takes the colour as
+  is; a grouped query that returns several series is drawn in shades of it.
+- `palette` — `default` | `success` | `warning` | `error`. Indexing restarts at 0 for the
+  query rather than continuing the panel-wide series counter; `offset` (integer ≥ 0) rotates
+  the palette so the first series takes that slot.
+- Present on every query arm, including `formula`.
+
+> [!NOTE]
+> Ships with the query colour overrides release. A server that predates it strips the key
+> (like any unknown field), so the query renders in the panel scheme rather than failing
+> import.
+
 ## `valueOptions`
 
 ```json

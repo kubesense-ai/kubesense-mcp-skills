@@ -202,7 +202,8 @@ Three config fields the old format got wrong:
   `filled_regions_and_lines_dashed`.
 - **`colorScheme`**, not `colorPalette`. A 5-variant union; the palette variant is
   `{"type":"palette","palette":"default"}` and the only palette keys are `default`,
-  `success`, `warning`, `error`.
+  `success`, `warning`, `error`. To pin one query's colour regardless of the panel scheme,
+  use the query's own `fieldConfig.color` (see [Per-query color](#per-query-color)).
 - **`mergeTables`** is `z.literal(true)` and lives in the defaults — it is **always
   `true`** and cannot be disabled. Sending `false` silently becomes `true`. Just omit it.
 
@@ -316,6 +317,30 @@ Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggreg
 - Labels are **single letters A–Z**; a two-character label breaks the dependency check.
 - The formula must appear **after** the queries it references in the `queries` array.
 - It cannot reference itself, or a label that doesn't exist.
+
+### Per-query color
+
+Any query arm (metrics, logs, traces, formula) may carry `fieldConfig.color`. It colours
+every series that query yields and **outranks the panel `colorScheme`**; threshold colours
+still outrank it. Use it whenever the meaning of a query is fixed — errors red, success
+green — so the colour does not depend on the query's position in the panel.
+
+```json
+{ "selectedMode": "traces", "label": "A", "...": "...",
+  "fieldConfig": { "color": { "type": "single", "color": "#4AAD5A" } } }
+{ "selectedMode": "traces", "label": "B", "...": "...",
+  "fieldConfig": { "color": { "type": "palette", "palette": "error" } } }
+```
+
+- `single` — one hex colour (`#rgb`, `#rrggbb`, or with alpha). A grouped query that returns
+  several series is drawn in shades of it, not all identical.
+- `palette` — `default` | `success` | `warning` | `error`, cycled from the query's first
+  series. Optional `offset` (integer ≥ 0) starts at a later slot.
+- Omit `color` (or the whole `fieldConfig`) to inherit the panel scheme.
+
+A non-hex colour or an unknown palette name **fails validation** on import; the UI, if it
+ever reads one, drops back to the panel scheme. Full shape in
+[references/panel-config.md](./references/panel-config.md#fieldconfigcolor--per-query).
 
 ### Filters
 
