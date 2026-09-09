@@ -298,7 +298,9 @@ The essentials:
 
 - Flat fields (`threshold_operator`, `threshold_value`) and **plain duration strings**
   (`"5m"`, not `*_prometheus_format`) — except `breach_counting_window`, which import reads
-  as `breach_counting_window_prometheus_format`.
+  as `breach_counting_window_prometheus_format`. Send it under **both** names so the
+  document survives webapp#2081, which flips import to the plain one. It applies to
+  `always` as well as `more_than_once`.
 - One rule → a single JSON **object**. Multiple rules → **one JSON array**, which
   bulk-imports with a dry-run review. Never emit separate per-rule snippets.
 - `enabled` and `query_type` are **ignored** on import — the server hardcodes enabled and
@@ -347,7 +349,8 @@ cluster-specific. Ask the user, or have them export a reference rule.
     gauge/heartbeat). Never for a count/rate/change rule — a healthy window returns an empty
     result, not 0, so `firing` misfires at value 0. Use `normal`.
 12. `more_than_once` needs `breaches_count` (≥ 2); `always` needs `threshold_frequency` set
-    too.
+    too. Both read `breach_counting_window` — breaches counted over it for `more_than_once`,
+    condition held across it for `always` — and fall back to `time_window` without one.
 13. `{{field}}` placeholders in `name` resolve per firing series and must match a group-by
     key, e.g. group by `workload` → `"High latency {{workload}}"`. A placeholder with no
     matching group-by renders empty.
