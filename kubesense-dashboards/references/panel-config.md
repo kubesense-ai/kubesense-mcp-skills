@@ -90,6 +90,11 @@ Discriminated on `type` — five variants:
 
 There is **no `colorPalette` field** — it was replaced by `colorScheme`.
 
+On a **treemap**, colour is what tells one cell from its neighbour: every cell takes the
+next entry of the resolved palette, the way a pie slice does. `single` therefore paints the
+whole map one flat colour and is almost never what you want there — reach for `shades` if
+you need the map in one hue.
+
 ## `fieldConfig.color` — per query
 
 Not a `config` field: it lives on each **query** next to `fieldConfig.unit`, and applies to

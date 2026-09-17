@@ -178,8 +178,8 @@ omitted field takes the default; a wrong one can take out its siblings.
 }
 ```
 
-`panelType` — 9 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
-`spl`, `sql`. Note camelCase `timeSeries`.
+`panelType` — 11 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
+`treemap`, `spl`, `sql`, `slo`. Note camelCase `timeSeries`.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
@@ -194,6 +194,13 @@ For a **top-list** panel, `config.topListDisplayMode` is `flat` (default) or `st
 blocks stacked inside it. With one dimension the renderer draws flat whatever the field
 says. Value-driven colouring goes in `config.visualFormattingRules[]`, which **supersedes
 `thresholds` for this panel type**. Both are in the reference.
+
+For a **treemap** panel, give the query a `groupBy` and leave `config` alone — it has no
+config of its own beyond `colorScheme` and the unit, and it draws one cell per returned
+series, sized by value and coloured categorically from the panel palette. It is an instant
+panel like `pie`/`topList`, so `config.step` does not apply. Its `chart_type` is `topList`
+(see below), since the query-level enum has no `treemap` arm. Every series comes back, so
+cap the result with the query's own `limit` rather than expecting the panel to trim it.
 
 Three config fields the old format got wrong:
 
@@ -282,7 +289,9 @@ supply is overwritten. Don't bother setting it.
 
 - `chart_type` — 7 values: `table`, `stat`, `bar`, `pie`, `topList`, `timeseries`, `list`.
   **Lowercase `timeseries`** — `timeSeries` silently becomes `table`. This is a query-level
-  field, separate from the panel-level `panelType`.
+  field, separate from the panel-level `panelType`. There is deliberately **no `treemap`
+  arm**: the panel is not offered for SPL/SQL, so a `treemap` panel sets `chart_type` to
+  `topList` the way a `stat` panel sets `table`.
 - `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` with a `query`
   string for anything MFD's equality-only filters can't express (e.g. a latency threshold).
 - `groupBy` entries use the same shape as `columnFields`.
