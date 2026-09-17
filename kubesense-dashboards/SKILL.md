@@ -178,8 +178,8 @@ omitted field takes the default; a wrong one can take out its siblings.
 }
 ```
 
-`panelType` — 11 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
-`treemap`, `spl`, `sql`, `slo`. Note camelCase `timeSeries`.
+`panelType` — 12 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
+`treemap`, `alert`, `spl`, `sql`, `slo`. Note camelCase `timeSeries`.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
@@ -201,6 +201,15 @@ series, sized by value and coloured categorically from the panel palette. It is 
 panel like `pie`/`topList`, so `config.step` does not apply. Its `chart_type` is `topList`
 (see below), since the query-level enum has no `treemap` arm. Every series comes back, so
 cap the result with the query's own `limit` rather than expecting the panel to trim it.
+
+For an **alert** panel, the query names a rule and the widget to draw it as:
+`widgetType` is `graph`, `value` or `summary`. `graph` and `value` need a `ruleId`
+(and cache the rule's name in `ruleName`); `summary` reads `filters` instead, plus
+`displayFormat` (`count`/`list`/`both`) and `colorPreference` (`text`/`background`).
+Like slo it is served by the alert endpoints, not `/explore/query`, so `config.step`
+does not apply and its `chart_type` is `topList`. Datadog's fourth widget, Check
+Status, has no arm: the engine persists only `normal` and `firing`, so a four-state
+widget would have nothing to put in two of its cells.
 
 Three config fields the old format got wrong:
 
