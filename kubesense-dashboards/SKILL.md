@@ -206,7 +206,9 @@ For an **alert** panel, the query names a rule and the widget to draw it as:
 `widgetType` is `graph`, `value` or `summary`. `graph` and `value` need a `ruleId`
 (and cache the rule's name in `ruleName`); `graph` also takes `vizType`, `timeseries`
 (default) or `topList`, which draws the rule's own query ranked by each series' last
-value. `summary` reads `filters` instead, plus
+value. `value` takes `valueDisplay`, `full` (default) or `value` — the latter prints the
+number alone, for a tile whose own title already names the rule. `summary` reads
+`filters` instead, plus
 `displayFormat` (`count`/`list`/`both`), `colorPreference` (`text`/`background`) and
 `summaryType` (`monitor`/`group`/`combined`). `summaryType` decides what one row is:
 `monitor` one per rule, `group` one per firing instance (a rule grouped by `pod` gets a
