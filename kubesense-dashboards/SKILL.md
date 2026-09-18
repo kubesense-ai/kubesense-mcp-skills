@@ -204,8 +204,16 @@ cap the result with the query's own `limit` rather than expecting the panel to t
 
 For an **alert** panel, the query names a rule and the widget to draw it as:
 `widgetType` is `graph`, `value` or `summary`. `graph` and `value` need a `ruleId`
-(and cache the rule's name in `ruleName`); `summary` reads `filters` instead, plus
-`displayFormat` (`count`/`list`/`both`) and `colorPreference` (`text`/`background`).
+(and cache the rule's name in `ruleName`); `graph` also takes `vizType`, `timeseries`
+(default) or `topList`, which draws the rule's own query ranked by each series' last
+value. `summary` reads `filters` instead, plus
+`displayFormat` (`count`/`list`/`both`), `colorPreference` (`text`/`background`) and
+`summaryType` (`monitor`/`group`/`combined`). `summaryType` decides what one row is:
+`monitor` one per rule, `group` one per firing instance (a rule grouped by `pod` gets a
+row per breaching pod), `combined` one per rule with its firing instances counted beside
+it. Unlike Datadog's equivalent, `group` cannot list healthy groups — the engine
+materialises an instance only while it is firing, so a series that never breached has no
+row to show.
 Like slo it is served by the alert endpoints, not `/explore/query`, so `config.step`
 does not apply and its `chart_type` is `topList`. Datadog's fourth widget, Check
 Status, has no arm: the engine persists only `normal` and `firing`, so a four-state
