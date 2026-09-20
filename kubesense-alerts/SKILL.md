@@ -234,9 +234,45 @@ verify on the condition chart.
 | A hand-written `unified_filter` block | **Never read on import** — silently discarded |
 | `advanced_query` alongside other `raw_filters` keys | `advanced_query` is **exclusive**; every other filter key is dropped |
 | A `label` key on a `query_config` entry | Ignored — labels bind **positionally** (index 0 → `A`, 1 → `B`) |
+| `send_resolved: false` on a rule routed to `pagerduty` / `jsm` / `datadog_oncall` | **Refused with a warning.** The resolved payload is what CLOSES the incident there, so suppressing it would leave it open forever |
+| Re-creating a deleted rule with the same name to "restore" it | Deletes are soft — the old rule keeps its history and stays deleted. You get a **new** rule with no past events |
 
 Always tell the user to confirm the values on the import editor's **condition chart** before
 clicking Create.
+
+## Notification Behaviour
+
+How often a firing rule actually pages someone is governed mostly by the
+**channel**, not the rule.
+
+| Setting | Lives on | What it does |
+|---|---|---|
+| `group_interval` | channel | How soon Alertmanager reconsiders a group whose **contents changed**. The default is short, and a grouped rule's contents change constantly as series come and go — this, not `repeat_interval`, is usually the answer to "why does this notify on nearly every evaluation?" |
+| `repeat_interval` | channel | How often an **unchanged** firing group re-notifies. Only gets a say once `group_interval` has stopped firing. Hours is normal. |
+| `send_resolved` | channel | Whether the channel announces recoveries at all. |
+| `send_resolved` | **rule** | Per-rule override of the channel's setting. Omit to inherit — which is what every rule did before this existed. |
+
+`group_wait` and `group_by` are deliberately not exposed. Setting them wrongly
+means you stop being alerted, rather than being alerted less.
+
+### `send_resolved: false` on a rule
+
+For an informational rule that should fire and say nothing on recovery — "a new
+ledger appeared", "a deploy started" — without giving it its own channel. See
+the Traps table for where it is refused.
+
+### `send_count` is not a notification count
+
+It increments on **every evaluation** the series is firing, so it is roughly
+firing-duration ÷ `evaluation_interval`. A two-day alert on a 1m rule reads
+~3000. Never report it as "this paged someone 3000 times" — the number of times
+a human was actually notified is bounded by the channel's cadence above.
+
+### Acknowledging
+
+Acknowledge stops notifications for that one firing instance via an Alertmanager
+silence, capped at 7 days, and the alert **stays in Firing Now** — it says "I am
+on it", not "this is over". Unacknowledging expires the silence.
 
 ## Trace latency thresholds are in nanoseconds
 
