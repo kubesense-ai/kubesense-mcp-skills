@@ -178,8 +178,8 @@ omitted field takes the default; a wrong one can take out its siblings.
 }
 ```
 
-`panelType` — 9 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
-`spl`, `sql`. Note camelCase `timeSeries`.
+`panelType` — 12 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
+`treemap`, `alert`, `spl`, `sql`, `slo`. Note camelCase `timeSeries`.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
@@ -195,6 +195,32 @@ blocks stacked inside it. With one dimension the renderer draws flat whatever th
 says. Value-driven colouring goes in `config.visualFormattingRules[]`, which **supersedes
 `thresholds` for this panel type**. Both are in the reference.
 
+For a **treemap** panel, give the query a `groupBy` and leave `config` alone — it has no
+config of its own beyond `colorScheme` and the unit, and it draws one cell per returned
+series, sized by value and coloured categorically from the panel palette. It is an instant
+panel like `pie`/`topList`, so `config.step` does not apply. Its `chart_type` is `topList`
+(see below), since the query-level enum has no `treemap` arm. Every series comes back, so
+cap the result with the query's own `limit` rather than expecting the panel to trim it.
+
+For an **alert** panel, the query names a rule and the widget to draw it as:
+`widgetType` is `graph`, `value` or `summary`. `graph` and `value` need a `ruleId`
+(and cache the rule's name in `ruleName`); `graph` also takes `vizType`, `timeseries`
+(default) or `topList`, which draws the rule's own query ranked by each series' last
+value. `value` prints that rule's current figure alone — for a rule firing on several
+series it is the one furthest past the threshold, highest for a `greater_than` rule and
+lowest for a `less_than` one. `summary` reads `filters` instead, plus
+`displayFormat` (`count`/`list`/`both`), `colorPreference` (`text`/`background`) and
+`summaryType` (`monitor`/`group`/`combined`). `summaryType` decides what one row is:
+`monitor` one per rule, `group` one per firing instance (a rule grouped by `pod` gets a
+row per breaching pod), `combined` one per rule with its firing instances counted beside
+it. Unlike Datadog's equivalent, `group` cannot list healthy groups — the engine
+materialises an instance only while it is firing, so a series that never breached has no
+row to show.
+Like slo it is served by the alert endpoints, not `/explore/query`, so `config.step`
+does not apply and its `chart_type` is `topList`. Datadog's fourth widget, Check
+Status, has no arm: the engine persists only `normal` and `firing`, so a four-state
+widget would have nothing to put in two of its cells.
+
 Three config fields the old format got wrong:
 
 - **`thresholdDisplayMode`**, not `enableThresholds`. Values: `off` (default), `lines`,
@@ -202,7 +228,8 @@ Three config fields the old format got wrong:
   `filled_regions_and_lines_dashed`.
 - **`colorScheme`**, not `colorPalette`. A 5-variant union; the palette variant is
   `{"type":"palette","palette":"default"}` and the only palette keys are `default`,
-  `success`, `warning`, `error`.
+  `success`, `warning`, `error`. To pin one query's colour regardless of the panel scheme,
+  use the query's own `fieldConfig.color` (see [Per-query color](#per-query-color)).
 - **`mergeTables`** is `z.literal(true)` and lives in the defaults — it is **always
   `true`** and cannot be disabled. Sending `false` silently becomes `true`. Just omit it.
 
@@ -281,7 +308,9 @@ supply is overwritten. Don't bother setting it.
 
 - `chart_type` — 7 values: `table`, `stat`, `bar`, `pie`, `topList`, `timeseries`, `list`.
   **Lowercase `timeseries`** — `timeSeries` silently becomes `table`. This is a query-level
-  field, separate from the panel-level `panelType`.
+  field, separate from the panel-level `panelType`. There is deliberately **no `treemap`
+  arm**: the panel is not offered for SPL/SQL, so a `treemap` panel sets `chart_type` to
+  `topList` the way a `stat` panel sets `table`.
 - `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` with a `query`
   string for anything MFD's equality-only filters can't express (e.g. a latency threshold).
 - `groupBy` entries use the same shape as `columnFields`.
@@ -316,6 +345,31 @@ Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggreg
 - Labels are **single letters A–Z**; a two-character label breaks the dependency check.
 - The formula must appear **after** the queries it references in the `queries` array.
 - It cannot reference itself, or a label that doesn't exist.
+
+### Per-query color
+
+Any query arm (metrics, logs, traces, formula) may carry `fieldConfig.color`. It colours
+every series that query yields and **outranks the panel `colorScheme`**, including the
+stat panel's default base threshold. Only an explicit `colorScheme` of type `thresholds`
+outranks it. Use it whenever the meaning of a query is fixed — errors red, success
+green — so the colour does not depend on the query's position in the panel.
+
+```json
+{ "selectedMode": "traces", "label": "A", "...": "...",
+  "fieldConfig": { "color": { "type": "single", "color": "#4AAD5A" } } }
+{ "selectedMode": "traces", "label": "B", "...": "...",
+  "fieldConfig": { "color": { "type": "palette", "palette": "error" } } }
+```
+
+- `single` — one hex colour (`#rgb`, `#rrggbb`, or with alpha). A grouped query that returns
+  several series is drawn in shades of it, not all identical.
+- `palette` — `default` | `success` | `warning` | `error`, cycled from the query's first
+  series. Optional `offset` (integer ≥ 0) starts at a later slot.
+- Omit `color` (or the whole `fieldConfig`) to inherit the panel scheme.
+
+A non-hex colour or an unknown palette name **fails validation** on import; the UI, if it
+ever reads one, drops back to the panel scheme. Full shape in
+[references/panel-config.md](./references/panel-config.md#fieldconfigcolor--per-query).
 
 ### Filters
 
