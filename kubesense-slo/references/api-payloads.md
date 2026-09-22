@@ -31,7 +31,7 @@ goes in the body as `id`, and every column is written from what you send.
 | `slo_type` | string | `by_count` (default) \| `time_slice` \| `alert`. |
 | `metric` | string | A **label**, not a query. `requests` for traces, the PromQL metric name for metrics, `alert_uptime` for alert SLOs. Filterable on the list page. |
 | `slo_target_percentage` | number | e.g. `99.9`. Percentage, not fraction. |
-| `warning_target_percentage` | number \| null | Must be **above** the target (UI enforces ≥ target + 0.1). Omit for none. |
+| `warning_target_percentage` | number \| null | Should be **above** the target — a UI convention (≥ target + 0.1), **not validated by the API**. A value below the target is stored and then unreachable: the breached check runs first, so `warning` never appears. Omit for none. |
 | `operation` | string | `time_slice` only: **`GT`, `GTE`, `LT`, `LTE`, `EQ` — uppercase, nothing else.** Send `""` otherwise. See the operator warning below. |
 | `threshold_value` | integer | `time_slice` only — the value `operation` compares against. `0` otherwise. |
 | `evaluation_window_days` | integer | Rolling compliance window. 7 / 30 / 90 … |
@@ -62,7 +62,6 @@ Identical to an alert rule's `query_config` entry.
     "common_filter": [ {"field": "app_service", "operation": "IN", "values": ["checkout"]} ],
     "adv_filters": {}
   },
-  "queryMode": "code",             // metrics only
   "promql": "",                    // metrics only
   "alert_ids": []                  // alert SLOs only
 }
@@ -70,6 +69,19 @@ Identical to an alert rule's `query_config` entry.
 
 `is_free_search` is derived server-side from the filter tree — you do not need to
 send it, and a top-level `is_free_search` on the SLO body is ignored.
+
+> [!NOTE]
+> **`queryMode` is not part of the SLO API's QueryConfig.** An alert rule's
+> `query_config` carries it, and the UI sends it here too, but the SLO endpoints
+> decode into a struct that has no such field — so it is dropped, and a read-back
+> never returns it. Nothing needs it: a metrics query is executed from `promql`
+> alone. Do not be surprised when it vanishes, and do not treat its absence on
+> read-back as data loss.
+>
+> `operation` **is** a QueryConfig field, and the API falls back to
+> `total_events_filter.operation` when the top-level `operation` is empty. Setting it
+> in one place is enough; setting it in both with different values is asking for
+> confusion.
 
 **Filter operations** (`common_filter[].operation`): `IN`, `NIN`, `EQ`, `NEQ`, `LT`,
 `LTE`, `GT`, `GTE`, `LIKE`, `ILIKE`, `NOT_LIKE`, `SUBSTR_ILIKE`, `HAS_TOKEN`,
@@ -175,11 +187,11 @@ Both sides are PromQL. Use counters, and the same `[window]` on both.
   "status": "active",
   "operation": "", "threshold_value": 0, "value": 0,
   "good_events_filter": {
-    "label": "A", "selectedMode": "metrics", "queryMode": "code", "fields": [],
+    "label": "A", "selectedMode": "metrics", "fields": [],
     "promql": "sum(increase(nginx_ingress_controller_requests{status!~\"5..\"}[1m]))"
   },
   "total_events_filter": {
-    "label": "B", "selectedMode": "metrics", "queryMode": "code", "fields": [],
+    "label": "B", "selectedMode": "metrics", "fields": [],
     "promql": "sum(increase(nginx_ingress_controller_requests[1m]))"
   },
   "alert_types": ["burn_rate_fast"],
@@ -230,9 +242,9 @@ good when `value <operation> threshold_value`.
   "evaluation_time_interval_seconds": 60,
   "status": "active",
   "value": 0,
-  "good_events_filter": {"label": "A", "selectedMode": "metrics", "queryMode": "code", "promql": "", "fields": []},
+  "good_events_filter": {"label": "A", "selectedMode": "metrics", "promql": "", "fields": []},
   "total_events_filter": {
-    "label": "B", "selectedMode": "metrics", "queryMode": "code", "fields": [],
+    "label": "B", "selectedMode": "metrics", "fields": [],
     "promql": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"checkout\"}[1m]))) * 1000"
   },
   "alert_types": ["error_budget_low"],
@@ -240,8 +252,9 @@ good when `value <operation> threshold_value`.
 }
 ```
 
-- `good_events_filter` is unused but must be **present** — send the empty metrics
-  config above.
+- `good_events_filter` is **unused and optional** for `time_slice` — neither the API
+  nor the evaluator reads it. The empty metrics config above is shown because that is
+  what the UI sends; omitting the key entirely is equally fine.
 - `threshold_value` is an integer in whatever unit the query returns. Make the query
   return the unit you want to write in (the `* 1000` above turns seconds into ms).
 - Slice size = `evaluation_time_interval_seconds`. 60 or 300.
@@ -318,7 +331,10 @@ Response:
 }
 ```
 
-`status` is `normal` | `warning` | `breached` | `no_data`. A `no_data` preview with
+`status` here is **`normal` | `breached` | `no_data` only** — preview never returns
+`warning`, even with `warning_target_percentage` set, because it compares against the
+target alone. The `warning` state exists on the *stored* SLO (`status_eval`, and the
+`/slo/stats` counts), not in preview. A `no_data` preview with
 `total_events: 0` almost always means a wrong field name or an over-narrow filter —
 fix that before creating, not after.
 

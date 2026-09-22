@@ -87,7 +87,7 @@ All under `/api/slo`, RBAC module `slo`. Create/update/delete additionally need
 | `POST` | `/api/slo/list?status=active&current_time=<RFC3339>` | list; filters in the JSON body |
 | `GET` | `/api/slo/search?search=<substr>&limit=50` | `{id, name}` only — for pickers |
 | `POST` | `/api/slo/stats` | counts by status: normal / warning / breached / no_data |
-| `POST` | `/api/slo/preview` | dry-run compliance over a window, stores nothing |
+| `POST` | `/api/slo/preview` | dry-run compliance over a window, stores nothing (status is `normal`/`breached`/`no_data` — never `warning`) |
 | `GET` | `/api/slo/{id}/metrics?from_time=&to_time=` | good/bad/total + budget for a window |
 | `GET` | `/api/slo/{id}/groups?windows=last_24_hour,last_7_days` | per-group figures, several windows in one scan |
 | `GET` | `/api/slo/{id}/timeseries` | compliance over time |
@@ -135,8 +135,10 @@ Rules of the body:
   and the evaluator skips an SLO whose interval is 0 rather than looping forever.
 - `status: "active"` or the evaluator never picks it up.
 - `slo_target_percentage` is a percentage (`99.9`), not a fraction.
-- `warning_target_percentage`, when set, must be **higher** than the target (the UI
-  enforces `>= target + 0.1`). It is where you want to be warned *before* breaching.
+- `warning_target_percentage`, when set, should be **higher** than the target — it is
+  where you want to be warned *before* breaching. The UI enforces `>= target + 0.1`;
+  **the API does not validate it at all**, and a value below the target is stored and
+  never reached, because the breached check runs first.
 - `metric` is a **label**, not a query. `"requests"` for a traces SLI, the PromQL
   metric name for a metrics SLI, `"alert_uptime"` for an alert SLI. Nothing is
   evaluated from it — it just lands on the list page and in filters.
@@ -158,7 +160,7 @@ rule's query applies here.
 |---|---|
 | `selectedMode` | `traces` \| `logs` \| `metrics`. **Defaults to `traces`** when empty. |
 | `unified_filter` | traces/logs filter tree: `{type, common_filter[], adv_filters{}}` |
-| `promql` | metrics only — with `queryMode: "code"` |
+| `promql` | metrics only — the whole metrics query. (An alert rule's `queryMode` has no field here and is dropped.) |
 | `value_operation` | `row_count` (the normal choice), `unique_count`, `avg`, `sum`, `min`, `max`, percentiles |
 | `fields` | required for any non-count `value_operation` |
 | `groupBy` | `[{field, type, is_attribute}]` — see Grouping |
