@@ -88,8 +88,7 @@ An acknowledgement suppresses through **two** independent mechanisms: an Alertma
 silence capped at 7 days, *and* an engine-side check that skips the send entirely while the
 database flag is set. **The flag has no expiry.** Never tell someone notifications will
 come back on their own after a week — they will not until the alert resolves, flaps, or
-someone unacknowledges. (A manual resolve deliberately does *not* suppress: it closes the
-current episode and the next evaluation judges the rule afresh.)
+someone unacknowledges.
 
 > [!IMPORTANT]
 > Nothing in the MCP output tells the two apart from a real recovery. A manually resolved
