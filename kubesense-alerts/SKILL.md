@@ -297,10 +297,11 @@ verified working examples for metrics/logs/traces/formula rules, read
 The essentials:
 
 - Flat fields (`threshold_operator`, `threshold_value`) and **plain duration strings**
-  (`"5m"`, not `*_prometheus_format`) — except `breach_counting_window`, which import reads
-  as `breach_counting_window_prometheus_format`. Send it under **both** names so the
-  document survives webapp#2081, which flips import to the plain one. It applies to
-  `always` as well as `more_than_once`.
+  (`"5m"`, not `*_prometheus_format`) — including `breach_counting_window`, which is the
+  name **import reads**; `breach_counting_window_prometheus_format` is what the POST body
+  and the export carry. Send **both**, and never omit them: the `_prometheus_format` name
+  on its own is ignored and the rule silently gets **5 minutes**. It applies to `always`
+  as well as `more_than_once`.
 - One rule → a single JSON **object**. Multiple rules → **one JSON array**, which
   bulk-imports with a dry-run review. Never emit separate per-rule snippets.
 - `enabled` and `query_type` are **ignored** on import — the server hardcodes enabled and

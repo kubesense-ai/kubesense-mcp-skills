@@ -112,21 +112,28 @@ See the trap below.
 
 ### The `breach_counting_window` trap
 
-Import reads **`breach_counting_window_prometheus_format`**; export writes
-`breach_counting_window`. The round-trip is broken for this one field — re-add the
-`_prometheus_format` name when re-importing an exported rule that used it.
+**Send both keys, and never omit them.** `breach_counting_window` is what import reads;
+`breach_counting_window_prometheus_format` is what the POST body and the export carry.
+Measured on `convertAlertConfigToFormValues`, which is what a bulk import runs per rule:
 
-**Send both keys.** webapp#2081 (open against `dev` as of 2026-08-13) flips import to read
-the plain `breach_counting_window`, which fixes the round-trip but inverts this trap. A
-document carrying both names imports correctly before and after that change; the unread key
-is ignored either way.
+| the document carries | the window the rule gets |
+|---|---|
+| `breach_counting_window_prometheus_format: "15m"` **only** | **5 minutes** |
+| `breach_counting_window: "15m"` only | 15 minutes |
+| neither | 5 minutes |
 
-**And never omit it.** The engine falls back to `time_window` when the column is null, but
-an import does not reach the engine with a null: the editor fills the field first, and with
-neither key present it defaults to **5 minutes**. So a 15-minute rule whose whole point is
-a 15-minute hold imports as a 5-minute one, silently, and the reviewer sees a plausible
-number rather than a blank. The fallback protects rules created by other routes; it does
-not protect yours.
+So the `_prometheus_format` name alone — the name an earlier version of this document
+called "the one import reads" — is **ignored**, and the rule silently gets five minutes.
+Not an error, not a blank field: a plausible number the reviewer has no reason to question.
+A 15-minute hold becomes a 5-minute one and the rule fires three times sooner than asked.
+
+The plain name alone works today. Send both anyway: the Export button emits both
+(`helper.ts`), so a document carrying both is exactly what a round-tripped rule looks like,
+and it survives the reader changing which one it prefers.
+
+The engine *does* fall back to `time_window` when the column is null — that fallback
+protects rules created by other routes. An import never reaches it, because the editor has
+already filled the field.
 
 ## `query_config[]`
 
