@@ -29,6 +29,7 @@ Two distinct jobs, don't confuse them:
 | "give me the alert JSON for…" / several rules / migrating | import JSON → [references/import-json.md](./references/import-json.md) |
 | "port these Datadog monitors" | [references/datadog-migration.md](./references/datadog-migration.md) |
 | you hand-built rule JSON and want it checked | `validate-alert-json` before handing it over |
+| "error budget", "burn rate", "are we meeting 99.9%" | [kubesense-slo](../kubesense-slo/SKILL.md) — burn-rate rules are generated from an SLO's `alert_types`, not hand-written |
 
 ## Reading Alerts
 

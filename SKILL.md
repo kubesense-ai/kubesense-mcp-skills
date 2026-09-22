@@ -1,11 +1,11 @@
 ---
 name: kubesense-skills
-description: KubeSense observability skills for AI agents — query logs, traces, and metrics from Kubernetes clusters, inspect cluster inventory, and generate alert and dashboard configuration.
+description: KubeSense observability skills for AI agents — query logs, traces, and metrics from Kubernetes clusters, inspect cluster inventory, manage service level objectives, and generate alert and dashboard configuration.
 metadata:
   version: "2.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,observability,kubernetes,logs,traces,metrics,alerts,dashboards,mcp,cloud,aws,gcp,azure
+  tags: kubesense,observability,kubernetes,logs,traces,metrics,alerts,dashboards,slo,mcp,cloud,aws,gcp,azure
 ---
 
 # KubeSense Skills
@@ -25,6 +25,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | **kubesense-infra** | Cluster inventory: clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List, investigate, and create alert rules; generate import JSON; migrate Datadog monitors |
 | **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
+| **kubesense-slo** | Create and manage service level objectives; error budgets, burn-rate alerting, Datadog SLO migration |
 
 ## Routing
 
@@ -37,6 +38,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | "what's running / why is this pod restarting / what changed" | kubesense-infra |
 | "alert me when… / what's firing / convert this Datadog monitor" | kubesense-alerts |
 | "build me a dashboard" | kubesense-dashboards |
+| "track an SLO / error budget / port a Datadog SLO" | kubesense-slo |
 | a query needing a join, CTE, or window function | kubesense-sql |
 | "search the logs with a pipeline" / SPL tab | kubesense-spl |
 | "this alert fired — what's wrong?" | kubesense-alerts, then kubesense-infra |
@@ -44,11 +46,15 @@ Observability skills for KubeSense, grouped by telemetry surface.
 
 ## Prerequisites
 
-Every skill except `kubesense-dashboards` and `kubesense-alerts` (which can generate
-JSON offline) needs the **KubeSense MCP server** connected. Those two need it for their
-validate and create tools, and for discovering real metric and field names — offline they
-fall back to JSON built from names the user supplies. It is served by kubeapi at
-`/mcp` over Streamable HTTP and authenticates with the same credentials as the REST API.
+Every skill except `kubesense-dashboards`, `kubesense-alerts` and `kubesense-slo`
+(which can generate JSON offline) needs the **KubeSense MCP server** connected. Those
+three need it for their validate and create tools, and for discovering real metric and
+field names — offline they fall back to JSON built from names the user supplies.
+`kubesense-slo` has no MCP tools at all: it drives the REST API directly, and uses the
+MCP query tools only to discover names.
+
+The MCP server is served by kubeapi at `/mcp` over Streamable HTTP and authenticates
+with the same credentials as the REST API.
 
 ```bash
 claude mcp add --scope user --transport http kubesense \
@@ -78,10 +84,10 @@ npx skills add kubesense-ai/kubesense-mcp-skills --full-depth -y
 
 > [!IMPORTANT]
 > **`--full-depth` is required.** Without it the installer stops at this root `SKILL.md`
-> and installs only this index — 1 skill instead of 10 — with no warning.
+> and installs only this index — 1 skill instead of 11 — with no warning.
 >
 > If you are reading this as the *only* installed KubeSense skill, that is what happened.
 > Re-run the command above with `--full-depth`.
 
 Verify with `npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth`, which
-should report 10 skills. Or pick individual skills — see the [README](./README.md).
+should report 11 skills. Or pick individual skills — see the [README](./README.md).
