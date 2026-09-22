@@ -44,7 +44,9 @@ catch an SLO that stored cleanly and evaluates nothing.
    absence of firing rows reads as perfect uptime.
 4. **Create** with `POST /api/slo` and keep the returned id. No id, no SLO.
 5. **Read back** with `GET /api/slo/{id}?current_time=…` and check the stored config is
-   what you sent — particularly `slo_type`, `operation`, and both `groupBy` lists.
+   what you sent — particularly `slo_type`, both `groupBy` lists, and the query
+   filters. For `by_count`, an omitted or empty `operation` is stored as `GT`; it is
+   ignored for that SLO type.
 6. **Verify real buckets** after one or two evaluation intervals:
    `GET /api/slo/{id}/metrics?from_time=…&to_time=…`, plus the SLO read-back.
    - **`last_evaluated` advancing** between two reads is what proves the evaluator
@@ -133,7 +135,7 @@ Minimum viable `by_count` SLO over traces:
   "evaluation_start_time": "2026-09-01T00:00:00Z",
   "status": "active",
   "cluster": "", "namespace": "", "workload": "", "customer_identifier": "",
-  "operation": "", "threshold_value": 0, "value": 0,
+  "operation": "GT", "threshold_value": 0, "value": 0,
   "good_events_filter":  { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "unified_filter": { "type": "common", "common_filter": [ {"field": "app_service", "operation": "IN", "values": ["checkout"]}, {"field": "status", "operation": "IN", "values": ["ok"]} ], "adv_filters": {} } },
   "total_events_filter": { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "unified_filter": { "type": "common", "common_filter": [ {"field": "app_service", "operation": "IN", "values": ["checkout"]} ], "adv_filters": {} } },
   "alert_types": ["burn_rate_fast", "error_budget_low"],
@@ -158,18 +160,20 @@ Rules of the body:
   metric name for a metrics SLI, `"alert_uptime"` for an alert SLI. Nothing is
   evaluated from it — it just lands on the list page and in filters.
 - `operation` / `threshold_value` are the **time_slice condition only**. `by_count`
-  ignores them; fold a latency cutoff into the good query as a duration filter
-  instead.
+  ignores them; the API canonicalizes an omitted or empty operation to `GT`. Fold a
+  latency cutoff into the good query as a duration filter instead.
 - Update is a **full replace**: `PUT /api/slo` writes every column from the body, so
   send the whole object (read it back with `GET /api/slo/{id}` first), and put the
   id in the body as `id`.
 
-## Good and Total Are Alert Query Configs
+## Good and Total Query Configs
 
-`good_events_filter` and `total_events_filter` are the **same `query_config` object
-an alert rule uses** — same JSON keys, same executors, same field allow-lists. That
-is the single most useful thing to know: anything you know about building an alert
-rule's query applies here.
+`good_events_filter` and `total_events_filter` use a query shape that is similar to
+an alert rule's `query_config`, and the same executors and field allow-lists apply.
+Do not copy an alert-rule object verbatim: an SLO uses `unified_filter`, while an
+alert rule uses `filters`. Alert-rule-only fields such as `queryMode`, `rawFilters`,
+`visible`, and `labelOptions` are not stored by an SLO. SLO-only fields include
+`operation`, `alert_ids`, `sortBy`, `sortOrder`, and `variables`.
 
 | Key | Meaning |
 |---|---|
