@@ -70,9 +70,10 @@ A `time_slice` SLO instead carries:
 | `thresholds[].warning` | `warning_target_percentage` | Must be **above** the target — Datadog's own rule, same here. Omit if absent. |
 | `thresholds[].timeframe` | `evaluation_window_days` | `7d` → 7, `30d` → 30, `90d` → 90. `custom` → read `thresholds[].timeframe`'s day count. |
 | **several `thresholds`** | **several SLOs** | KubeSense stores **one** window per SLO. Emit one SLO per timeframe, named `"<name> (7d)"`, `"<name> (30d)"`, and say so. |
-| `groups` | `groupBy` on both filters | Datadog group strings are `tag:value` pairs; the *key* becomes the groupBy field. Verify the KubeSense field name first. |
+| `groups` (monitor SLOs) | **no equivalent — do not map to `groupBy`** | These *select* which monitor groups count toward compliance. KubeSense has no such selection: an alert SLO takes the union of its rules' firing history, and its grouped path keys on alert **fingerprint**, not on a tag value. See "Monitor SLOs" below. |
+| `by {tag}` inside a metric SLO query | `groupBy` on both filters + `by (…)` in the PromQL | A grouping dimension, unlike `groups` above. Verify the KubeSense field name first. |
 | `tags` | *(no equivalent)* | An SLO has **no** labels/tags field. Fold what matters into `description`, or into the `workload`/`namespace`/`cluster` metadata columns, which the list page filters on. |
-| `sli_specification.time_slice.comparator` | `operation` | `<=` → `LTE`, `<` → `LT`, `>=` → `GTE`, `>` → `GT`, `==` → `EQ`, `!=` → `NEQ` |
+| `sli_specification.time_slice.comparator` | `operation` | `<=` → `LTE`, `<` → `LT`, `>=` → `GTE`, `>` → `GT`, `==` → `EQ`. **Uppercase only.** `!=` has **no working equivalent** — `NEQ` is rejected at create; invert the query instead, or flag it to the user. |
 | `sli_specification.time_slice.threshold` | `threshold_value` | Integer, in the unit your query returns. |
 | `query_interval_seconds` | `evaluation_time_interval_seconds` | Datadog offers 60 and 300; so does KubeSense. Pass it straight through. |
 | `monitor_ids` | `total_events_filter.alert_ids` | **Uuids of the migrated KubeSense rules**, not Datadog's integer ids. |
@@ -130,11 +131,32 @@ a coarser signal.
    finds them afterwards).
 3. Put those uuids in `total_events_filter.alert_ids`.
 
-Datadog computes monitor-SLO uptime from monitor state history; KubeSense computes it
-from the firing history of the named rules **from the moment they exist**. There is no
-backfill of alert history — an alert SLO's compliance starts accumulating the day you
-create the rules, whatever `evaluate_from` says. Tell the user this; it is the biggest
-behavioural gap in the whole migration.
+> [!WARNING]
+> **Set `evaluate_from` to the moment the migrated rules started existing.** This is
+> the biggest hazard in the whole migration, and it fails in the flattering direction.
+>
+> Uptime is computed as `bucket_seconds - downtime`, where downtime comes from rows in
+> `alert_events`. A backfilled bucket from before the rules existed has no rows, so it
+> scores as **fully healthy** — not as "no data". Backdate `evaluate_from` to match
+> Datadog's history and you manufacture a stretch of perfect uptime, which then feeds
+> the error budget and every burn-rate alert derived from it.
+>
+> There is no import path for Datadog's monitor state history. Say plainly that
+> compliance starts at migration, and that the first full window is the first
+> trustworthy number.
+
+The other gap is **group selection**. Datadog's `groups` field restricts a monitor SLO
+to named monitor groups. KubeSense cannot express that: `evaluateAlert` takes the union
+of the firing history of every rule in `alert_ids`, so outages in groups the original
+SLO excluded *will* count against you. Two honest options:
+
+1. **Scope it in the rules.** Migrate the monitor into a rule whose filters already
+   restrict it to the groups the SLO named, and point the SLO at that rule.
+2. **Flag it as unsupported** and port the SLO without the restriction, saying so.
+
+Do not silently translate `groups` into a `groupBy` entry — that is a different
+operation, and for an alert SLO `groupBy` splits compliance by alert **fingerprint**
+(`groupLabels: {"fingerprint": …}`), which is not the tag grouping Datadog showed.
 
 ## Burn-rate and error-budget monitors
 
@@ -243,8 +265,12 @@ client spans of everything calling checkout are counted too. Add it, and say you
 - That `tags` had nowhere to go, and where you put them instead.
 - That metric and field names were **rediscovered**, not copied — and which ones you
   could not resolve.
-- For monitor SLOs: that compliance **starts from rule creation**, with no backfill
-  of Datadog's monitor history.
+- For monitor SLOs: that compliance **starts at migration**, that `evaluate_from` was
+  set accordingly, and that backdating it would have invented perfect uptime rather
+  than leaving a gap.
+- For monitor SLOs with `groups`: that the group **restriction** could not be carried
+  over, and which of the two options above you took.
+- That `!=` time-slice comparators have no working equivalent, if one appeared.
 - That burn-rate monitors became `alert_types`, that the multipliers are derived from
   the window rather than ported, and that editing a generated rule is reverted on the
   next SLO update.

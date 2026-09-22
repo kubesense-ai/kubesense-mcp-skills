@@ -20,6 +20,35 @@ rolling aggregate over `evaluation_window_days`.
 > do not. Everything here is the **REST API** at `/api/slo`, authenticated exactly
 > like the MCP server (`x-api-key`, or `Authorization: Bearer <token>`). Use the
 > MCP query tools to *discover* metric and field names, then build the SLO body.
+>
+> **So this skill needs two things an MCP connection does not give you**: a way to make
+> HTTP calls (a shell with `curl`, or an HTTP tool), and the API credentials as a value
+> you can put in a header — the MCP server's own credentials are not readable from
+> inside a tool call. An agent with MCP alone can still build and explain the payload,
+> and should say plainly that the user has to send it.
+
+## The Lifecycle
+
+Follow it in order. Steps 5 and 6 are the ones people skip, and they are the ones that
+catch an SLO that stored cleanly and evaluates nothing.
+
+1. **Discover.** Real metric names (`get-available-metrics`, `get-metric-labels`) and
+   real field names (`get-trace-or-log-fields`). Channel ids for the burn-rate alerts
+   (`list-notification-channels`). Alert rule uuids if it is an alert SLO.
+2. **Construct** the body — the type, the two queries, the window, `alert_types`.
+3. **Preview** with `POST /api/slo/preview`, knowing what preview does and does not
+   check. A `no_data` or wildly wrong result is a filter bug; fix it here.
+4. **Create** with `POST /api/slo` and keep the returned id. No id, no SLO.
+5. **Read back** with `GET /api/slo/{id}?current_time=…` and check the stored config is
+   what you sent — particularly `slo_type`, `operation`, and both `groupBy` lists.
+6. **Verify real buckets** after one or two evaluation intervals:
+   `GET /api/slo/{id}/metrics?from_time=…&to_time=…`. Non-zero `total_events` (or
+   `total` slices/seconds) is the only proof the query actually runs. `last_evaluated`
+   staying null means the evaluator never picked it up.
+7. **Verify the generated alerts** if you set `alert_types` — they should exist as
+   rules named `"<SLO name> Fast Burn Rate"` and so on, with your channel ids.
+8. **Update or delete** with `PUT` (full body, id inside) or `DELETE /api/slo/{id}`,
+   then repeat steps 5–7. An update rebuilds the generated rules.
 
 ## The Three SLI Types
 
@@ -37,7 +66,7 @@ Time Slices" and "By Uptime".
 | The user is asking… | Do this |
 |---|---|
 | "create an SLO for X" | build the `POST /api/slo` body — [references/api-payloads.md](./references/api-payloads.md) |
-| "will this SLO pass?" / "what would compliance have been?" | `POST /api/slo/preview` **before** creating — it costs nothing and stores nothing |
+| "will this SLO pass?" / "what would compliance have been?" | `POST /api/slo/preview` **before** creating — it costs nothing and stores nothing, but it is an estimate, not a replay ([limits](./references/api-payloads.md#preview--always-do-this-first)) |
 | "what SLOs do we have / which are breached?" | `POST /api/slo/list?status=active&current_time=…`, or `POST /api/slo/stats` |
 | "why is this SLO burning budget?" | `GET /api/slo/{id}/burn-rate/timeseries`, then [kubesense-traces](../kubesense-traces/SKILL.md) / [kubesense-logs](../kubesense-logs/SKILL.md) on the same filter |
 | "alert me when the budget burns" | `alert_types` on the SLO — do **not** hand-write burn-rate alert rules |
@@ -145,9 +174,12 @@ rule's query applies here.
 >
 > There is one divergence to know about: **`POST /api/slo/preview` runs the query
 > through the API's own explore engine, while the evaluator runs it through the
-> rule-engine.** Their field maps overlap but are not identical. A name that previews
-> fine can still error on every evaluation — which is why a preview is necessary but
-> not sufficient. Confirm the first real bucket after creating.
+> rule-engine.** Their field maps overlap but are not identical, so a name that
+> previews fine can still error on every evaluation. Preview also **hardcodes
+> `row_count` for traces and logs** (ignoring `value_operation` and `fields`, so a
+> latency SLI previews request counts) and **samples ~300 points** for metrics rather
+> than evaluating every bucket. Preview catches an empty or wrong filter; it does not
+> validate the number. Confirm on the first real buckets after creating.
 
 ## Grouping
 
@@ -168,6 +200,12 @@ joined on group identity.
   `trace_id` or any unbounded field.
 - Groups on the good side that have no matching total group are clamped away, with a
   warning. Keep the two `groupBy` lists identical.
+- **A metrics SLI needs a non-empty `groupBy` too.** `by (…)` in the PromQL does not
+  switch grouping on by itself: the evaluator reads `total_events_filter.groupBy`, and
+  with an empty list a multi-series result is reduced to its **first series**, the rest
+  discarded silently. (`time_slice` over metrics is the exception — it always runs
+  multi-series.) See
+  [references/api-payloads.md](./references/api-payloads.md#grouping-a-metrics-by_count-slo).
 
 ## Burn-Rate Alerting Comes From `alert_types`
 
@@ -187,8 +225,15 @@ familiar 14.4× / 6× multi-window burn rates. They are recomputed on every upda
 > [!WARNING]
 > **Never hand-write these rules.** `PUT /api/slo` **deletes every alert rule
 > attached to the SLO and rebuilds them** from `alert_types`; `DELETE` removes them.
-> Any rule you create yourself against `kubesense_slo_*` for that SLO survives — but
-> an edit you make to a *generated* rule is silently reverted on the next SLO update.
+> An edit to a *generated* rule is silently reverted on the next SLO update.
+>
+> "Attached" means the rule's **own `labels.slo_id`**, not its PromQL. The delete is
+> `WHERE JSON_EXTRACT(labels, '$.slo_id') = <id>`, and it does not care who created
+> the rule. So a hand-written rule that merely *selects*
+> `kubesense_slo_burn_rate{slo_id="…"}` in its query survives, while one that carries
+> `slo_id` in its own labels — the obvious thing to do when copying a generated rule —
+> is deleted along with them. Keep `slo_id` out of the labels of any rule you want to
+> keep.
 >
 > `notification_channels` on the SLO is what those generated rules page. Call
 > `list-notification-channels` (MCP) or `GET /api/alerts/notification-channels`
@@ -223,6 +268,11 @@ familiar 14.4× / 6× multi-window burn rates. They are recomputed on every upda
 | `groupBy` lists differing between good and total | Orphaned good groups are clamped; compliance reads as 100% for them |
 | Alert SLO with no `alert_ids` | Evaluator skips it (it would otherwise report a flawless 100% forever) |
 | `warning_target_percentage` **below** the target | Never warns — warning must be above target |
+| `time_slice` `operation` as a long form (`less_than`) or lowercase (`lt`) | Passes API validation, unreadable to the evaluator — **every slice scores as downtime**, 0% forever. Uppercase `GT`/`GTE`/`LT`/`LTE`/`EQ` only |
+| `time_slice` `operation: "NEQ"` | Rejected at create, despite being offered in the UI's dropdown |
+| Metrics `by_count` with `by (…)` but an empty `groupBy` | Only the **first series** is counted; the rest vanish silently |
+| A hand-written rule carrying `slo_id` in its own labels | Deleted on the next `PUT /api/slo` along with the generated ones |
+| Alert SLO with `evaluate_from` before its rules existed | Backfills **invented perfect uptime** — it is not recorded as no-data |
 | Editing a generated burn-rate rule | Reverted on the next `PUT /api/slo` |
 | `PUT` with a partial body | Full replace — unsent fields are written as their zero values |
 | `evaluation_window_days` not a multiple of 7 and > 31 (e.g. 90) | Works over the API, but the UI's period input (1–31 × day/week) cannot represent it, so a later edit in the UI fails validation |
@@ -235,7 +285,10 @@ familiar 14.4× / 6× multi-window burn rates. They are recomputed on every upda
   query returning 0 is treated as "no data", so a zero-traffic minute is a good
   slice. This does mean a telemetry outage reads as a healthy SLO.
 - **`alert`**: downtime is the union of firing intervals of the named rules; a rule
-  still firing at the window edge is counted as firing up to that edge.
+  still firing at the window edge is counted as firing up to that edge. A bucket with
+  **no firing rows at all scores as fully healthy, not as no-data** — so an
+  `evaluate_from` earlier than the rules themselves backfills invented perfect uptime
+  into the budget. Set `evaluate_from` to when the rules started existing.
 
 Say which one applies when you hand an SLO over. It is the single most common source
 of "this number looks wrong".
@@ -265,9 +318,14 @@ of "this number looks wrong".
    and budget numbers it returns. Preview is free and stores nothing.
 4. Set `selectedMode` explicitly on both filters. The default is `traces`.
 5. `evaluation_time_interval_seconds > 0` and `status: "active"`, always.
-6. Keep `groupBy` identical on good and total, and bounded well under 100 groups.
+6. Keep `groupBy` identical on good and total, and bounded well under 100 groups — and
+   set it even on a metrics SLI, where `by (…)` alone leaves you with one series.
 7. Never hand-write burn-rate alert rules — use `alert_types`, and verify the channel
    ids exist first.
 8. `PUT` sends the **whole** object; read the SLO back before editing it.
-9. State the missing-data semantics for the type you built.
-10. Never claim an SLO was created unless `POST /api/slo` actually returned an id.
+9. `time_slice` operators are uppercase `GT`, `GTE`, `LT`, `LTE`, `EQ`. Nothing else
+   works end to end.
+10. State the missing-data semantics for the type you built — and for an alert SLO, set
+   `evaluate_from` to when its rules started existing.
+11. Never claim an SLO was created unless `POST /api/slo` returned an id — and never
+   call it working until a real bucket came back with events (step 6).

@@ -32,7 +32,7 @@ goes in the body as `id`, and every column is written from what you send.
 | `metric` | string | A **label**, not a query. `requests` for traces, the PromQL metric name for metrics, `alert_uptime` for alert SLOs. Filterable on the list page. |
 | `slo_target_percentage` | number | e.g. `99.9`. Percentage, not fraction. |
 | `warning_target_percentage` | number \| null | Must be **above** the target (UI enforces ≥ target + 0.1). Omit for none. |
-| `operation` | string | `time_slice` only: `GT` \| `GTE` \| `LT` \| `LTE` \| `EQ` \| `NEQ` (long forms `less_than`, `greater_than_or_equal`, … also accepted). Send `""` otherwise. |
+| `operation` | string | `time_slice` only: **`GT`, `GTE`, `LT`, `LTE`, `EQ` — uppercase, nothing else.** Send `""` otherwise. See the operator warning below. |
 | `threshold_value` | integer | `time_slice` only — the value `operation` compares against. `0` otherwise. |
 | `evaluation_window_days` | integer | Rolling compliance window. 7 / 30 / 90 … |
 | `evaluation_time_interval_seconds` | integer | Bucket size; **must be > 0**. Slice size for `time_slice` (use 60 or 300). |
@@ -187,9 +187,31 @@ Both sides are PromQL. Use counters, and the same `[window]` on both.
 }
 ```
 
-Grouped metrics SLOs infer their groups from the **PromQL result labels** — add
-`by (…)` to both queries and the label set becomes the group key. No `groupBy` entry
-is needed for a metrics SLI.
+### Grouping a metrics `by_count` SLO
+
+> [!WARNING]
+> **`by (…)` in the PromQL is not enough.** The evaluator decides whether to run the
+> grouped path from `total_events_filter.groupBy` alone — a non-empty list switches
+> it on. With an empty `groupBy`, a multi-series PromQL goes down the single-value
+> path, which **takes the first series returned and discards the rest**, with no
+> group labels and no warning. Two groups of 90 and 10 events record as 90.
+
+So a grouped metrics SLI needs **both**: `by (…)` in the PromQL *and* a non-empty
+`groupBy` on `total_events_filter` and `good_events_filter` alike.
+
+```json
+"groupBy": [{"field": "service", "type": "string", "is_attribute": false}],
+"promql": "sum by (service) (increase(nginx_ingress_controller_requests[1m]))"
+```
+
+For a **metrics** SLI the group key is built from the PromQL result labels, not from
+the `groupBy` field names — so the field name there is only a switch, and a name that
+does not appear in `by (…)` still works. Name it after the `by (…)` label anyway: the
+generated per-group burn-rate alerts and anything reading the series will be read by
+someone who expects the two to agree.
+
+`time_slice` over metrics is the exception: its metrics path always runs multi-series,
+so it does infer groups from the result labels with no `groupBy` entry.
 
 ## Example 3 — `time_slice`
 
@@ -223,6 +245,13 @@ good when `value <operation> threshold_value`.
 - `threshold_value` is an integer in whatever unit the query returns. Make the query
   return the unit you want to write in (the `* 1000` above turns seconds into ms).
 - Slice size = `evaluation_time_interval_seconds`. 60 or 300.
+- **`operation` must be uppercase `GT`, `GTE`, `LT`, `LTE` or `EQ`.** The API and the
+  evaluator disagree about the rest, and both failures are silent-ish:
+  - `NEQ` is **rejected at create** ("operation is required for time_slice SLOs"),
+    even though the UI's dropdown offers it.
+  - Long forms (`less_than`, `greater_than_or_equal`) and lowercase (`lt`) **pass API
+    validation and are then unreadable to the evaluator**, which scores every slice as
+    downtime. The SLO stores cleanly and reports 0% compliance forever.
 - **Missing data counts as uptime.** For a traces/logs `time_slice`, a `row_count`
   of 0 is treated as missing, so a zero-traffic slice is good.
 
@@ -293,11 +322,25 @@ Response:
 `total_events: 0` almost always means a wrong field name or an over-narrow filter —
 fix that before creating, not after.
 
-> [!NOTE]
-> Preview runs through the API's explore engine; the evaluator runs through the
-> rule-engine executors. They agree on the common cases but not on every field alias,
-> so a clean preview is necessary, not sufficient. Check the first real bucket after
-> creating (`GET /api/slo/{id}/metrics`).
+> [!WARNING]
+> **Preview is an estimate, not a replay of what the evaluator will do.** It runs
+> through the API's own explore engine, and differs in three ways that change the
+> number it returns:
+>
+> 1. **Traces and logs previews are hardcoded to `row_count`.** `value_operation` and
+>    `fields` are ignored. A p99-latency SLI previews *request counts* against its
+>    latency threshold — a number that means nothing. Only a metrics SLI previews the
+>    aggregate you configured.
+> 2. **Metrics `by_count` previews sample.** The window is divided into about 300
+>    steps and the samples are summed, rather than every configured bucket being
+>    evaluated. Expect drift against the real figures, more of it on a long window.
+> 3. **Field aliases do not match exactly.** The explore engine and the rule-engine
+>    executors resolve names from different maps, so a name can preview clean and then
+>    error on every evaluation.
+>
+> Use preview to catch an empty or wildly wrong filter — that is what it is good at.
+> Do not present its output as historical compliance. Verify on the first real
+> buckets after creating (`GET /api/slo/{id}/metrics`).
 
 ## Reading
 
