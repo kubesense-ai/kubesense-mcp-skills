@@ -1,8 +1,8 @@
 ---
 name: kubesense-alerts
-description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes validate-alert-json for checking hand-built rule JSON, the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors.
+description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes validate-alert-json for checking hand-built rule JSON, the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors. Also covers multi-query formula rules, the Alert. placeholder namespace, manual resolve, and maintenance windows.
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels
@@ -28,6 +28,8 @@ Two distinct jobs, don't confuse them:
 | "create an alert when…" (one rule, agent applies it) | `create-alert` MCP tool |
 | "give me the alert JSON for…" / several rules / migrating | import JSON → [references/import-json.md](./references/import-json.md) |
 | "port these Datadog monitors" | [references/datadog-migration.md](./references/datadog-migration.md) |
+| "why did this fire but page nobody?" | channel cadence first, then whether a **maintenance window** covers it |
+| "put these rules in a list / folder" | UI-only grouping — no MCP surface, say so rather than guessing |
 | you hand-built rule JSON and want it checked | `validate-alert-json` before handing it over |
 | "error budget", "burn rate", "are we meeting 99.9%" | [kubesense-slo](../kubesense-slo/SKILL.md) — burn-rate rules are generated from an SLO's `alert_types`, not hand-written |
 
@@ -71,12 +73,37 @@ A **fingerprint** identifies one firing *series* of a rule (one namespace/pod/wo
 Pass it to narrow `get-alert-details` / `get-alert-history` to that instance; omit it for
 the whole rule.
 
+### An alert can leave Firing Now without recovering
+
+Two human verbs act on a firing series, and they mean different things:
+
+| | says | stays in Firing Now | notifications |
+|---|---|---|---|
+| **Acknowledge** | "I am on it" | yes | suppressed **twice over** — see below |
+| **Resolve** | "this is handled" | **no** | suppressed for *this* breach only |
+
+A resolve dismisses the current breach; the engine drops the flag as soon as the series
+stops breaching, so a genuine re-breach later notifies normally. It is not a mute.
+
+An acknowledgement suppresses through **two** independent mechanisms: an Alertmanager
+silence capped at 7 days, *and* an engine-side check that skips the send entirely while the
+database flag is set. **The flag has no expiry.** Never tell someone notifications will
+come back on their own after a week — they will not until the alert resolves, flaps, or
+someone unacknowledges.
+
+> [!IMPORTANT]
+> Nothing in the MCP output tells the two apart from a real recovery. A manually resolved
+> series just gains an `ends_at` and falls out of `list-active-alerts`, exactly like one
+> that recovered. So never conclude "it recovered at 14:02" from `include_resolved` alone —
+> say the alert *closed*, and if the user is asking why a known-broken thing went green,
+> point them at the alert's own page, which does distinguish them.
+
 ## Creating Alerts — Which Path?
 
 | | `create-alert` MCP tool | Import JSON |
 |---|---|---|
 | Rules per call | one | one or many (bulk) |
-| Field names | **auto-bridged** — tries the catalog label, then the storage name | you must get them exactly right |
+| Field names | `fields`/`group_by_fields` **auto-bridge** — catalog label first, then the storage name. `where` is strict: catalog labels only | you must get them exactly right, in the engine's own vocabulary |
 | Validation | up-front, with a precise error to retry against | server-side at import |
 | Applied by | the agent (write tool, needs approval) | the user, in the UI |
 | Best for | a single rule the user wants created now | reviewable output, several rules, migrations |
@@ -119,6 +146,74 @@ monitors.
   `greater_than`, `below` as `less_than` — so the rule reads back with the canonical
   value, not the one you sent. Prefer the canonical names when you know them.
 
+### Several Queries and a Formula
+
+A ratio — error rate, share of total, one query over another — no longer forces the import
+path. Pass `queries` **instead of** the flat single-query fields, and give the last entry
+an `expression`:
+
+```json
+{
+  "signal": "traces",
+  "name": "Checkout 5xx rate above 5%",
+  "queries": [
+    {"label": "A", "where": "status_code LIKE \"5__\"", "value_operation": "row_count",
+     "group_by_fields": [{"field": "workload"}]},
+    {"label": "B", "where": "", "value_operation": "row_count",
+     "group_by_fields": [{"field": "workload"}]},
+    {"label": "C", "expression": "A / B * 100"}
+  ],
+  "threshold_operator": "greater_than",
+  "threshold_value": 5,
+  "notification_channels": [1]
+}
+```
+
+- `queries` and the flat fields (`promql`, `where`, `value_operation`, `fields`,
+  `group_by_fields`) are **mutually exclusive** — pass `queries` and everything goes in it.
+- `label` defaults to `A`, `B`, `C` **by position**, letters only; 26 queries maximum.
+- A formula entry carries `expression` and nothing else, and may reference only queries
+  listed **before** it.
+- Every non-formula query runs against the rule's one `signal` — a rule cannot mix logs
+  with metrics.
+- **Grouped inputs must group by the same fields.** The engine matches their series by
+  those keys, so two inputs grouped differently produce keys that never meet.
+  `create-alert` refuses this up front and names both groupings — it is not a rule you can
+  create and then wonder about.
+- **An ungrouped input is exempt, and that is a feature.** A single ungrouped series is
+  broadcast across the grouped one, which is exactly "this workload's share of the total":
+  group `A` by `workload`, leave `B` ungrouped, threshold `A / B * 100`.
+- The same mismatch through **import JSON** is *not* checked — nothing rejects it, the
+  join produces nothing, and an empty result reads as **healthy**. The rule simply goes
+  quiet. That is the argument for building multi-query rules through `create-alert`.
+- The threshold applies to the formula. With several queries and **no** formula, name the
+  one to threshold in `threshold_query`.
+- `"where": ""` is accepted inside `queries` — a denominator of "everything" is the point —
+  where an unfiltered single-query rule is refused.
+
+> [!IMPORTANT]
+> **`where` takes catalog labels, and only catalog labels.** `status_code`, not
+> `return_code`; `instance`, not `pod_name`. A storage column is rejected by name:
+>
+> ```
+> field "return_code" is a storage column; use the catalog label "status_code" instead
+> ```
+>
+> This is the opposite of the vocabulary further down, which governs **stored and imported**
+> rules — there `return_code` is right and `service` is not. Same rule, two vocabularies,
+> decided by how it reaches the engine. `fields` and `group_by_fields` are the forgiving
+> ones: `create-alert` tries the catalog label and then the storage name, so either works
+> there. `where` does not bridge.
+>
+> The example in the tool's own description has this bug — it writes `return_code` in a
+> `where` and is rejected by the validator behind the same tool. Do not copy it.
+
+Percentiles are still out of reach here: `value_operation` has no `p95`, so a p95 latency
+rule remains an import-JSON job.
+
+`labels` attaches extra labels to the rule and to every alert it fires. They route, and
+they resolve in `{{placeholders}}` — see below.
+
 > [!WARNING]
 > **Call `list-notification-channels` first.** `notification_channels` is required and must
 > contain a real channel id. A nonexistent id fails rule creation outright. If no channels
@@ -155,28 +250,46 @@ create alert rule: …` is a server problem — report it rather than retrying.
 >    validated.
 > 3. **Alert filter keys** — the group-by set *plus* extra storage-name overlays.
 
-### Logs — group-by and value fields (17, exact)
+### Logs — group-by and value fields (19, exact)
 
 ```
 instance  workload  namespace  cluster  pod  container  node
 pod_name  container_name  level  format  host  body_length
 region  app_version  customer_identifier  source
+service  env_type
 ```
 
 Note both spellings work: `pod` **and** `pod_name`, `container` **and** `container_name`,
 `node` **and** `host`, `instance`. Severity is **`level`** here — not the query tools'
 `type`.
 
-**Logs filter keys** = the 17 above **plus** `env_type`, `env`, `node_name`.
+`service` and `env_type` were accepted only recently (KUBE-2638). The logs catalog had
+offered both in the Group By dropdown since it existed while the engine rejected them, so
+picking either failed rule creation. If you meet an install that still refuses them, it
+predates that fix — group by `workload` instead.
 
-> [!WARNING]
-> **`body` is rejected.** It is in neither logs list, so `raw_filters: {"body": [...]}`
-> fails import with a 400. `body_length` is allowed; `body` is not. Text search must go
-> through `advanced_query` (below).
+**Logs filter keys** = the 19 above **plus** `env`, `node_name`, and **`body`**.
+
+> [!NOTE]
+> **`body` is a filter key, not a dimension.** `raw_filters: {"body": ["timeout"]}` is
+> accepted; `body` as a **group-by or value field is still rejected**, deliberately —
+> grouping by the message text yields one series per distinct line, and there is nothing to
+> aggregate. `body_length` is the numeric field, and a different one.
 >
-> `env_type` is **filter-only** — valid as a filter key, rejected as a group-by.
+> Two things follow from how it is stored. A body filter **forces the raw table** (no
+> rollup has the column), so it costs a full scan per evaluation — worth saying out loud
+> before putting one on a 24h window in a busy tenant. And a bare `ILIKE` on `body` is
+> rewritten to **token search**, because in SQL it is an exact match and matched no real
+> log line. Token search is case-insensitive and splits on non-alphanumerics, so
+> `hasAnyTokens` "false positives" are inherent to the index, not a defect — expect them,
+> and do not report them as alerting bugs.
+>
+> `pattern_id` is **not** accepted: it exists only on the rollups, so a rule using it would
+> freeze the moment the query fell back to the raw table.
 
-### Traces — group-by and value fields (28, exact)
+### Traces — group-by and value fields (40, exact)
+
+The 28 catalog labels:
 
 ```
 status  protocol  source  role  status_code  namespace  method
@@ -186,19 +299,31 @@ partner_cluster  customer_identifier  duration  duration_quantile
 duration_avg  pod  instance  cluster  return_code  app_service
 ```
 
-**Trace filter keys** = the 28 above **plus** `clustered_resource`, `subtype`, `kind`,
-`protocol_type`, `node_name`, `pod_name`, `container_name`, `is_external`, `env_type`,
-`app_name`, `perspective_namespace`, `perspective_workload`, `partner_namespace`,
-`partner_workload`.
+…**plus 12 storage names**, which is what the webapp actually persists for a trace
+group-by:
 
-So for traces, **both** the catalog name and the storage name work as a filter key
-(`status_code` and `return_code`, `resource` and `clustered_resource`, `method` and
-`subtype`). Group-by is stricter — use the names in the 28-list.
+```
+container_name  pod_name  node_name  kind  subtype  protocol_type
+clustered_resource  perspective_namespace  perspective_workload
+env_type  app_db  issue_reason
+```
+
+Group-by used to accept only the first list, so 12 of the 27 groupable trace fields the UI
+offered were rejected on save — KUBE-2638 again, and the reason `issue_reason` is now
+accepted where older notes say it is not.
+
+**Trace filter keys** = the 40 above **plus** `is_external`, `app_name`,
+`partner_namespace`, `partner_workload`.
+
+So for traces, **both** the catalog name and the storage name work, as a filter key *and*
+as a group-by (`status_code` and `return_code`, `resource` and `clustered_resource`,
+`method` and `subtype`).
 
 > [!WARNING]
-> **`service` is NOT accepted — use `app_service`.** The query tools' preferred label
-> doesn't exist in the alert engine. `issue_reason` is also rejected (trace-issues table
-> only).
+> **`service` is NOT accepted for traces — use `app_service`.** The query tools' preferred
+> label does not exist in the trace side of the alert engine, and the rejection message
+> says so. (Logs are the opposite: `service` *is* accepted there.) For logs, `node_name` is
+> filter-only — as a dimension the column is called `host`.
 
 Fields marked `is_attribute: true` skip validation entirely, as do filter keys that are
 empty, `advanced_query`, or `@`-prefixed.
@@ -263,8 +388,13 @@ percentiles.
 
 ## Text and Pattern Filters
 
-`unified_filter` does not work through import. The only working route is the reserved
-`advanced_query` key, holding a WHERE string:
+For a single body match, filter on **`body` directly** — `raw_filters: {"body": ["timeout"]}`
+— and read the note under the logs field list for what that costs and how it matches.
+
+For anything the simple prefix operators cannot express — an OR across two phrases, a mix
+of body text and another field, a status-code class — `unified_filter` does not work
+through import, and the only working route is the reserved `advanced_query` key holding a
+WHERE string:
 
 ```json
 "raw_filters": {
@@ -288,6 +418,88 @@ Because these filter shapes are fiddly and a filter that fails to bind is **sile
 rule then matches *everything*, not nothing), the reliable path is: build the condition in
 the Explorer's advanced-query editor, attach it in the alert editor, verify on the condition
 chart, then Export.
+
+## Placeholders in a Name or Description
+
+`{{...}}` in a rule's name or description is expanded **per firing series**, so one rule
+produces one differently-titled alert per group. There are two namespaces.
+
+**The rule's own labels** — its group-by keys and any `labels` it carries. Resolution runs
+in this order, per placeholder:
+
+1. **The label key itself.** An exact match always wins.
+2. **The UI-label alias**, and only when that column is in *this* alert's labels. 16 fields
+   are shown in the Group By dropdown under one name and stored under another:
+
+   ```
+   service→app_service   domain→cluster        resource→clustered_resource
+   container→container_name  node→host         instance→pod_name
+   type→level            status_code→return_code  method→subtype
+   protocol→protocol_type  role→kind           reason→issue_reason
+   primary_workload→perspective_workload   primary_namespace→perspective_namespace
+   associate_workload→partner_workload     associate_namespace→partner_namespace
+   ```
+
+   Rule 1 is what keeps this unambiguous: `service` is the UI label for both logs' own
+   `service` and traces' `app_service`, and each rule resolves against its own column.
+   An alias never *invents* a value — group by neither and `{{domain}}` stays literal, so a
+   typo stays visible instead of silently rendering empty.
+3. **The same name as an attribute.** Group by the attribute `topic` and `{{topic}}`
+   resolves it, even though the stored key is `@topic`.
+
+`{{@topic}}` is also writable, and it is the form to reach for when a plain label of the
+same name exists: with both `topic` and `@topic` present, `{{topic}}` gives you the column
+(rule 1) and only `{{@topic}}` gives you the attribute. Group-by keys that were
+disambiguated carry their suffix into the placeholder too — `{{status:float}}` and
+`{{status#0}}` for the same attribute grouped twice by type or by position.
+
+**The alert's own facts**, under a reserved `Alert.` prefix:
+
+```
+{{Alert.status}}  {{Alert.value}}  {{Alert.threshold}}  {{Alert.thresholdOperator}}
+{{Alert.severity}}  {{Alert.timeWindow}}  {{Alert.frequency}}
+{{Alert.startedAt}}  {{Alert.startsAt}}  {{Alert.endsAt}}
+{{Alert.evaluatedFrom}}  {{Alert.evaluatedTo}}
+```
+
+- The prefix is **not** optional and is not decoration. Bare `{{status}}` resolves the
+  rule's *label* `status` first, so on a rule grouped by an attribute called `status` it
+  printed "firing" instead of the value. The namespace removes the collision — no group-by
+  can produce a key beginning `Alert.`.
+- `{{Alert.status}}` renders `firing`, `resolved` or `no_data` — lowercase tokens, not
+  display text.
+- **`startedAt`/`endsAt` bound the episode; `evaluatedFrom`/`evaluatedTo` bound the query
+  window.** A rule firing for three hours on a 5m window has a three-hour episode and a
+  five-minute window, so a "show me what fired this" link built from the episode shows
+  three hours of data to explain five minutes of it. Build links from `evaluated*`.
+- **A missing reading renders `no_value`.** `{{Alert.value}}` on a series that measured
+  nothing is the one fact that gets a token rather than staying literal, because authors
+  put it in the alert *name* and a literal `{{Alert.value}}` would ship to Slack. It is
+  deliberately not `0.00`, which is a legitimate measurement.
+- **A missing time stays literal.** `{{Alert.endsAt}}` on a firing alert renders as itself,
+  not `0001-01-01` — same for `evaluatedFrom`/`evaluatedTo` when the window is unknown.
+
+## Maintenance Windows
+
+Scheduled downtime, Datadog-style: a window mutes alert **notifications** for a scope over
+a period — and, on any deployment carrying alert_rule_engine#71, the matching **workflow
+triggers** with them, both the firing and the resolve side. Telemetry still arrives, rules
+still evaluate, alerts still fire and resolve, history still records, SLO budgets still
+burn.
+
+That matters when reading: a muted alert looks completely normal in `list-active-alerts`
+and `get-alert-history`. If the user asks why a firing alert paged nobody, a window is a
+candidate answer, and **no MCP tool exposes one** — say that and point at Alerts →
+Maintenance Windows rather than guessing from the alert's own data.
+
+- Scope is rule ids and/or **label matchers**, with Alertmanager's semantics: anchored
+  regex, and an absent label reading as empty.
+- An empty scope mutes **nothing** unless `scope_all` is set explicitly — a blank form
+  cannot black out the estate.
+- Schedules are one-off, daily or weekly, stored as a wall-clock time plus an IANA zone, so
+  "01:00 nightly" stays 01:00 across a DST change.
+- Suppression is an Alertmanager **silence**, not the engine going quiet. Going quiet would
+  trip `resolve_timeout` and page a false all-clear.
 
 ## Import JSON
 
@@ -331,7 +543,7 @@ cluster-specific. Ask the user, or have them export a reference rule.
 
 1. Discover every metric, field, and channel id before emitting a rule.
 2. Use the **alert engine's** field lists, not the query tools' catalog labels. `level` not
-   `type`; `app_service` not `service`; `body` is rejected entirely.
+   `type`; `app_service` not `service` **for traces**. `body` filters, but never groups.
 3. `list-notification-channels` first. Never invent an id; `[]` blocks a single-rule import.
 4. Trace latency thresholds in **nanoseconds**, `unit: "nanoseconds"`.
 5. Emit all three keys on every `groupBy` entry, or grouping is silently dropped.
@@ -349,8 +561,9 @@ cluster-specific. Ask the user, or have them export a reference rule.
     result, not 0, so `firing` misfires at value 0. Use `normal`.
 12. `more_than_once` needs `breaches_count` (≥ 2); `always` needs `threshold_frequency` set
     too.
-13. `{{field}}` placeholders in `name` resolve per firing series and must match a group-by
-    key, e.g. group by `workload` → `"High latency {{workload}}"`. A placeholder with no
-    matching group-by renders empty.
+13. `{{field}}` placeholders in `name` resolve per firing series against a group-by key or
+    a rule label, e.g. group by `workload` → `"High latency {{workload}}"`. One that
+    matches nothing stays **literal**, which is how you spot a typo. The alert's own facts
+    need the `Alert.` prefix — `{{Alert.value}}`, not `{{value}}`.
 14. Tell the user to review the condition chart before creating, and never claim a rule was
     created unless `create-alert` actually returned an id.
