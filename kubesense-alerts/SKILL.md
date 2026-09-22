@@ -263,16 +263,34 @@ the Traps table for where it is refused.
 
 ### `send_count` is not a notification count
 
-It increments on **every evaluation** the series is firing, so it is roughly
+It increments once per evaluation that actually **sends**, so it is roughly
 firing-duration ÷ `evaluation_interval`. A two-day alert on a 1m rule reads
 ~3000. Never report it as "this paged someone 3000 times" — the number of times
 a human was actually notified is bounded by the channel's cadence above.
 
+Two things stop it being a clean duration measure either:
+
+- **An acknowledged evaluation does not count.** The suppression check returns
+  before the send, and the upsert that increments the counter is part of the
+  send — so the number stalls for as long as someone holds the ack.
+- **It is not per-episode.** The row is keyed by fingerprint, and a re-fire
+  resets `starts_at` but adds to `send_count`. A series that has opened and
+  closed five times carries the sum of all five.
+
 ### Acknowledging
 
-Acknowledge stops notifications for that one firing instance via an Alertmanager
-silence, capped at 7 days, and the alert **stays in Firing Now** — it says "I am
-on it", not "this is over". Unacknowledging expires the silence.
+Acknowledge stops notifications for that one firing instance and the alert
+**stays in Firing Now** — it says "I am on it", not "this is over".
+Unacknowledging expires the silence.
+
+It suppresses through **two** independent mechanisms, and only one of them has a
+deadline: an Alertmanager silence capped at 7 days, and an engine-side check that
+skips the send outright while the database `acknowledged` flag is set. **That
+flag never expires.**
+
+So do not tell anyone paging resumes by itself after a week. It resumes when the
+series resolves, flaps, or someone unacknowledges — the upsert on the next real
+firing clears `acknowledged` along with the rest of the finished episode.
 
 ## Trace latency thresholds are in nanoseconds
 
