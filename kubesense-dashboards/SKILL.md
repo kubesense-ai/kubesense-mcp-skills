@@ -2,7 +2,7 @@
 name: kubesense-dashboards
 description: Create KubeSense dashboards over metrics, logs, and traces — either directly with the create-dashboard MCP tool or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.1.0"
+  version: "2.3.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization
@@ -178,13 +178,48 @@ omitted field takes the default; a wrong one can take out its siblings.
 }
 ```
 
-`panelType` — 9 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
-`spl`, `sql`. Note camelCase `timeSeries`.
+`panelType` — 12 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
+`treemap`, `alert`, `spl`, `sql`, `slo`. Note camelCase `timeSeries`.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
-`thresholds` / `alignColumns` shapes, read
+`thresholds` / `alignColumns` / `columnFormatting` / `visualFormattingRules` shapes, read
 **[references/panel-config.md](./references/panel-config.md)**.
+
+For a **table** panel, per-column display names, visibility, cell type (`number` / `bar`),
+and threshold/range colouring go in `config.columnFormatting[]` — see the reference.
+
+For a **top-list** panel, `config.topListDisplayMode` is `flat` (default) or `stacked`, and
+`stacked` needs **two or more `groupBy` entries** — the first is the row, the rest are the
+blocks stacked inside it. With one dimension the renderer draws flat whatever the field
+says. Value-driven colouring goes in `config.visualFormattingRules[]`, which **supersedes
+`thresholds` for this panel type**. Both are in the reference.
+
+For a **treemap** panel, give the query a `groupBy` and leave `config` alone — it has no
+config of its own beyond `colorScheme` and the unit, and it draws one cell per returned
+series, sized by value and coloured categorically from the panel palette. It is an instant
+panel like `pie`/`topList`, so `config.step` does not apply. Its `chart_type` is `topList`
+(see below), since the query-level enum has no `treemap` arm. Every series comes back, so
+cap the result with the query's own `limit` rather than expecting the panel to trim it.
+
+For an **alert** panel, the query names a rule and the widget to draw it as:
+`widgetType` is `graph`, `value` or `summary`. `graph` and `value` need a `ruleId`
+(and cache the rule's name in `ruleName`); `graph` also takes `vizType`, `timeseries`
+(default) or `topList`, which draws the rule's own query ranked by each series' last
+value. `value` prints that rule's current figure alone — for a rule firing on several
+series it is the one furthest past the threshold, highest for a `greater_than` rule and
+lowest for a `less_than` one. `summary` reads `filters` instead, plus
+`displayFormat` (`count`/`list`/`both`), `colorPreference` (`text`/`background`) and
+`summaryType` (`monitor`/`group`/`combined`). `summaryType` decides what one row is:
+`monitor` one per rule, `group` one per firing instance (a rule grouped by `pod` gets a
+row per breaching pod), `combined` one per rule with its firing instances counted beside
+it. Unlike Datadog's equivalent, `group` cannot list healthy groups — the engine
+materialises an instance only while it is firing, so a series that never breached has no
+row to show.
+Like slo it is served by the alert endpoints, not `/explore/query`, so `config.step`
+does not apply and its `chart_type` is `topList`. Datadog's fourth widget, Check
+Status, has no arm: the engine persists only `normal` and `firing`, so a four-state
+widget would have nothing to put in two of its cells.
 
 Three config fields the old format got wrong:
 
@@ -193,23 +228,23 @@ Three config fields the old format got wrong:
   `filled_regions_and_lines_dashed`.
 - **`colorScheme`**, not `colorPalette`. A 5-variant union; the palette variant is
   `{"type":"palette","palette":"default"}` and the only palette keys are `default`,
-  `success`, `warning`, `error`.
+  `success`, `warning`, `error`. To pin one query's colour regardless of the panel scheme,
+  use the query's own `fieldConfig.color` (see [Per-query color](#per-query-color)).
 - **`mergeTables`** is `z.literal(true)` and lives in the defaults — it is **always
   `true`** and cannot be disabled. Sending `false` silently becomes `true`. Just omit it.
 
 ### Y-axis units
 
-`yAxisLabelFormatter` accepts **199 values** (the same enum as `fieldConfig.unit`).
+`yAxisLabelFormatter` accepts **199 values** — the same enum as `fieldConfig.unit`. Common
+ones: `auto`, `number`, `percentage`, `bytes`, `bytes/sec`, `nanoseconds`, `milliseconds`,
+`seconds`, `mCPU`, `CPU`. Use `nanoseconds` for any panel aggregating trace `duration` —
+the formatter auto-scales ns → µs/ms/s. Full list in
+[references/panel-config.md](./references/panel-config.md).
 
 > [!WARNING]
 > `percent`, `percent_unit`, `short`, `ops`, `bps`, `celsius`, `fahrenheit`, and `none`
 > **do not exist** and silently become `auto`. Use `percentage`, `CPU` / `mCPU`,
 > `bytes/sec`, `number` instead.
-
-Common ones: `auto`, `number`, `percentage`, `bytes`, `bytes/sec`, `nanoseconds`,
-`microseconds`, `milliseconds`, `seconds`, `mCPU`, `CPU`, `dollars`. Use `nanoseconds` for
-any panel aggregating trace `duration` — the formatter auto-scales ns → µs/ms/s. Full list
-in [references/panel-config.md](./references/panel-config.md).
 
 ## Queries
 
@@ -273,7 +308,9 @@ supply is overwritten. Don't bother setting it.
 
 - `chart_type` — 7 values: `table`, `stat`, `bar`, `pie`, `topList`, `timeseries`, `list`.
   **Lowercase `timeseries`** — `timeSeries` silently becomes `table`. This is a query-level
-  field, separate from the panel-level `panelType`.
+  field, separate from the panel-level `panelType`. There is deliberately **no `treemap`
+  arm**: the panel is not offered for SPL/SQL, so a `treemap` panel sets `chart_type` to
+  `topList` the way a `stat` panel sets `table`.
 - `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` with a `query`
   string for anything MFD's equality-only filters can't express (e.g. a latency threshold).
 - `groupBy` entries use the same shape as `columnFields`.
@@ -309,6 +346,31 @@ Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggreg
 - The formula must appear **after** the queries it references in the `queries` array.
 - It cannot reference itself, or a label that doesn't exist.
 
+### Per-query color
+
+Any query arm (metrics, logs, traces, formula) may carry `fieldConfig.color`. It colours
+every series that query yields and **outranks the panel `colorScheme`**, including the
+stat panel's default base threshold. Only an explicit `colorScheme` of type `thresholds`
+outranks it. Use it whenever the meaning of a query is fixed — errors red, success
+green — so the colour does not depend on the query's position in the panel.
+
+```json
+{ "selectedMode": "traces", "label": "A", "...": "...",
+  "fieldConfig": { "color": { "type": "single", "color": "#4AAD5A" } } }
+{ "selectedMode": "traces", "label": "B", "...": "...",
+  "fieldConfig": { "color": { "type": "palette", "palette": "error" } } }
+```
+
+- `single` — one hex colour (`#rgb`, `#rrggbb`, or with alpha). A grouped query that returns
+  several series is drawn in shades of it, not all identical.
+- `palette` — `default` | `success` | `warning` | `error`, cycled from the query's first
+  series. Optional `offset` (integer ≥ 0) starts at a later slot.
+- Omit `color` (or the whole `fieldConfig`) to inherit the panel scheme.
+
+A non-hex colour or an unknown palette name **fails validation** on import; the UI, if it
+ever reads one, drops back to the panel scheme. Full shape in
+[references/panel-config.md](./references/panel-config.md#fieldconfigcolor--per-query).
+
 ### Filters
 
 `filters` is `Record<string, string[]>`:
@@ -333,11 +395,7 @@ argument counts are exact tuples — so build these carefully.
 | `top_bottom` | `top`, `bottom` | `[{arg_name:"k",arg_value:5},{arg_name:"by",arg_value:"max"}]` — `by` ∈ `max\|min\|avg\|median\|last` |
 | `rollup` | `avg_over_time`, `sum_over_time`, `max_over_time`, `min_over_time`, `count_over_time`, `last_over_time`, `absent_over_time`, `present_over_time`, `increases_over_time`, `range_over_time`, `quantile_over_time` | `[{arg_name:"over", arg_value:"5m"}]` — **restricted to `30s\|1m\|5m\|30m\|1h\|1d`** |
 | `comparison` | `greater`, `lesser`, `greater_than_or_equal`, `less_than_or_equal`, `equal`, `not_equal` | `[{arg_name:"than"\|"to", arg_value:100}]` |
-| `transform` | `abs`, `clamp`, `clamp_max`, `clamp_min`, `round`, `histogram_quantile`, `sort`, `sort_desc` | variable length, but the `arguments` key is **still required** — use `[]` for zero-arg |
-
-`transform` argument names: `clamp` → `min`+`max`, `clamp_max` → `max`, `clamp_min` →
-`min`, `round` → `to_nearest`, `histogram_quantile` → `quantile`; `abs`/`sort`/`sort_desc`
-take none (but still need `"arguments": []`).
+| `transform` | `clamp` (`min`+`max`), `clamp_max` (`max`), `clamp_min` (`min`), `round` (`to_nearest`), `histogram_quantile` (`quantile`), `abs` / `sort` / `sort_desc` (none) | arg names in parens; the `arguments` key is **still required** — use `[]` for the zero-arg ones |
 
 > [!WARNING]
 > `range.over` accepts any string, but **`rollup.over` only accepts
@@ -367,48 +425,16 @@ validated — `w: 99` is accepted and renders broken.
 - `i`: the array index as a string. **Matching is positional**, so keep `gridLayout` in the
   same order as `panels`, and at least as long.
 
-## Variables
+## Variables and Rows
 
-```json
-{
-  "name": "service",
-  "description": "",
-  "meta": { "variableType": "custom", "options": ["api", "web"], "value": [], "selectType": "multiple" }
-}
-```
+Both are optional and most dashboards need neither — omit `variables`, `subGrids`, and
+`subGridLayout` and they default to `[]`.
 
-- `name`: required, non-empty, **max 20 chars**, must match `^[a-zA-Z_][a-zA-Z0-9_]*$`.
-- `description`: **required** — use `""`. It is not optional.
-- `meta`: discriminated union on `variableType`. There is no `id`, `label`, or
-  `multiSelect`.
-- `selectType`: `"single"` or `"multiple"`.
-
-| variableType | required in `meta` |
-|---|---|
-| `textbox` | — (`defaultValue`, `value` default to `""`) |
-| `custom` | `options: string[]` with ≥ 1 entry |
-| `logs` / `traces` | `fieldMeta: {field, type, is_attribute}` — all three; optional `filters`, `filterMode` (`MFD`\|`ADVANCED_QUERY`) |
-| `metrics` | `metric` (non-empty) **and** `fieldMeta`; **no `filterMode`** |
-
-`fieldMeta.type` and `fieldMeta.is_attribute` have no defaults — both must be present.
-
-> [!WARNING]
-> **One invalid variable silently deletes every variable** with no import error. Double-check
-> `description: ""` is present and the name matches the regex.
-
-## Sub-Grids (Rows)
-
-```json
-"subGrids": [ { "id": "row-1", "title": "Payments", "collapsed": false, "panels": [], "gridLayout": [] } ],
-"subGridLayout": [ { "i": "sg-row-1", "x": 0, "y": 0, "w": 12, "h": 1 } ]
-```
-
-`id` and `title` are required on a sub-grid. In `subGridLayout`, `i` **must** be
-`` `sg-${id}` `` — and only `y` is honoured; `x`, `w`, `h` are forced to `0`, `12`, and a
-computed value. Row order comes from `y`.
-
-A sub-grid's inner `gridLayout` is optional-chained with fallbacks, so it may be shorter
-than its `panels` — unlike the top-level one.
+If the dashboard needs a **template variable** (a dropdown feeding `$name` into query
+filters) or **rows** (collapsible panel groups), read
+**[references/variables-and-rows.md](./references/variables-and-rows.md)** for the schemas.
+Two things to carry into that file: a variable's `description` is required (use `""`), and
+one invalid variable silently deletes every variable.
 
 ## Delivering It
 
@@ -437,28 +463,33 @@ On this path never claim the dashboard was created — the user imports and conf
 
 ## Rules
 
-1. Validate with `validate-dashboard-json` before creating or handing over. Everything
-   below is a rule this check enforces for you.
-2. `preset` **must** be a stringified JSON string in the import envelope — but the plain
-   object when passed to `create-dashboard` or `validate-dashboard-json`.
-3. `gridLayout` must be at least as long as `panels`, in the same order — matching is
-   positional and a short layout crashes at render.
-4. Every logs/traces query needs `columnFields`, even if `[]`.
-5. Panel `name` and top-level `name` must be non-empty.
-6. Numeric aggregations need `fields[].type: "float"` exactly, or they silently become
-   `row_count`.
-7. `chart_type` is lowercase `timeseries`; `panelType` is camelCase `timeSeries`.
-8. Formula expressions: uppercase, no decimals, single-letter labels, placed **after** the
-   queries they reference.
-9. `rollup.over` only accepts `30s`/`1m`/`5m`/`30m`/`1h`/`1d`; a bad value wipes all
-   `functions`.
-10. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
-    variable deletes them all.
-11. Prefer omitting optional fields to guessing them: an omitted field takes its default, a
-    wrong one can reset its siblings.
-12. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
-    `topListValue` — none exist in the current schema.
-13. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
-    silently become `auto`.
-14. Discover metric/field names with MCP before writing queries; tell the user to verify on
-    the panel preview.
+Rule 0: run `validate-dashboard-json` before creating or handing over, and fix what it
+reports. Everything in [What Hard-Fails Import](#what-hard-fails-import) is machine-checked
+— the validator names the JSON Pointer, so it needs no checklist here.
+
+**This checklist is for what the validator is blind to.** Every rule below **passes
+validation** and then silently discards your data or crashes at render. A green validation
+is not a working dashboard — check these by hand before you hand it over.
+
+1. `gridLayout` must be at least as long as `panels`, in the same order — matching is
+   positional, and a short layout throws a TypeError when the dashboard renders.
+2. Numeric aggregations need `fields[].type: "float"` exactly, or the whole aggregation
+   resets to `row_count` — a row count where you asked for a percentile.
+3. `chart_type` is lowercase `timeseries`; `panelType` is camelCase `timeSeries`. Each
+   resets to its own default (`table` / `timeSeries`) on a mismatch.
+4. `rollup.over` only accepts `30s`/`1m`/`5m`/`30m`/`1h`/`1d`; a bad value wipes every
+   function on that query.
+5. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
+   variable deletes them all.
+6. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
+   become `auto`.
+7. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
+   `topListValue` — none exist, and unknown keys are stripped without comment. On a **top
+   list**, value colouring goes in `visualFormattingRules`, not `thresholds`.
+8. Prefer omitting an optional field to guessing it: an omitted field takes its default, a
+   wrong one can reset its siblings.
+9. Validation checks shape, not existence. Discover metric and field names with MCP before
+   writing queries, and tell the user to confirm on the panel preview.
+
+The one rule that spans both: `preset` is a stringified JSON string in the import envelope,
+but the plain object when passed to `create-dashboard` or `validate-dashboard-json`.

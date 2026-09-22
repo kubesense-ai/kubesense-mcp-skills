@@ -14,16 +14,19 @@ skill for the tool layer they share.
 | **kubesense-logs** | Search and aggregate logs |
 | **kubesense-traces** | Spans, latency percentiles, error rates, distributed traces |
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes and infrastructure metrics |
+| **kubesense-sql** | Raw ClickHouse SQL over logs and traces — joins, CTEs, window functions |
+| **kubesense-spl** | SPL — the piped log query language, and its inverted field contract |
 | **kubesense-infra** | Clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List/investigate/create alerts, generate import JSON, migrate Datadog monitors |
 | **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
+| **kubesense-slo** | SLOs: error budgets, burn-rate alerting, Datadog SLO migration |
 
 ## Install
 
 > [!IMPORTANT]
 > **Always pass `--full-depth`.** This repo has a root `SKILL.md` (the umbrella index), and
 > the installer stops there unless told to search deeper — so without the flag it finds
-> **1** skill instead of **8**, and does so *silently*. Every command below includes it.
+> **1** skill instead of **11**, and does so *silently*. Every command below includes it.
 >
 > `references/` directories are **not** the reason for the flag. They are copied
 > automatically as part of a skill, nested subdirectories included.
@@ -46,9 +49,12 @@ npx skills add kubesense-ai/kubesense-mcp-skills \
   --skill kubesense-logs \
   --skill kubesense-traces \
   --skill kubesense-metrics \
+  --skill kubesense-sql \
+  --skill kubesense-spl \
   --skill kubesense-infra \
   --skill kubesense-alerts \
   --skill kubesense-dashboards \
+  --skill kubesense-slo \
   --full-depth
 ```
 
@@ -64,7 +70,7 @@ npx skills add kubesense-ai/kubesense-mcp-skills --skill kubesense-dashboards --
 npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth
 ```
 
-Should report **8 skills**. If it says 1, the `--full-depth` flag is missing.
+Should report **11 skills**. If it says 1, the `--full-depth` flag is missing.
 
 ### Unattended installs
 
@@ -85,9 +91,10 @@ a specific agent.
 
 ## Connect the MCP Server
 
-Every skill except `kubesense-dashboards` and `kubesense-alerts` needs the KubeSense MCP
-server — those two work offline for generating JSON, but need it to validate, create, or
-discover real field names. It is served by kubeapi at **`/mcp`** over Streamable HTTP, outside the `/api`
+Every skill except `kubesense-dashboards`, `kubesense-alerts` and `kubesense-slo` needs
+the KubeSense MCP server — those three work offline for generating JSON, but need it to
+validate, create, or discover real field names. `kubesense-slo` has no MCP tools of its
+own and drives the REST API directly. It is served by kubeapi at **`/mcp`** over Streamable HTTP, outside the `/api`
 group, and authenticates with the same credentials as the REST API.
 
 **API key** (recommended for agents — does not expire):
@@ -122,6 +129,7 @@ Access is scoped by the same RBAC as the UI: `logs`, `traces`, `infrastructure`,
 | "what's running", "why is this pod restarting", "did we deploy" | kubesense-infra |
 | "alert me when 5xx > 1%", "what's firing", "port this Datadog monitor" | kubesense-alerts |
 | "build a dashboard for the payments service" | kubesense-dashboards |
+| "are we meeting 99.9%", "error budget", "port our Datadog SLOs" | kubesense-slo |
 | "this alert fired, what's wrong?" | kubesense-alerts, then kubesense-infra |
 
 ## Field Names: The One Thing To Know
@@ -162,6 +170,9 @@ kubesense-alerts/SKILL.md
   references/datadog-migration.md
 kubesense-dashboards/SKILL.md
   references/panel-config.md
+kubesense-slo/SKILL.md
+  references/api-payloads.md
+  references/datadog-migration.md
 drafts/                           not installable — see drafts/README.md
 ```
 

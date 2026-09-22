@@ -32,6 +32,9 @@ the default. Unknown keys are stripped.
 | `colorScheme` | 5-variant union, see below | `{type:"palette",palette:"default"}` |
 | `tableSettings` | `{columnWidths: Record<string, number>}` | `{columnWidths:{}}` |
 | `alignColumns` | array, see below | `[]` |
+| `columnFormatting` | array, see below | `[]` |
+| `topListDisplayMode` | `flat` \| `stacked` | `flat` |
+| `visualFormattingRules` | array, see below | `[]` |
 
 `step` must be an *integer* — `60.5` silently becomes `"auto"`.
 
@@ -87,6 +90,36 @@ Discriminated on `type` — five variants:
 
 There is **no `colorPalette` field** — it was replaced by `colorScheme`.
 
+On a **treemap**, colour is what tells one cell from its neighbour: every cell takes the
+next entry of the resolved palette, the way a pie slice does. `single` therefore paints the
+whole map one flat colour and is almost never what you want there — reach for `shades` if
+you need the map in one hue.
+
+## `fieldConfig.color` — per query
+
+Not a `config` field: it lives on each **query** next to `fieldConfig.unit`, and applies to
+every series that query yields. Precedence, highest first: threshold colour when
+`colorScheme.type` is `thresholds` → the query's `fieldConfig.color` → threshold colour
+otherwise (stat panels always carry a default base threshold) → the panel `colorScheme`.
+
+```json
+{ "type": "single",  "color": "#4AAD5A" }
+{ "type": "palette", "palette": "error" }
+{ "type": "palette", "palette": "warning", "offset": 2 }
+```
+
+- `single.color` — same hex pattern as `custom.colors`. One series takes the colour as
+  is; a grouped query that returns several series is drawn in shades of it.
+- `palette` — `default` | `success` | `warning` | `error`. Indexing restarts at 0 for the
+  query rather than continuing the panel-wide series counter; `offset` (integer ≥ 0) rotates
+  the palette so the first series takes that slot.
+- Present on every query arm, including `formula`.
+
+> [!NOTE]
+> Ships with the query colour overrides release. A server that predates it strips the key
+> (like any unknown field), so the query renders in the panel scheme rather than failing
+> import.
+
 ## `valueOptions`
 
 ```json
@@ -110,6 +143,157 @@ mean | standard_deviation | sum | max | min | median | last | first | range | mi
 ```
 
 Used to align columns across queries in a table panel.
+
+## `columnFormatting[]`
+
+Per-column overrides for a **table** panel — display name, visibility, cell rendering, and
+colouring. One entry per column you want to change; a column with no entry renders with its
+default name and a plain numeric cell. Ignored by non-table panels.
+
+```json
+{
+  "id": "b1e2…",
+  "columnId": "count-a",
+  "cellType": "number",
+  "colorMode": "conditions",
+  "conditions": [ { "operator": ">", "value": 100, "style": "red-background" } ],
+  "range": { "palette": "green", "scale": "logarithmic", "min": null, "max": null },
+  "displayName": "Requests",
+  "hidden": false,
+  "width": 120
+}
+```
+
+| Field | Type / allowed values | Default |
+|---|---|---|
+| `id` | string — a uuid, the array key | required |
+| `columnId` | string — the rendered column id this applies to | required |
+| `cellType` | `number` \| `bar` | `number` |
+| `colorMode` | `conditions` \| `range` | `conditions` |
+| `conditions` | array of condition objects, see below | `[]` |
+| `range` | object, see below | omitted |
+| `displayName` | string | omitted |
+| `hidden` | boolean | omitted |
+| `width` | positive number (px) | omitted |
+
+`columnId` is the id the renderer assigns, which differs by table shape: a merged dimension
+column is its metric key (`service`, `@service`), a merged value column is the kebab-cased
+query label (`a`, `count-a`), and an SPL/SQL column is `<name>-<index>`. A `columnId` matching
+nothing currently rendered is **not** an error — the entry simply does not apply, which is
+what lets a saved panel survive a query edit.
+
+`displayName` is the outermost of the column-naming layers and wins over
+`alignColumns[].displayName`, `columnFields[].alias`, and the field-catalog label. An empty or
+whitespace-only value counts as absent (the derived name shows instead).
+
+**`conditions[]`** — **last** match wins, in list order (not first, not most-specific).
+A threshold list reads as escalating, so `> 10 green` above `> 15 red` paints 58 red; put
+the most specific rule at the bottom:
+
+| Field | Type | Notes |
+|---|---|---|
+| `operator` | `>` \| `>=` \| `<` \| `<=` \| `=` \| `!=` | required |
+| `value` | number | required |
+| `style` | see list below | `red-background` on a bad value |
+| `color` | string (hex) | read only for `custom-background` / `custom-text` |
+
+`style` values: `red-background`, `yellow-background`, `green-background`,
+`light-red-background`, `light-yellow-background`, `light-green-background`, `red-text`,
+`yellow-text`, `green-text`, `custom-background`, `custom-text`.
+
+**`range`** — continuous colouring, read when `colorMode` is `range`:
+
+| Field | Type | Default |
+|---|---|---|
+| `palette` | see list below | `green` |
+| `scale` | `linear` \| `logarithmic` | `logarithmic` |
+| `min` | number \| null (`null` = derive from data) | `null` |
+| `max` | number \| null (`null` = derive from data) | `null` |
+
+`palette` values: `green`, `orange`, `red`, `blue`, `red-green`, `red-blue`, `solid-green`,
+`solid-orange`, `solid-red`, `solid-blue`, `solid-red-green`, `solid-red-blue`. Gradient
+palettes go transparent→colour; two-hue ramps name their direction (`red-green` = red at the
+minimum, green at the maximum).
+
+> [!NOTE]
+> **`bar`** cells are always coloured by `conditions` — the bar length carries the
+> magnitude, so `range` applies to `number` cells only.
+>
+> `columnFormatting` ships with the panel field-overrides release. A server that predates it
+> strips the key (like any unknown field), so the panel renders unformatted rather than
+> failing import.
+
+## `topListDisplayMode` and `visualFormattingRules[]`
+
+Both are **top-list only**. Other panel types ignore them.
+
+### `topListDisplayMode`
+
+`flat` (default) draws one block per row. `stacked` splits each row's bar by the group-bys
+**after the first**: the first group-by becomes the row, the rest become the blocks inside
+it, with a legend underneath.
+
+Stacking therefore needs **two or more `groupBy` entries** (or, for SPL/SQL panels, two or
+more entries in the query's `list`). With one dimension the renderer falls back to `flat`
+whatever this says — so `stacked` on a single-group-by panel is stale rather than broken,
+and removing a group-by from a stacked panel cannot break it.
+
+```json
+{
+  "panelType": "topList",
+  "queries": [ { "selectedMode": "traces", "label": "A",
+    "groupBy": [ {"field": "service", "type": "string", "is_attribute": false},
+                 {"field": "status",  "type": "string", "is_attribute": false} ],
+    "aggregation": {"function": "row_count"} } ],
+  "config": { "topListDisplayMode": "stacked" }
+}
+```
+
+### `visualFormattingRules[]`
+
+Value-driven block colouring. **Supersedes `thresholds` on top-list panels** — the editor
+no longer offers a Thresholds section there. Nothing rewrites `thresholds`, so a panel
+saved with them keeps that colouring until its rule list is non-empty; the first rule takes
+over.
+
+```json
+{ "id": "0c8f…", "operator": ">", "value": 1000, "style": "light-red-background" }
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string — a uuid, the array key | required |
+| `operator` | `>` \| `>=` \| `<` \| `<=` \| `=` \| `!=` | required |
+| `value` | number | required |
+| `style` | see below | `light-red-background` on a bad value |
+| `color` | string (hex) | read only for `custom-background` |
+
+`style` values — **light backgrounds and custom only**, a narrower set than
+`columnFormatting`'s conditions: `light-red-background`, `light-yellow-background`,
+`light-green-background`, `custom-background`. A solid or `*-text` style is repaired to
+`light-red-background`.
+
+**Last** match wins, as with `columnFormatting[].conditions`.
+
+Three behaviours worth knowing before writing rules:
+
+- Every **block** is judged by its OWN value, not the row's. On a stacked row the rule marks
+  the block that breached; on a flat row the single block is worth the row total, so the two
+  agree.
+- Once **any** rule exists, colour stops encoding the series and starts encoding the value:
+  every block matching no rule collapses to one neutral colour, and the legend's swatches
+  collapse with it. Remove every rule and the palette returns.
+- `custom-background` with no `color` is **inert** — the rule paints nothing rather than
+  failing import. The editor seeds a colour when you pick it; a hand-written preset has to
+  supply one.
+
+Colouring with no rules at all: a single group-by paints every row the same colour, and
+multiple group-bys use the palette per series.
+
+> [!NOTE]
+> `topListDisplayMode` and `visualFormattingRules` ship with the top-list stacking release.
+> A server that predates them strips the keys (like any unknown field), so the panel renders
+> flat and unformatted rather than failing import.
 
 ## `yAxisLabelFormatter` — all 199 values
 
