@@ -97,7 +97,7 @@ preferred label in the query tools.)
 | `notify_no_data: true` | `no_data_state: "firing"` **only when metric absence is itself the incident** — see the caveat below |
 | `notify_no_data: false` | `no_data_state: "normal"` |
 | `no_data_timeframe` | Informational — KubeSense uses `time_window` for the no-data decision. Note any mismatch. |
-| `require_full_window` | ≈ `frequency_type: "always"` — and you must also send `threshold_frequency: "always"`, or it downgrades to `at_least_once`. Set `breach_counting_window_prometheus_format` to the span the condition must hold across; without one it falls back to `time_window` |
+| `require_full_window` | **No equivalent — do not map it to `always`.** Datadog uses it to decide *whether to evaluate at all*: the monitor waits until the window holds a full set of data. KubeSense has no coverage gate, and `always` answers a different question — whether every evaluation in the window breached. Translating one to the other suppresses or delays alerts Datadog would have fired. Say so, and pick the frequency from what the monitor is actually for. |
 | `evaluation_delay`, `new_host_delay` | No equivalent — ignore and mention it |
 | `renotify_interval` | Handled by Alertmanager `repeat_interval`, not the rule — mention it |
 | `@channel` mentions in `message` / `escalation_message` | Map to channel ids — see below |

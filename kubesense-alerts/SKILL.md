@@ -349,8 +349,10 @@ cluster-specific. Ask the user, or have them export a reference rule.
     gauge/heartbeat). Never for a count/rate/change rule — a healthy window returns an empty
     result, not 0, so `firing` misfires at value 0. Use `normal`.
 12. `more_than_once` needs `breaches_count` (≥ 2); `always` needs `threshold_frequency` set
-    too. Both read `breach_counting_window` — breaches counted over it for `more_than_once`,
-    condition held across it for `always` — and fall back to `time_window` without one.
+    too. **All three** frequencies read `breach_counting_window` — breaches counted over it
+    for `more_than_once`, condition held across it for `always`, resolution checked over it
+    for `at_least_once`. The engine falls back to `time_window` without one, but an import
+    never gets that far: the editor defaults the empty field to **5 minutes**. Send it.
 13. `{{field}}` placeholders in `name` resolve per firing series and must match a group-by
     key, e.g. group by `workload` → `"High latency {{workload}}"`. A placeholder with no
     matching group-by renders empty.

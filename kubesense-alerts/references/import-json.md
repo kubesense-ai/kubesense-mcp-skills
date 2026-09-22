@@ -64,7 +64,7 @@ is written until the user confirms.
 | `time_window` | How far back the query looks. Plain string. |
 | `frequency_type` | `at_least_once` \| `more_than_once` \| `always`. See the `always` trap below. |
 | `breaches_count` | Integer ≥ 2 — only with `more_than_once`. |
-| `breach_counting_window_prometheus_format` | Optional window. With `more_than_once`, the span the breaches are counted over; with `always`, the span the condition must hold across. Ignored for `at_least_once`. Omitted → the engine falls back to `time_window`. **Note the name** — see round-trip trap. |
+| `breach_counting_window_prometheus_format` | With `more_than_once`, the span the breaches are counted over; with `always`, the span the condition must hold across; with `at_least_once`, the span checked for *resolution*. It is read by all three — **always send it**, and see the trap below for why omitting it is not the same as leaving it to `time_window`. **Note the name.** |
 | `severity` | `critical` \| `error` \| `warning` \| `info`. (The MCP tool allows only critical/warning/info.) |
 | `labels` | `{"team": "infra"}` |
 | `notification_channel_ids` | Array of **integer** channel ids from `list-notification-channels`. **`[]` blocks a single-rule import.** |
@@ -106,9 +106,9 @@ Import maps only `more_than_once` specially; **everything else becomes
 Export emits only `frequency_type`, so `always` silently downgrades on a round-trip.
 
 An `always` rule also honours `breach_counting_window_prometheus_format` — the condition
-must hold across that whole span, and without one the engine falls back to `time_window`.
-Set it whenever the "must hold for N minutes" part is the point of the rule; leave it out
-when `time_window` already is that span.
+must hold across that whole span. **Set it explicitly, always**, even when `time_window`
+already is that span: the engine's fallback to `time_window` is not what an import gets.
+See the trap below.
 
 ### The `breach_counting_window` trap
 
@@ -120,6 +120,13 @@ Import reads **`breach_counting_window_prometheus_format`**; export writes
 the plain `breach_counting_window`, which fixes the round-trip but inverts this trap. A
 document carrying both names imports correctly before and after that change; the unread key
 is ignored either way.
+
+**And never omit it.** The engine falls back to `time_window` when the column is null, but
+an import does not reach the engine with a null: the editor fills the field first, and with
+neither key present it defaults to **5 minutes**. So a 15-minute rule whose whole point is
+a 15-minute hold imports as a 5-minute one, silently, and the reviewer sees a plausible
+number rather than a blank. The fallback protects rules created by other routes; it does
+not protect yours.
 
 ## `query_config[]`
 
