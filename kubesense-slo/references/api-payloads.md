@@ -316,6 +316,17 @@ storing nothing.
 Optional `from_time` / `to_time` (RFC3339) override the window; otherwise it is the
 last `evaluation_window_days` (defaulting to **7**, not 30).
 
+> [!WARNING]
+> **For an `alert` SLO, always send `from_time` and `to_time`.** Preview does not read
+> `evaluate_from`, so the default window reaches back before the alert rules existed —
+> and a period with no firing rows scores as **perfect uptime**, not as no-data. Set
+> `from_time` to when the rules started existing and `to_time` to now.
+>
+> Right after a migration that is a window of minutes, or nothing at all (the API
+> rejects `from_time` not before `to_time`). That is the honest answer: there is
+> nothing to preview yet. Skip it and verify on real buckets instead — do not fall
+> back to the default window and report the 100% it returns.
+
 Response:
 
 ```json

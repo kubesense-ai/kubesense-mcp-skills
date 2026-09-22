@@ -37,14 +37,29 @@ catch an SLO that stored cleanly and evaluates nothing.
    (`list-notification-channels`). Alert rule uuids if it is an alert SLO.
 2. **Construct** the body — the type, the two queries, the window, `alert_types`.
 3. **Preview** with `POST /api/slo/preview`, knowing what preview does and does not
-   check. A `no_data` or wildly wrong result is a filter bug; fix it here.
+   check. A wildly wrong number is usually a filter bug. `no_data` **is not proof of
+   one** — a genuinely quiet service produces empty windows too; tell the two apart
+   before changing anything (step 6). For an **alert** SLO, pass `from_time`/`to_time`
+   explicitly: the default window reaches back before the rules existed, where the
+   absence of firing rows reads as perfect uptime.
 4. **Create** with `POST /api/slo` and keep the returned id. No id, no SLO.
 5. **Read back** with `GET /api/slo/{id}?current_time=…` and check the stored config is
    what you sent — particularly `slo_type`, `operation`, and both `groupBy` lists.
 6. **Verify real buckets** after one or two evaluation intervals:
-   `GET /api/slo/{id}/metrics?from_time=…&to_time=…`. Non-zero `total_events` (or
-   `total` slices/seconds) is the only proof the query actually runs. `last_evaluated`
-   staying null means the evaluator never picked it up.
+   `GET /api/slo/{id}/metrics?from_time=…&to_time=…`, plus the SLO read-back.
+   - **`last_evaluated` advancing** between two reads is what proves the evaluator
+     picked the SLO up. Null, or frozen, means it never did — check `status`, the
+     interval, and the group cap.
+   - A **non-zero** `total_events` (or `total` slices/seconds) additionally proves the
+     query resolves and matches.
+   - **Zero is not automatically a bug.** A quiet service legitimately produces empty
+     buckets — `no_data` for `by_count`, uptime for `time_slice`. Before touching the
+     SLO, query the same scope and window directly with `analyze-traces` /
+     `analyze-logs` / `analyze-metrics`: no rows there either means the telemetry is
+     absent, which is a different problem to fix somewhere else.
+   - **Never widen the user's filter to make numbers appear.** That changes what is
+     being measured into something nobody asked for. Report the empty result and what
+     you checked.
 7. **Verify the generated alerts** if you set `alert_types` — they should exist as
    rules named `"<SLO name> Fast Burn Rate"` and so on, with your channel ids.
 8. **Update or delete** with `PUT` (full body, id inside) or `DELETE /api/slo/{id}`,
@@ -182,6 +197,44 @@ rule's query applies here.
 > latency SLI previews request counts) and **samples ~300 points** for metrics rather
 > than evaluating every bucket. Preview catches an empty or wrong filter; it does not
 > validate the number. Confirm on the first real buckets after creating.
+
+## Formulas and Ratios
+
+A Datadog monitor or SLO built from several queries and an expression like
+`(A/B)*100` does not port as one thing. Where it lands decides the shape:
+
+| What you are porting | Where it goes | How |
+|---|---|---|
+| An SLO whose SLI is numerator / denominator | **`by_count` SLO** | **Two queries, no formula.** A → `good_events_filter`, B → `total_events_filter`. The evaluator divides them itself. |
+| A monitor that thresholds a ratio | **Alert rule** | Alerts have a real formula mode — keep A, B and `expression` as separate queries and point `metric_query_label` at the formula's label. See [kubesense-alerts](../kubesense-alerts/SKILL.md). |
+| An SLI that is a ratio compared to a threshold each interval | **`time_slice` SLO** | One inlined PromQL, with `operation` + `threshold_value`. |
+| Ad-hoc analysis, no SLO or rule | `analyze-telemetry` (MCP) | An array of labelled queries plus `{"selectedMode": "formula", "expression": "(A/B)*100"}` — it composes across logs, traces and metrics. |
+
+> [!WARNING]
+> **`selectedMode: "formula"` does not work in an SLO.** The evaluator resolves its
+> query through an executor factory that knows `logs`, `metrics` and `traces` and
+> returns `unsupported query type: formula` for anything else — on every evaluation,
+> so the SLO sits at `no_data` forever. Alerts are the surface with formula support;
+> SLOs are not.
+
+**Inline it into one PromQL string instead.** That is what the product does: the SLO
+editor's formula builder substitutes each label with its parenthesised query before it
+posts, and stores one flat `promql`. So `(A/B)*100` is stored as
+
+```promql
+(sum(increase(http_requests_total{status=~"5.."}[5m])) / sum(increase(http_requests_total[5m]))) * 100
+```
+
+> [!IMPORTANT]
+> **Do not inline a ratio into a `by_count` SLO.** There the ratio *is* the SLO — the
+> evaluator computes good/total and builds the error budget from it. Feed it a
+> percentage as `total_events_filter` and it counts percentages as events, and every
+> number downstream is meaningless. Ratios belong in `time_slice` (one value per
+> slice, compared to a threshold) or in an alert rule.
+
+When an inlined ratio is grouped, keep `by (…)` on **both** sides of the division and
+a non-empty `groupBy` on the query — `by (…)` alone leaves the SLO on the single-series
+path (see Grouping).
 
 ## Grouping
 

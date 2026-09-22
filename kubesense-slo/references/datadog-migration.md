@@ -108,7 +108,10 @@ names, not the query tools' catalog labels:
 
 Datadog's convention "good = total − errors" becomes a good-side filter of
 `status = ok`, or a `return_code NOT_LIKE "5__"`. Do not express the numerator as a
-subtraction; there is no formula mode on an SLI query.
+subtraction: there is **no formula mode on an SLI query**, and a ratio does not belong
+in a `by_count` SLO in the first place — the evaluator computes good/total itself. See
+[Formulas and Ratios](../SKILL.md#formulas-and-ratios) for where a `(A/B)*100` from
+Datadog actually goes.
 
 **Latency thresholds are nanoseconds** on trace `duration`, exactly as for alerts:
 Datadog's `0.5` seconds or `500ms` → `500000000`.
@@ -144,6 +147,13 @@ a coarser signal.
 > There is no import path for Datadog's monitor state history. Say plainly that
 > compliance starts at migration, and that the first full window is the first
 > trustworthy number.
+>
+> **Preview has the same hazard and does not read `evaluate_from`.** Its default
+> window is the last `evaluation_window_days`, which for a just-migrated SLO is almost
+> entirely history the rules did not exist for — and it will report 100%. Send
+> `from_time` (the migration start) and `to_time` (now) explicitly, or, when that
+> window is still empty, skip the preview and say why rather than quoting a number
+> that means nothing.
 
 The other gap is **group selection**. Datadog's `groups` field restricts a monitor SLO
 to named monitor groups. KubeSense cannot express that: `evaluateAlert` takes the union
