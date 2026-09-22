@@ -78,11 +78,18 @@ Two human verbs act on a firing series, and they mean different things:
 
 | | says | stays in Firing Now | notifications |
 |---|---|---|---|
-| **Acknowledge** | "I am on it" | yes | suppressed by an Alertmanager silence, capped at 7 days |
+| **Acknowledge** | "I am on it" | yes | suppressed **twice over** — see below |
 | **Resolve** | "this is handled" | **no** | suppressed for *this* breach only |
 
 A resolve dismisses the current breach; the engine drops the flag as soon as the series
 stops breaching, so a genuine re-breach later notifies normally. It is not a mute.
+
+An acknowledgement suppresses through **two** independent mechanisms: an Alertmanager
+silence capped at 7 days, *and* an engine-side check that skips the send entirely while the
+database flag is set. **The flag has no expiry.** Never tell someone notifications will
+come back on their own after a week — they will not until the alert resolves, flaps, or
+someone unacknowledges. (A manual resolve deliberately does *not* suppress: it closes the
+current episode and the next evaluation judges the rule afresh.)
 
 > [!IMPORTANT]
 > Nothing in the MCP output tells the two apart from a real recovery. A manually resolved
@@ -96,7 +103,7 @@ stops breaching, so a genuine re-breach later notifies normally. It is not a mut
 | | `create-alert` MCP tool | Import JSON |
 |---|---|---|
 | Rules per call | one | one or many (bulk) |
-| Field names | **auto-bridged** — tries the catalog label, then the storage name | you must get them exactly right |
+| Field names | `fields`/`group_by_fields` **auto-bridge** — catalog label first, then the storage name. `where` is strict: catalog labels only | you must get them exactly right, in the engine's own vocabulary |
 | Validation | up-front, with a precise error to retry against | server-side at import |
 | Applied by | the agent (write tool, needs approval) | the user, in the UI |
 | Best for | a single rule the user wants created now | reviewable output, several rules, migrations |
@@ -150,7 +157,7 @@ an `expression`:
   "signal": "traces",
   "name": "Checkout 5xx rate above 5%",
   "queries": [
-    {"label": "A", "where": "return_code LIKE \"5__\"", "value_operation": "row_count",
+    {"label": "A", "where": "status_code LIKE \"5__\"", "value_operation": "row_count",
      "group_by_fields": [{"field": "workload"}]},
     {"label": "B", "where": "", "value_operation": "row_count",
      "group_by_fields": [{"field": "workload"}]},
@@ -169,13 +176,37 @@ an `expression`:
   listed **before** it.
 - Every non-formula query runs against the rule's one `signal` — a rule cannot mix logs
   with metrics.
-- **Composed queries must group by the same fields**, or not group at all. The engine
-  matches their series by those keys, so a mismatch joins nothing — and an empty result
-  reads as *healthy*, not as an error. The rule goes quiet instead of complaining.
+- **Grouped inputs must group by the same fields.** The engine matches their series by
+  those keys, so two inputs grouped differently produce keys that never meet.
+  `create-alert` refuses this up front and names both groupings — it is not a rule you can
+  create and then wonder about.
+- **An ungrouped input is exempt, and that is a feature.** A single ungrouped series is
+  broadcast across the grouped one, which is exactly "this workload's share of the total":
+  group `A` by `workload`, leave `B` ungrouped, threshold `A / B * 100`.
+- The same mismatch through **import JSON** is *not* checked — nothing rejects it, the
+  join produces nothing, and an empty result reads as **healthy**. The rule simply goes
+  quiet. That is the argument for building multi-query rules through `create-alert`.
 - The threshold applies to the formula. With several queries and **no** formula, name the
   one to threshold in `threshold_query`.
 - `"where": ""` is accepted inside `queries` — a denominator of "everything" is the point —
   where an unfiltered single-query rule is refused.
+
+> [!IMPORTANT]
+> **`where` takes catalog labels, and only catalog labels.** `status_code`, not
+> `return_code`; `instance`, not `pod_name`. A storage column is rejected by name:
+>
+> ```
+> field "return_code" is a storage column; use the catalog label "status_code" instead
+> ```
+>
+> This is the opposite of the vocabulary further down, which governs **stored and imported**
+> rules — there `return_code` is right and `service` is not. Same rule, two vocabularies,
+> decided by how it reaches the engine. `fields` and `group_by_fields` are the forgiving
+> ones: `create-alert` tries the catalog label and then the storage name, so either works
+> there. `where` does not bridge.
+>
+> The example in the tool's own description has this bug — it writes `return_code` in a
+> `where` and is rejected by the validator behind the same tool. Do not copy it.
 
 Percentiles are still out of reach here: `value_operation` has no `p95`, so a p95 latency
 rule remains an import-JSON job.
@@ -414,7 +445,13 @@ in this order, per placeholder:
    An alias never *invents* a value — group by neither and `{{domain}}` stays literal, so a
    typo stays visible instead of silently rendering empty.
 3. **The same name as an attribute.** Group by the attribute `topic` and `{{topic}}`
-   resolves it; the stored key is `@topic`, and `@` cannot be typed inside `{{ }}`.
+   resolves it, even though the stored key is `@topic`.
+
+`{{@topic}}` is also writable, and it is the form to reach for when a plain label of the
+same name exists: with both `topic` and `@topic` present, `{{topic}}` gives you the column
+(rule 1) and only `{{@topic}}` gives you the attribute. Group-by keys that were
+disambiguated carry their suffix into the placeholder too — `{{status:float}}` and
+`{{status#0}}` for the same attribute grouped twice by type or by position.
 
 **The alert's own facts**, under a reserved `Alert.` prefix:
 
@@ -435,14 +472,20 @@ in this order, per placeholder:
   window.** A rule firing for three hours on a 5m window has a three-hour episode and a
   five-minute window, so a "show me what fired this" link built from the episode shows
   three hours of data to explain five minutes of it. Build links from `evaluated*`.
-- An unknown fact stays **literal** rather than rendering a zero — `{{Alert.value}}` for a
-  series with no reading must not read `0.00`, because `0.00` is also a real measurement.
+- **A missing reading renders `no_value`.** `{{Alert.value}}` on a series that measured
+  nothing is the one fact that gets a token rather than staying literal, because authors
+  put it in the alert *name* and a literal `{{Alert.value}}` would ship to Slack. It is
+  deliberately not `0.00`, which is a legitimate measurement.
+- **A missing time stays literal.** `{{Alert.endsAt}}` on a firing alert renders as itself,
+  not `0001-01-01` — same for `evaluatedFrom`/`evaluatedTo` when the window is unknown.
 
 ## Maintenance Windows
 
 Scheduled downtime, Datadog-style: a window mutes alert **notifications** for a scope over
-a period. Nothing else changes — telemetry still arrives, rules still evaluate, alerts
-still fire and resolve, history still records, SLO budgets still burn.
+a period — and, on any deployment carrying alert_rule_engine#71, the matching **workflow
+triggers** with them, both the firing and the resolve side. Telemetry still arrives, rules
+still evaluate, alerts still fire and resolve, history still records, SLO budgets still
+burn.
 
 That matters when reading: a muted alert looks completely normal in `list-active-alerts`
 and `get-alert-history`. If the user asks why a firing alert paged nobody, a window is a
