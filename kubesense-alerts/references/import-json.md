@@ -49,7 +49,7 @@ is written until the user confirms.
 
 | Field | Values / notes |
 |---|---|
-| `name` | **Required.** Editor enforces ≥ 3 characters. `{{field}}` placeholders resolve per firing series and must match a group-by key. |
+| `name` | **Required.** Editor enforces ≥ 3 characters. `{{field}}` placeholders resolve per firing series against a group-by key or a rule label; one matching nothing stays literal. The alert's own facts take an `Alert.` prefix (`{{Alert.value}}`, `{{Alert.evaluatedFrom}}`) — see the placeholder section of the SKILL. |
 | `description` | Free text, shown to whoever receives the page. |
 | `enabled` | **Ignored** — the server hardcodes `true`. |
 | `query_type` | **Ignored** — derived from `query_config[0].selectedMode`. |
@@ -328,12 +328,24 @@ Emit **one array** even for two rules; a bare object only for exactly one.
 }
 ```
 
-Text-search variant — replace both filter maps:
+Text-search variant. For **one** body match, filter on `body` directly — it is a valid
+filter key (never a group-by), and a bare `ILIKE` on it is rewritten to token search:
+
+```json
+"filters":     { "body": ["timeout"] },
+"raw_filters": { "body": ["timeout"] }
+```
+
+For an OR across phrases, or body text mixed with another field, `advanced_query` still
+wins — remembering it **replaces** every other filter key:
 
 ```json
 "filters":     { "advanced_query": ["body SUBSTR_ILIKE \"timeout\" OR body SUBSTR_ILIKE \"connection refused\""] },
 "raw_filters": { "advanced_query": ["body SUBSTR_ILIKE \"timeout\" OR body SUBSTR_ILIKE \"connection refused\""] }
 ```
+
+Either way the rule reads the **raw** logs table every evaluation — no rollup carries
+`body` — so say so before attaching one to a long window in a busy tenant.
 
 ### Trace p95 latency (500 ms)
 
