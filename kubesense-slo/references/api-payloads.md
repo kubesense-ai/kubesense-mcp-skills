@@ -15,8 +15,9 @@ curl -sS https://<host>/api/slo \
 # or: -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
-Responses are uniformly `{"data": …, "message": "…", "error": false}`. `POST /api/slo`
-puts the new id in `data` as a bare string.
+Successful responses use `{"data": …, "message": "…", "error": false}`. Error
+responses use the same envelope with `"error": true`. `POST /api/slo` puts the new
+id in `data` as a bare string.
 
 ## Create / Update body
 
@@ -32,7 +33,7 @@ goes in the body as `id`, and every column is written from what you send.
 | `metric` | string | A **label**, not a query. `requests` for traces, the PromQL metric name for metrics, `alert_uptime` for alert SLOs. Filterable on the list page. |
 | `slo_target_percentage` | number | e.g. `99.9`. Percentage, not fraction. |
 | `warning_target_percentage` | number \| null | Should be **above** the target — a UI convention (≥ target + 0.1), **not validated by the API**. A value below the target is stored and then unreachable: the breached check runs first, so `warning` never appears. Omit for none. |
-| `operation` | string | `time_slice` only: **`GT`, `GTE`, `LT`, `LTE`, `EQ` — uppercase, nothing else.** Send `""` otherwise. See the operator warning below. |
+| `operation` | string | `time_slice` only: **`GT`, `GTE`, `LT`, `LTE`, `EQ` — uppercase, nothing else.** For other types, send or accept the default `GT`; an empty value is stored as `GT`. See the operator warning below. |
 | `threshold_value` | integer | `time_slice` only — the value `operation` compares against. `0` otherwise. |
 | `evaluation_window_days` | integer | Rolling compliance window. 7 / 30 / 90 … |
 | `evaluation_time_interval_seconds` | integer | Bucket size; **must be > 0**. Slice size for `time_slice` (use 60 or 300). |
@@ -48,7 +49,9 @@ goes in the body as `id`, and every column is written from what you send.
 
 ### QueryConfig
 
-Identical to an alert rule's `query_config` entry.
+Similar to an alert rule's `query_config` entry, but not identical. SLOs use
+`unified_filter`; alert rules use `filters`. Do not copy an alert-rule query object
+verbatim.
 
 ```jsonc
 {
