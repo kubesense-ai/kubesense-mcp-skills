@@ -64,7 +64,7 @@ is written until the user confirms.
 | `time_window` | How far back the query looks. Plain string. |
 | `frequency_type` | `at_least_once` \| `more_than_once` \| `always`. See the `always` trap below. |
 | `breaches_count` | Integer ≥ 2 — only with `more_than_once`. |
-| `breach_counting_window_prometheus_format` | Optional window to count breaches over. **Note the name** — see round-trip trap. |
+| `breach_counting_window_prometheus_format` | With `more_than_once`, the span the breaches are counted over; with `always`, the span the condition must hold across; with `at_least_once`, the span checked for *resolution*. It is read by all three — **always send it**, and see the trap below for why omitting it is not the same as leaving it to `time_window`. **Note the name.** |
 | `severity` | `critical` \| `error` \| `warning` \| `info`. (The MCP tool allows only critical/warning/info.) |
 | `labels` | `{"team": "infra"}` |
 | `notification_channel_ids` | Array of **integer** channel ids from `list-notification-channels`. **`[]` blocks a single-rule import.** |
@@ -105,11 +105,35 @@ Import maps only `more_than_once` specially; **everything else becomes
 
 Export emits only `frequency_type`, so `always` silently downgrades on a round-trip.
 
+An `always` rule also honours `breach_counting_window_prometheus_format` — the condition
+must hold across that whole span. **Set it explicitly, always**, even when `time_window`
+already is that span: the engine's fallback to `time_window` is not what an import gets.
+See the trap below.
+
 ### The `breach_counting_window` trap
 
-Import reads **`breach_counting_window_prometheus_format`**; export writes
-`breach_counting_window`. The round-trip is broken for this one field — re-add the
-`_prometheus_format` name when re-importing an exported rule that used it.
+**Send both keys, and never omit them.** `breach_counting_window` is what import reads;
+`breach_counting_window_prometheus_format` is what the POST body and the export carry.
+Measured on `convertAlertConfigToFormValues`, which is what a bulk import runs per rule:
+
+| the document carries | the window the rule gets |
+|---|---|
+| `breach_counting_window_prometheus_format: "15m"` **only** | **5 minutes** |
+| `breach_counting_window: "15m"` only | 15 minutes |
+| neither | 5 minutes |
+
+So the `_prometheus_format` name alone — the name an earlier version of this document
+called "the one import reads" — is **ignored**, and the rule silently gets five minutes.
+Not an error, not a blank field: a plausible number the reviewer has no reason to question.
+A 15-minute hold becomes a 5-minute one and the rule fires three times sooner than asked.
+
+The plain name alone works today. Send both anyway: the Export button emits both
+(`helper.ts`), so a document carrying both is exactly what a round-tripped rule looks like,
+and it survives the reader changing which one it prefers.
+
+The engine *does* fall back to `time_window` when the column is null — that fallback
+protects rules created by other routes. An import never reaches it, because the editor has
+already filled the field.
 
 ## `query_config[]`
 
