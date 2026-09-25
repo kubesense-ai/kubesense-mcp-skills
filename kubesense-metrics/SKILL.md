@@ -1,18 +1,18 @@
 ---
 name: kubesense-metrics
-description: Query Kubernetes, infrastructure and cloud-provider metrics from KubeSense with PromQL/MetricsQL — metric discovery, label inspection, the metric families KubeSense actually collects (kube-state-metrics, cAdvisor, node-exporter, OTel hostmetrics, DCGM GPU, JVM, and AWS/GCP/Azure/MongoDB Atlas/Confluent/Kong cloud resources), and the label conventions (clusterId, kubesense_cloud_resource_metric) needed to write a query that returns data.
+description: Query Kubernetes, infrastructure and cloud-provider metrics from KubeSense with PromQL/MetricsQL — metric discovery, label inspection, the metric families KubeSense actually collects (kube-state-metrics, cAdvisor, node-exporter, OTel hostmetrics, DCGM GPU, JVM, and AWS/GCP/Azure/MongoDB Atlas/Confluent/Kong cloud resources), and the label conventions (clusterId, kubesense_cloud_resource_metric) needed to write a query that returns data, plus a reference for every MetricsQL function.
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,metrics,promql,metricsql,victoriametrics,prometheus,kube-state-metrics,cadvisor,node-exporter,gpu,jvm,interval-macros,cloud,aws,gcp,azure,cloudwatch,mongodb-atlas,confluent,kong
+  tags: kubesense,metrics,promql,metricsql,prometheus,kube-state-metrics,cadvisor,node-exporter,gpu,jvm,interval-macros,cloud,aws,gcp,azure,cloudwatch,mongodb-atlas,confluent,kong
 ---
 
 # KubeSense Metrics
 
-Metrics are stored in **VictoriaMetrics** and queried with **PromQL** (plus MetricsQL
-extensions — see below). Requires the KubeSense MCP server; see
-**[kubesense-mcp](../kubesense-mcp/SKILL.md)** for connection and auth.
+Metrics are queried with **PromQL** plus the **MetricsQL** extensions (see below).
+Requires the KubeSense MCP server; see **[kubesense-mcp](../kubesense-mcp/SKILL.md)**
+for connection and auth.
 
 ## Tools
 
@@ -98,7 +98,7 @@ the OTel family splits it into `process_pid`, `process_command_line`, and
 A `rate()` window narrower than the step leaves gaps — the step for a 1-hour window is
 120s, so `rate(x[30s])` samples less than one bucket's worth and returns a broken series.
 Rather than picking a literal that happens to clear the step, use a macro. The API
-resolves these before the query reaches VictoriaMetrics:
+resolves these before the query reaches the metrics store:
 
 | Macro | Resolves to | Use for |
 |---|---|---|
@@ -117,7 +117,7 @@ but it is the thing the macro exists to stop you having to reason about.
 Two limits worth knowing:
 
 - Only these three are resolved. `$__interval_ms` and `$__range` are **not** implemented
-  and will reach VictoriaMetrics unexpanded, which fails.
+  and will reach the metrics store unexpanded, which fails.
 - A macro inside a label value is left alone — `up{job="$__interval"}` matches the
   literal string, it is not rewritten into a duration.
 
@@ -160,16 +160,24 @@ The `max by (...)` de-dup matters — duplicate label sets otherwise inflate the
 
 ## MetricsQL Extensions
 
-The backend is VictoriaMetrics, so MetricsQL is available on top of PromQL. Two
-extensions KubeSense itself relies on:
+Queries run as MetricsQL, a superset of PromQL. The extensions you will reach for
+most:
 
 | Extension | Use |
 |---|---|
 | `default 0` | Substitute a value where the series is absent: `sum(...) default 0` |
 | `drop_empty_series(...)` | Discard series that are entirely empty after filtering |
 | `[1h:60s]` subqueries | Rollup-over-rollup, e.g. `max_over_time(rate(x[5m])[1h:60s])` |
+| `limit N` | Cap an aggregate's output series: `sum(x) by (pod) limit 10` |
+| `keep_metric_names` | Keep metric names through a function; fixes `duplicate time series` |
 
 These will not work against a stock Prometheus, but they are correct here.
+
+**MetricsQL reference:** before using a function not shown in this file, check its
+signature and argument order, or reach for syntax beyond PromQL (`WITH` templates,
+`or` inside a selector, `offset`/`@` placement, `if`/`ifnot`), read
+**[references/metricsql.md](./references/metricsql.md)**. It lists all 232 functions,
+each with what it does and whether stock PromQL has it.
 
 ## Common Patterns
 
@@ -190,7 +198,7 @@ For a histogram percentile, always `sum(rate(...)) by (le)` **before**
 
 Metrics pulled from cloud providers' own monitoring APIs — AWS CloudWatch, Google Cloud
 Monitoring, Azure Monitor, MongoDB Atlas, Confluent Cloud, Kong — are in the same
-VictoriaMetrics instance but follow a **different convention entirely**.
+metrics store but follow a **different convention entirely**.
 
 > [!IMPORTANT]
 > Every cloud datapoint, for every provider and resource type, is stored under one
