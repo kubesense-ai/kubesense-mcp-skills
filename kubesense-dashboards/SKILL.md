@@ -2,7 +2,7 @@
 name: kubesense-dashboards
 description: Create KubeSense dashboards over metrics, logs, and traces — either directly with the create-dashboard MCP tool or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.3.0"
+  version: "2.4.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization
@@ -273,6 +273,10 @@ Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `formula`. Note
 Every field is optional. `queryMode` is `builder` or `code` — use `code` with `promql`
 set, `builder` with `selectedMetric` + `functions`.
 
+A builder query can also shift its series selector with `selectorModifiers`:
+`{"offset": "1h"}`, `{"at": "end()"}` (`start()`, `end()` or a unix timestamp), or both.
+The Explorer renders them where the selector is used, e.g. `rate(m{…}[5m] offset 1h)`.
+
 `variables` is **auto-derived** from filters and promql (`$name` references) — anything you
 supply is overwritten. Don't bother setting it.
 
@@ -382,27 +386,17 @@ ever reads one, drops back to the panel scheme. Full shape in
 - Attribute keys are prefixed `@_@`, e.g. `"@_@user.id": ["abc"]`.
 - Exclusion is a `-` prefix on the **value**: `{"namespace": ["-kube-system"]}`.
 - A `$name` value is a dashboard-variable reference.
+- On a **metrics** query, a `~` prefix makes the value a regex, and `-~` a negated one:
+  `{"namespace": ["~kube-.*"], "pod": ["-~test-.*"]}` renders
+  `namespace=~"kube-.*", pod!~"test-.*"`. `-` alone gives `!=`, so `{"container": ["-"]}`
+  is `container!=""`.
 
 ## Metrics Query Functions
 
-`functions` is an ordered pipeline. **One malformed entry wipes the entire array**, and
-argument counts are exact tuples — so build these carefully.
-
-| type | names | arguments |
-|---|---|---|
-| `range` | `rate`, `increase`, `resets` | `[{arg_name:"over", arg_value:"5m"}]` — any string |
-| `aggregations` | `sum`, `avg`, `max`, `min`, `count`, `No_Aggregations` | `[{arg_name:"by", arg_value:["namespace"]}]` — must be an **array** |
-| `top_bottom` | `top`, `bottom` | `[{arg_name:"k",arg_value:5},{arg_name:"by",arg_value:"max"}]` — `by` ∈ `max\|min\|avg\|median\|last` |
-| `rollup` | `avg_over_time`, `sum_over_time`, `max_over_time`, `min_over_time`, `count_over_time`, `last_over_time`, `absent_over_time`, `present_over_time`, `increases_over_time`, `range_over_time`, `quantile_over_time` | `[{arg_name:"over", arg_value:"5m"}]` — **restricted to `30s\|1m\|5m\|30m\|1h\|1d`** |
-| `comparison` | `greater`, `lesser`, `greater_than_or_equal`, `less_than_or_equal`, `equal`, `not_equal` | `[{arg_name:"than"\|"to", arg_value:100}]` |
-| `transform` | `clamp` (`min`+`max`), `clamp_max` (`max`), `clamp_min` (`min`), `round` (`to_nearest`), `histogram_quantile` (`quantile`), `abs` / `sort` / `sort_desc` (none) | arg names in parens; the `arguments` key is **still required** — use `[]` for the zero-arg ones |
-
-> [!WARNING]
-> `range.over` accepts any string, but **`rollup.over` only accepts
-> `30s`, `1m`, `5m`, `30m`, `1h`, `1d`**. A `rollup` with `over: "7m"` silently deletes
-> every function on that query.
-
-Typical time-series pipeline: `rate` then `aggregations`.
+`functions` is an ordered pipeline: each entry applies to the result of the one before.
+Builder mode covers any single-query MetricsQL function (rollup, transform, label and
+aggregate functions, and scalar operators); a query that combines several series goes in
+`code` mode instead.
 
 ```json
 "functions": [
@@ -410,6 +404,25 @@ Typical time-series pipeline: `rate` then `aggregations`.
   { "type": "aggregations", "name": "sum", "arguments": [ { "arg_name": "by", "arg_value": ["namespace"] } ] }
 ]
 ```
+
+- `name` picks the function and fixes its `type` and its argument names.
+- `arguments` holds `{arg_name, arg_value}` entries in any order. Leave one out to take its
+  default, or, for an optional one, to leave it unrendered.
+- A rollup's `over` window takes any duration (`"15m"`, `"1h30m"`) or a macro
+  (`"$__rate_interval"`); omit it and the query engine picks one.
+- Modifiers are arguments too:
+  - `by` / `without` (label lists) and `limit` on aggregates
+  - `keep_metric_names: true` on rollups, transforms and operators
+  - `bool: true` on comparisons
+  - `step` for a `[window:step]` subquery
+- Validation rejects an unknown `name` or `arg_name`, a value of the wrong kind, and a
+  malformed window, naming the function it objects to.
+
+**Before writing any function, read
+[references/metrics-functions.md](./references/metrics-functions.md)**. It lists every
+function with its `type`, each argument's name, kind and default, and a verified example of
+the PromQL it renders. Argument names differ between look-alike functions: `quantile` takes
+`phi`, while `quantile_over_time` and `histogram_quantile` take `quantile`.
 
 ## Grid Layout
 
@@ -477,18 +490,16 @@ is not a working dashboard — check these by hand before you hand it over.
    resets to `row_count` — a row count where you asked for a percentile.
 3. `chart_type` is lowercase `timeseries`; `panelType` is camelCase `timeSeries`. Each
    resets to its own default (`table` / `timeSeries`) on a mismatch.
-4. `rollup.over` only accepts `30s`/`1m`/`5m`/`30m`/`1h`/`1d`; a bad value wipes every
-   function on that query.
-5. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
+4. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
    variable deletes them all.
-6. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
+5. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
    become `auto`.
-7. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
+6. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
    `topListValue` — none exist, and unknown keys are stripped without comment. On a **top
    list**, value colouring goes in `visualFormattingRules`, not `thresholds`.
-8. Prefer omitting an optional field to guessing it: an omitted field takes its default, a
+7. Prefer omitting an optional field to guessing it: an omitted field takes its default, a
    wrong one can reset its siblings.
-9. Validation checks shape, not existence. Discover metric and field names with MCP before
+8. Validation checks shape, not existence. Discover metric and field names with MCP before
    writing queries, and tell the user to confirm on the panel preview.
 
 The one rule that spans both: `preset` is a stringified JSON string in the import envelope,
