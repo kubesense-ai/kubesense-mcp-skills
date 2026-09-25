@@ -407,7 +407,9 @@ aggregate functions, and scalar operators); a query that combines several series
 
 - `name` picks the function and fixes its `type` and its argument names.
 - `arguments` holds `{arg_name, arg_value}` entries in any order. Leave one out to take its
-  default, or, for an optional one, to leave it unrendered.
+  default, or, for an optional one, to leave it unrendered. The exception is a label list
+  marked **required** in the reference (`label_keep`, `labels_equal`, the `sort_by_label`
+  family, …): it must be present with at least that many labels, or the import fails.
 - A rollup's `over` window takes any duration (`"15m"`, `"1h30m"`) or a macro
   (`"$__rate_interval"`); omit it and the query engine picks one.
 - Modifiers are arguments too:

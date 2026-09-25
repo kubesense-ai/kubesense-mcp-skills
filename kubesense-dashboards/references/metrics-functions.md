@@ -19,6 +19,9 @@ what the Explorer renders for those arguments on a metric `m`.
 - **Leave an argument out** to take its default. An optional argument that is
   left out is simply not rendered. For example, a rollup with no `over` lets
   the query engine pick the window.
+- **A required label list cannot be left out or short.** An argument marked
+  "required, at least N" must be present with N or more labels; the query
+  fails without them, so the import is rejected.
 - **`functions` is a pipeline:** each function applies to the result of the one
   before it.
 
@@ -222,8 +225,8 @@ both. `limit` keeps only that many output series.
 | `label_del` | `label` | `labels`: label list, default `[]` | `{"labels": ["pod", "instance"]}` → `label_del(m, "pod", "instance")` |
 | `label_graphite_group` | `label` | `group_nums`: number list, default `[0]` | `{"group_nums": [0, 2]}` → `label_graphite_group(m, 0, 2)` |
 | `label_join` | `label` | `dst_label`: label name, default `""`<br>`separator`: text, default `"-"`<br>`src_labels`: label list, default `[]` | `{"dst_label": "target", "separator": ":", "src_labels": ["namespace", "pod"]}` → `label_join(m, "target", ":", "namespace", "pod")` |
-| `label_keep` | `label` | `labels`: label list, default `[]` | `{"labels": ["job"]}` → `label_keep(m, "job")` |
-| `label_lowercase` | `label` | `labels`: label list, default `[]` | `{"labels": ["method"]}` → `label_lowercase(m, "method")` |
+| `label_keep` | `label` | `labels`: label list, required, at least 1 | `{"labels": ["job"]}` → `label_keep(m, "job")` |
+| `label_lowercase` | `label` | `labels`: label list, required, at least 1 | `{"labels": ["method"]}` → `label_lowercase(m, "method")` |
 | `label_map` | `label` | `label`: label name, default `""`<br>`value_pairs`: list of `[text, text]` pairs, default `[]` | `{"label": "code", "value_pairs": [["200", "ok"], ["500", "error"]]}` → `label_map(m, "code", "200", "ok", "500", "error")` |
 | `label_match` | `label` | `label`: label name, default `""`<br>`regex`: regex, default `".*"` | `{"label": "pod", "regex": "api-.*"}` → `label_match(m, "pod", "api-.*")` |
 | `label_mismatch` | `label` | `label`: label name, default `""`<br>`regex`: regex, default `".*"` | `{"label": "pod", "regex": "api-.*"}` → `label_mismatch(m, "pod", "api-.*")` |
@@ -231,13 +234,13 @@ both. `limit` keeps only that many output series.
 | `label_replace` | `label` | `dst_label`: label name, default `""`<br>`replacement`: text, default `"$1"`<br>`src_label`: label name, default `""`<br>`regex`: regex, default `"(.*)"` | `{"dst_label": "app", "regex": "(.*)-[a-z0-9]+", "replacement": "$1", "src_label": "pod"}` → `label_replace(m, "app", "$1", "pod", "(.*)-[a-z0-9]+")` |
 | `label_set` | `label` | `label_values`: list of `[label, text]` pairs, default `[]` | `{"label_values": [["env", "prod"], ["team", "core"]]}` → `label_set(m, "env", "prod", "team", "core")` |
 | `label_transform` | `label` | `label`: label name, default `""`<br>`regex`: regex, default `"(.*)"`<br>`replacement`: text, default `"$1"` | `{"label": "pod", "regex": "-", "replacement": "_"}` → `label_transform(m, "pod", "-", "_")` |
-| `label_uppercase` | `label` | `labels`: label list, default `[]` | `{"labels": ["method"]}` → `label_uppercase(m, "method")` |
+| `label_uppercase` | `label` | `labels`: label list, required, at least 1 | `{"labels": ["method"]}` → `label_uppercase(m, "method")` |
 | `label_value` | `label` | `label`: label name, default `""` | `{"label": "le"}` → `label_value(m, "le")` |
-| `labels_equal` | `label` | `labels`: label list, default `[]` | `{"labels": ["src", "dst"]}` → `labels_equal(m, "src", "dst")` |
-| `sort_by_label` | `label` | `labels`: label list, default `[]` | `{"labels": ["pod"]}` → `sort_by_label(m, "pod")` |
-| `sort_by_label_desc` | `label` | `labels`: label list, default `[]` | `{"labels": ["pod"]}` → `sort_by_label_desc(m, "pod")` |
-| `sort_by_label_numeric` | `label` | `labels`: label list, default `[]` | `{"labels": ["code"]}` → `sort_by_label_numeric(m, "code")` |
-| `sort_by_label_numeric_desc` | `label` | `labels`: label list, default `[]` | `{"labels": ["code"]}` → `sort_by_label_numeric_desc(m, "code")` |
+| `labels_equal` | `label` | `labels`: label list, required, at least 2 | `{"labels": ["src", "dst"]}` → `labels_equal(m, "src", "dst")` |
+| `sort_by_label` | `label` | `labels`: label list, required, at least 1 | `{"labels": ["pod"]}` → `sort_by_label(m, "pod")` |
+| `sort_by_label_desc` | `label` | `labels`: label list, required, at least 1 | `{"labels": ["pod"]}` → `sort_by_label_desc(m, "pod")` |
+| `sort_by_label_numeric` | `label` | `labels`: label list, required, at least 1 | `{"labels": ["code"]}` → `sort_by_label_numeric(m, "code")` |
+| `sort_by_label_numeric_desc` | `label` | `labels`: label list, required, at least 1 | `{"labels": ["code"]}` → `sort_by_label_numeric_desc(m, "code")` |
 
 ### Aggregate (40)
 

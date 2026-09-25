@@ -67,6 +67,8 @@ def params_text(spec: dict) -> str:
         text = f"`{param['name']}`: {kind_text(param['kind'])}"
         if param.get("optional"):
             text += ", optional"
+        elif param.get("minItems"):
+            text += f", required, at least {param['minItems']}"
         elif "default" in param:
             text += f", default `{json.dumps(param['default'])}`"
         if param.get("aliases"):
