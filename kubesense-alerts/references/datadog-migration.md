@@ -103,8 +103,8 @@ referenced monitor and translate it as above, then:
 | `a \|\| b` | `{"op": "or", ...}` |
 | the referenced monitors' common `by {service}` | `join_by: ["service"]`, and aggregate every query to exactly that label |
 | both referenced monitors are simple alerts (no `by`) | `join_by: []` |
-| `!a` | **No NOT.** Invert that condition's operator (`>` → `<=`, `<` → `>=`). The inversion is exact only while `a` has data: here a condition with no data is *unknown*, never true, so check how the user expects `!a` to behave when `a` goes quiet, and say so. |
-| `(a && b) \|\| c` | **No nesting through import** — the importer flattens it. Emit the largest flat part as one rule and the rest as another (`a AND b`, plus `c`), and tell the user |
+| `!a` | **No NOT — and flipping the operator is not NOT.** A condition reads its window through a reduction: `>`/`>=` take the window's **maximum**, `<`/`<=` its **minimum**. A window holding 100 and 600 makes `a > 500` AND `a <= 500` both true, so `a <= 500` is not `!(a > 500)`. No-data differs too: here a condition with no data is *unknown*, never true. Do not translate `!a` mechanically. Leave it out and tell the user, unless you have a translation you have verified keeps the window and no-data semantics they need. |
+| `(a && b) \|\| c` | Nested `condition_expression`: `{"op": "or", "conditions": ["c"], "children": [{"op": "and", "conditions": ["a", "b"]}]}`. The API and engine evaluate nesting. **Deliver it as an array (bulk import)**, which sends it as written. Tell the user that opening the rule in the editor, including a single-rule import, flattens it to one level, and that webapps before #2530 flatten on every import; for those, split it into two rules instead (`a AND b`, plus `c`). |
 | a warning threshold on a referenced monitor | Dropped — a composite rule cannot carry levels. Use the rule's single `severity` |
 
 Also check, and flag when they fail:

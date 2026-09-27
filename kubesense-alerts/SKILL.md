@@ -309,8 +309,8 @@ signal** — a logs condition cannot AND a metrics one.
 > condition of 500ms is `"value": 500000000` — optionally with `"unit": "ms"` so the
 > editor shows it as 500. `"value": 500, "unit": "ms"` is **500 ns** and fires on every
 > evaluation. And put a `unit` **only** on a condition reading a traces `duration`
-> aggregate: on any other condition the importer rescales the value by that unit and
-> saves the wrong number.
+> aggregate. On any other condition it means nothing, and webapps before #2530 rescale
+> the value by it on import and save the wrong number.
 
 **When the feature is off:** an OR band becomes **two rules** (`> HI` and `< LO`) —
 equivalent, at the cost of two alerts. An OR across signals is two rules. An AND has no
@@ -467,8 +467,8 @@ verify on the condition chart.
 | A `label` key on a `query_config` entry | Ignored — labels bind **positionally** (index 0 → `A`, 1 → `B`) |
 | `send_resolved: false` on a rule routed to `pagerduty` / `jsm` / `datadog_oncall` | **Refused with a warning.** The resolved payload is what CLOSES the incident there, so suppressing it would leave it open forever |
 | Re-creating a deleted rule with the same name to "restore" it | Deletes are soft — the old rule keeps its history and stays deleted. You get a **new** rule with no past events |
-| Cross-query composite with `join_by` missing or `null` in import JSON | The importer turns it into `[]` ("every query ungrouped") instead of letting the API refuse it; grouped queries are then all left out and the rule never fires. Always write it |
-| `condition_expression.children` in import JSON | Flattened by the importer to one level under the top `op` — `(c1 AND c2) OR c3` becomes `c1 OR c2 OR c3` |
+| Cross-query composite with `join_by` missing or `null` in import JSON | Refused by a bulk import's dry-run; the editor will not save it. Webapps before #2530 turn it into `[]` ("every query ungrouped") without refusing it, and grouped queries are then all left out, so the rule never fires. Always write it |
+| `condition_expression.children` in import JSON | Kept by a bulk (array) import; flattened to one level by the editor, which covers a single-rule import, any later UI edit, and every import before #2530. See import-json.md, "Which import path" |
 
 Always tell the user to confirm the values on the import editor's **condition chart** before
 clicking Create.

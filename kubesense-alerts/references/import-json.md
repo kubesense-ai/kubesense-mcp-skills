@@ -292,7 +292,7 @@ and no formula fakes it: `(A/500) * (B/10) > 1` passes at A=10000, B=0.5.
 | `conditions[].unit` | Optional, **display only**: `ns` \| `us` \| `ms` \| `s`, and **only** on a condition reading a traces query that aggregates `duration`. See the unit trap below. |
 | `condition_expression.op` | `and` \| `or`. |
 | `condition_expression.conditions` | Condition ids. Every condition must be used, **exactly once**. |
-| `condition_expression.children` | Nested sub-expressions — accepted by the API and engine, but the **importer flattens them**. Do not emit; see the traps. |
+| `condition_expression.children` | Nested sub-expressions: accepted by the API and engine, and kept by a **bulk (array) import**. The editor flattens them (see "Which import path" below). |
 | `join_by` | Tri-state, and `null` is **not** `[]` — see below. |
 
 Also required on a composite rule, because the document still has to be a valid single
@@ -317,8 +317,8 @@ rule:
 | several queries, each returning **one ungrouped value** | `[]` | One rule-level verdict, one alert with no series labels. |
 | several **grouped** queries | `["service"]` — label names | Series pair when they agree **exactly** on every listed label. The alert's labels are **exactly those labels** (plus the rule's `labels`). |
 
-Several queries with `join_by` missing or `null` is **refused** by the API — but see the
-trap below for what the importer does to it first. Label names must be exact: no blanks,
+Several queries with `join_by` missing or `null` is **refused** by the API. How an import
+surfaces that depends on the path (see "Which import path" below). Label names must be exact: no blanks,
 no surrounding whitespace, no duplicates.
 
 **Which label names?** Whatever the queries' series actually carry:
@@ -373,23 +373,34 @@ tells the editor how to *display* the stored number.
 - `"value": 500, "unit": "ms"` is **500 ns**. The rule breaches on every evaluation — the
   single-threshold KUBE-2435 bug, one condition at a time. The editor gives it away by
   showing `0.0005 ms`.
-- A duration `unit` on **any other** condition — a metrics query, a count, a non-duration
-  field — gets its value **silently rescaled on import**: the editor divides it for
-  display, then saves the divided number without the unit. `0.5` with `"unit": "s"` on a
-  PromQL query is stored as `5e-10`. Only a traces query aggregating `duration` may carry
-  a `unit`.
+- Put a `unit` **only** on a condition reading a traces `duration` aggregate. On any
+  other condition it means nothing. On webapps before #2530 it is also dangerous: the
+  editor divided the value by the unit and saved the divided number (`0.5` with
+  `"unit": "s"` on a PromQL query was stored as `5e-10`). From #2530 on, a bulk import
+  sends the value as written and the editor converts only trace-duration conditions.
 - Condition `unit` uses `ns`/`us`/`ms`/`s`. The rule's own `unit` is the chart formatter
   (`nanoseconds`, `seconds`, …). Do not swap the vocabularies.
 - `threshold_input_unit` is re-derived from condition 1's `unit` by the importer — you do
   not need to send it.
 
+### Which import path
+
+The same file is treated differently depending on how it is imported. Write it so it is
+right on all three.
+
+| Path | What happens to the composite fields |
+|---|---|
+| **Array** (bulk import, webapp #2530 and later) | `conditions`, `condition_expression` and `join_by` are sent **exactly as written**, and the API's dry-run refuses what is invalid: a missing `join_by` on a cross-query rule, a stray `join_by` on a band, unused ids. Nesting is kept. |
+| **Single object** (opens the editor) | The editor holds the rule. It **flattens** a nested expression to one level (and says so before saving), **will not save** a cross-query rule with no match labels, resets `join_by` to `null` on a single-query band, and converts a `unit` only on a trace-duration condition. The import's own check before the editor opens is shape-only. |
+| **Any path, webapp before #2530** | A missing `join_by` on a cross-query rule became `[]` ("every query ungrouped") without being refused, so grouped queries were all left out and the rule never fired. Nesting was flattened. A `unit` on a non-duration condition rescaled its value. |
+
 ### Composite traps
 
 | Trap | Consequence |
 |---|---|
-| Cross-query rule with `join_by` omitted or `null` | The **importer rewrites it to `[]`** before the API sees it, so it is not refused. With grouped queries every series is then left out as "wrong-shaped" and the rule never fires. **Always write `join_by` on a cross-query rule.** |
-| `join_by: []` or a list on a single-query band | Refused at a direct POST; the importer quietly resets it to `null`. Harmless, but write `null`. |
-| `condition_expression.children` (nested) | Evaluated by the engine, but the importer and editor **flatten** it to one level under the top `op` — `(c1 AND c2) OR c3` becomes `c1 OR c2 OR c3`. Nesting is only reachable by a direct `POST /api/alerts/rules`. |
+| Cross-query rule with `join_by` omitted or `null` | Refused by a bulk import's dry-run; the editor will not save it. **Before #2530 the importer rewrote it to `[]`** so it was not refused. With grouped queries every series is then left out as "wrong-shaped" and the rule never fires. **Always write `join_by` on a cross-query rule.** |
+| `join_by: []` or a list on a single-query band | Refused at a direct POST and by a bulk import's dry-run; the editor quietly resets it to `null`. Write `null`. |
+| `condition_expression.children` (nested) | Evaluated by the engine and kept by a **bulk** import. The **editor flattens** it to one level under the top `op`: `(c1 AND c2) OR c3` becomes `c1 OR c2 OR c3`. That happens on a single-rule import and whenever the rule is later edited in the UI, and on every import before #2530. Tell the user a UI edit changes the rule. |
 | A formula as a condition's query | Refused. Put the formula's arithmetic in PromQL, or threshold the formula as a single-threshold rule. |
 | Grouped logs/traces `less_than` count | A key with zero matching rows returns **no series**, not 0 — so "count dropped below N" cannot see it drop to zero. |
 | A `{{label}}` placeholder not in `join_by` | Stays literal on a cross-query rule — the alert carries only the join labels. |
