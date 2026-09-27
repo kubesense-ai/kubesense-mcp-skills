@@ -1,11 +1,11 @@
 ---
 name: kubesense-alerts
-description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes validate-alert-json for checking hand-built rule JSON, the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors. Also covers multi-query formula rules, the Alert. placeholder namespace, manual resolve, and maintenance windows.
+description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes validate-alert-json for checking hand-built rule JSON, the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors. Also covers multi-query formula rules, composite AND/OR conditions (bands, cross-query joins with join_by), two-level warning/critical thresholds, the Alert. placeholder namespace, manual resolve, and maintenance windows.
 metadata:
-  version: "2.3.0"
+  version: "2.4.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels
+  tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels,composite-conditions
 ---
 
 # KubeSense Alerts
@@ -26,6 +26,8 @@ Two distinct jobs, don't confuse them:
 | "is this flapping or new?" | `get-alert-history` |
 | "has this been root-caused before?" | `find-investigation-for-alert` |
 | "create an alert when…" (one rule, agent applies it) | `create-alert` MCP tool |
+| "fire when A **and** B", "outside a band", "above X or below Y" | [Several Conditions — AND / OR](#several-conditions--and--or) |
+| "warn at X, page at Y" on one query | a second level, not AND/OR — [Choosing the Rule Shape](#choosing-the-rule-shape) |
 | "give me the alert JSON for…" / several rules / migrating | import JSON → [references/import-json.md](./references/import-json.md) |
 | "port these Datadog monitors" | [references/datadog-migration.md](./references/datadog-migration.md) |
 | "why did this fire but page nobody?" | channel cadence first, then whether a **maintenance window** covers it |
@@ -64,6 +66,12 @@ It validates the **wire document** — the export/import shape with `query_confi
 `threshold_operator` and `frequency_type`. It is *not* for `create-alert`'s arguments;
 that tool validates its own input and rejects with the same findings.
 
+For a **composite** rule it checks only the shape of `conditions` and
+`condition_expression` — none of the cross-field rules (`join_by` present across queries,
+ids resolving and all used, no formula operand, no `always`, no warning level).
+`valid=true` there is necessary, not sufficient; the import's dry-run review is where the
+rest surface.
+
 > [!IMPORTANT]
 > **"Which alerts did I create?"** — call `get-current-user` and pass its **`username`** as
 > `created_by`. The stored creator is a username; an **email will never match**, and those
@@ -72,6 +80,15 @@ that tool validates its own input and rejects with the same findings.
 A **fingerprint** identifies one firing *series* of a rule (one namespace/pod/workload).
 Pass it to narrow `get-alert-details` / `get-alert-history` to that instance; omit it for
 the whole rule.
+
+> [!WARNING]
+> **A composite rule reads as its first condition.** `get-alert-details` returns
+> `threshold_operator`/`threshold_value` but not `conditions`, `condition_expression` or
+> `join_by`, and for an AND/OR rule that pair is **condition 1 alone**. Never report
+> "fires above 500ms" for a rule that says "above 500ms AND above 10 req/s". The firing
+> rows' `condition` column carries the whole expression with each condition's reading —
+> read that, or ask for the rule's Export. Evaluation warnings (series left out of a
+> join) appear only on the rule's page.
 
 ### An alert can leave Firing Now without recovering
 
@@ -213,6 +230,94 @@ rule remains an import-JSON job.
 
 `labels` attaches extra labels to the rule and to every alert it fires. They route, and
 they resolve in `{{placeholders}}` — see below.
+
+### Choosing the Rule Shape
+
+| The user wants | Shape |
+|---|---|
+| one number against one threshold | single threshold |
+| one number, two severities — "warn above 300ms, page above 500ms" | **two levels**: `warning_threshold_value` (import JSON only) |
+| a ratio or arithmetic over queries — error rate, share of total | **formula**, thresholded once |
+| one number outside a band — "below 5k OR above 250k" | **composite**, one query, `or` |
+| two numbers that must both hold for the same series — "p95 > 500ms AND > 10 req/s" | **composite**, two queries, `and`, `join_by` |
+| either of two measurements — "5xx count > 50 OR p99 > 2s" | **composite** `or` across queries, or simply two rules. Across **signals** (a log count OR a metric) it is always two rules |
+
+Two levels and composite are **both optional features, off by default**, and they cannot
+be combined in one rule. Check `GET /api/alerts/rules/capabilities` →
+`data.composite_conditions` / `data.dual_threshold` when you can reach the REST API; no
+MCP tool reports them. Otherwise the refusal names the switch —
+`ALERT_COMPOSITE_CONDITIONS_ENABLED` or `ALERT_DUAL_THRESHOLD_ENABLED` — and that is the
+cue to fall back, not to retry.
+
+### Several Conditions — AND / OR
+
+`create-alert` takes `conditions` + `conditions_combine` **instead of**
+`threshold_operator`/`threshold_value`. Each condition names a query label — the flat
+single-query form's query is `A`:
+
+```json
+{
+  "signal": "metrics",
+  "name": "Slow under load",
+  "queries": [
+    {"label": "A", "promql": "histogram_quantile(0.95, sum by (service, le) (rate(http_server_request_duration_seconds_bucket[5m])))"},
+    {"label": "B", "promql": "sum by (service) (rate(http_server_request_duration_seconds_count[5m]))"}
+  ],
+  "conditions": [
+    {"query": "A", "operator": "greater_than", "value": 0.5},
+    {"query": "B", "operator": "greater_than", "value": 10}
+  ],
+  "conditions_combine": "and",
+  "join_by": ["service"],
+  "severity": "critical",
+  "notification_channels": [1]
+}
+```
+
+(Metric and label names illustrative — discover them.) The tool assigns ids `c1`, `c2`…
+and needs no `threshold_query`. A trace **percentile** band still needs import JSON —
+`value_operation` has no `p95` here. The import shape, three verified examples and the
+full refusal list are in
+[references/import-json.md](./references/import-json.md#composite-conditions-and--or).
+
+**`join_by` is the one decision that matters**, and it has three states that are not
+interchangeable:
+
+| Conditions read | `join_by` | Alert identity |
+|---|---|---|
+| one query (a band) | omit / `null` | each series, with its own labels |
+| several queries, **each one ungrouped value** | `[]` | one rule-level alert |
+| several **grouped** queries | `["service"]` | one alert per key, labelled **only** with the join labels |
+
+For a labelled join, **aggregate every query to exactly the join labels** —
+`sum by (service) (...)` in PromQL, the same `groupBy` on every logs/traces query (join
+on the `groupBy` field names). The engine never guesses a pairing: a series missing a
+join label, two series of one query on the same key (a query that still carries `pod`
+returns two per service the moment it scales), or an ungrouped value in a labelled join is **left out** of that
+evaluation with a warning on the rule page. A key the other query does not return is
+**unknown**, not zero: `and` cannot fire on it (the series gets no data, and
+`no_data_state` decides), `or` still fires on the side it measured.
+
+Refused at save time, on every path: conditions on a **formula**, `condition_type` other
+than threshold, frequency **`always`**, a **warning level** alongside conditions, a
+cross-query rule without `join_by`, `join_by` on a single-query rule, an unknown or
+unused condition id, and `above`/`below` in import JSON. One rule is still **one
+signal** — a logs condition cannot AND a metrics one.
+
+> [!WARNING]
+> **A condition's `value` is native units; its `unit` is display only.** A trace-duration
+> condition of 500ms is `"value": 500000000` — optionally with `"unit": "ms"` so the
+> editor shows it as 500. `"value": 500, "unit": "ms"` is **500 ns** and fires on every
+> evaluation. And put a `unit` **only** on a condition reading a traces `duration`
+> aggregate: on any other condition the importer rescales the value by that unit and
+> saves the wrong number.
+
+**When the feature is off:** an OR band becomes **two rules** (`> HI` and `< LO`) —
+equivalent, at the cost of two alerts. An OR across signals is two rules. An AND has no
+honest single-threshold equivalent — **never fake it with a formula** — except in
+metrics, where PromQL can filter one side by the other:
+`(histogram_quantile(...) > 0.5) and on (service) (sum by (service) (rate(...)) > 10)`,
+thresholded `> 0.5`. For logs/traces AND, say it is not available on this deployment.
 
 > [!WARNING]
 > **Call `list-notification-channels` first.** `notification_channels` is required and must
@@ -362,6 +467,8 @@ verify on the condition chart.
 | A `label` key on a `query_config` entry | Ignored — labels bind **positionally** (index 0 → `A`, 1 → `B`) |
 | `send_resolved: false` on a rule routed to `pagerduty` / `jsm` / `datadog_oncall` | **Refused with a warning.** The resolved payload is what CLOSES the incident there, so suppressing it would leave it open forever |
 | Re-creating a deleted rule with the same name to "restore" it | Deletes are soft — the old rule keeps its history and stays deleted. You get a **new** rule with no past events |
+| Cross-query composite with `join_by` missing or `null` in import JSON | The importer turns it into `[]` ("every query ungrouped") instead of letting the API refuse it; grouped queries are then all left out and the rule never fires. Always write it |
+| `condition_expression.children` in import JSON | Flattened by the importer to one level under the top `op` — `(c1 AND c2) OR c3` becomes `c1 OR c2 OR c3` |
 
 Always tell the user to confirm the values on the import editor's **condition chart** before
 clicking Create.
@@ -431,6 +538,10 @@ percentiles.
 | 1s | `1000000000` |
 
 `ns = ms × 1_000_000`. Set `"unit": "nanoseconds"`.
+
+The same holds for a composite condition's `value` and for `warning_threshold_value`. A
+condition's own `unit` (`"ms"`) only changes how the editor *displays* the stored
+nanoseconds — it never converts.
 
 > [!NOTE]
 > This differs from the **query** tools, where a `duration` WHERE filter is expressed in
@@ -558,7 +669,7 @@ Maintenance Windows rather than guessing from the alert's own data.
 ## Import JSON
 
 For the complete top-level schema, `query_config` shapes, every enum, bulk import, and
-verified working examples for metrics/logs/traces/formula rules, read
+verified working examples for metrics/logs/traces/formula/composite rules, read
 **[references/import-json.md](./references/import-json.md)**.
 
 The essentials:
@@ -627,3 +738,7 @@ cluster-specific. Ask the user, or have them export a reference rule.
     need the `Alert.` prefix — `{{Alert.value}}`, not `{{value}}`.
 14. Tell the user to review the condition chart before creating, and never claim a rule was
     created unless `create-alert` actually returned an id.
+15. AND/OR conditions and warning levels are **off by default** — check the capabilities
+    endpoint or expect a refusal naming the switch, and fall back. A cross-query composite
+    always states `join_by`, aggregates every query to exactly those labels, and never
+    uses a formula as an operand. Condition values are native units.

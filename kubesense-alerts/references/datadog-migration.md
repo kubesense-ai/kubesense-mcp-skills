@@ -67,6 +67,7 @@ displaces every other `raw_filters` key, so fold all conditions into the one str
 | `log alert` | `logs` — `value_operation: "row_count"` + `raw_filters` + `groupBy` |
 | `trace-analytics alert`, `apm` | `traces` — `row_count`, or `p95`/`p99` over `duration`. See the latency note below. |
 | `anomaly`, `forecast`, `outlier` | No direct equivalent. Closest is `condition_type: "change_percent"` or a static threshold — **flag the gap to the user.** |
+| `composite` | One rule with AND/OR `conditions` — see [Composite monitors](#composite-monitors-a--b) below. |
 
 ### Trace latency conversion
 
@@ -88,12 +89,43 @@ yields empty or single-blank-series alerts. `workload` is populated on essential
 span. (Note `service` itself is **rejected** by the alert engine, even though it is the
 preferred label in the query tools.)
 
+### Composite monitors (`a && b`)
+
+A Datadog composite monitor combines **other monitors by id**: `"query": "12345 && 67890"`.
+KubeSense has no monitor-of-monitors; the equivalent is **one rule** whose queries are the
+referenced monitors' queries and whose `conditions` are their thresholds. Fetch each
+referenced monitor and translate it as above, then:
+
+| Datadog | KubeSense |
+|---|---|
+| each referenced monitor | one `query_config` entry (A, B, … by position) + one condition `{query, operator, value}` from its critical threshold |
+| `a && b` | `condition_expression: {"op": "and", ...}` |
+| `a \|\| b` | `{"op": "or", ...}` |
+| the referenced monitors' common `by {service}` | `join_by: ["service"]`, and aggregate every query to exactly that label |
+| both referenced monitors are simple alerts (no `by`) | `join_by: []` |
+| `!a` | **No NOT.** Invert that condition's operator (`>` → `<=`, `<` → `>=`). The inversion is exact only while `a` has data: here a condition with no data is *unknown*, never true, so check how the user expects `!a` to behave when `a` goes quiet, and say so. |
+| `(a && b) \|\| c` | **No nesting through import** — the importer flattens it. Emit the largest flat part as one rule and the rest as another (`a AND b`, plus `c`), and tell the user |
+| a warning threshold on a referenced monitor | Dropped — a composite rule cannot carry levels. Use the rule's single `severity` |
+
+Also check, and flag when they fail:
+
+- **Same signal.** A composite of a metric monitor and a log monitor cannot be one rule —
+  one rule runs one signal. Emit two rules and say the AND is lost.
+- **Same grouping.** Datadog broadcasts a simple monitor across a multi-alert one's
+  groups; KubeSense does not — an ungrouped query in a labelled join is left out, so the
+  AND never fires. Group both queries by the join label, or use `join_by: []` for both.
+- **The feature switch.** `composite_conditions` must be on. If it is off, an `||`
+  becomes separate rules; an `&&` has no faithful equivalent (PromQL `and on (...)` inside
+  one metrics query is the only honest approximation — see the SKILL).
+- Values are **native units**: a latency condition from an APM monitor is nanoseconds, as
+  in the conversion table above.
+
 ## `options` Mapping
 
 | Datadog option | KubeSense |
 |---|---|
 | `thresholds.critical` | `threshold_value` + `severity: "critical"` |
-| `thresholds.warning` | KubeSense has **one** threshold per rule. Generate **two rules** (a `warning` and a `critical`) and tell the user — or use critical only if they prefer. |
+| `thresholds.warning` | If the deployment reports `dual_threshold: true` (`GET /api/alerts/rules/capabilities`), set `warning_threshold_value` on the critical rule — one rule, one incident whose level moves, as in Datadog. See [import-json.md](./import-json.md#two-levels-on-one-threshold) for the conditions it must meet. Otherwise generate **two rules** (a `warning` and a `critical`) and tell the user — or use critical only if they prefer. |
 | `notify_no_data: true` | `no_data_state: "firing"` **only when metric absence is itself the incident** — see the caveat below |
 | `notify_no_data: false` | `no_data_state: "normal"` |
 | `no_data_timeframe` | Informational — KubeSense uses `time_window` for the no-data decision. Note any mismatch. |
@@ -214,7 +246,9 @@ rules that import".
 
 - Which Datadog options had **no equivalent** (`evaluation_delay`, anomaly/forecast types,
   `renotify_interval`) and how the behaviour differs.
-- That warning + critical became **two rules** (or that you used critical only).
+- That warning + critical became **two rules**, a two-level rule, or critical only.
+- For a composite monitor: which sub-monitors were folded into the rule, and any `!`,
+  nesting, mixed signal or mismatched grouping that could not be carried over.
 - That `@mentions` were resolved to real channel ids — and which ones **could not** be
   matched.
 - That metric and field names were **re-discovered**, not copied from Datadog.
