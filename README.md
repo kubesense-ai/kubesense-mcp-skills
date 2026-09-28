@@ -18,7 +18,7 @@ skill for the tool layer they share.
 | **kubesense-spl** | SPL — the piped log query language, and its inverted field contract |
 | **kubesense-infra** | Clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List/investigate/create alerts, generate import JSON, migrate Datadog monitors |
-| **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
+| **kubesense-dashboards** | Create or edit dashboards, or generate preset JSON to import |
 | **kubesense-slo** | SLOs: error budgets, burn-rate alerting, Datadog SLO migration |
 
 ## Install
