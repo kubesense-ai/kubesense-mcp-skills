@@ -1,8 +1,8 @@
 ---
 name: kubesense-dashboards
-description: Create KubeSense dashboards over metrics, logs, and traces — either directly with the create-dashboard MCP tool or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
+description: Create and edit KubeSense dashboards over metrics, logs, and traces — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.4.0"
+  version: "2.5.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization
@@ -29,6 +29,8 @@ Both go through the same server-side schema check, so a preset that passes
 - "Create a dashboard for…" / "Build a dashboard with panels for…" → `create-dashboard`
 - "Give me the dashboard JSON for…" → preset JSON
 - "Generate a dashboard preset" → preset JSON
+- "Change / fix / add a panel to the X dashboard" → `get-dashboard-details`, then
+  `update-dashboard` — see [Editing an existing dashboard](#editing-an-existing-dashboard)
 
 ## Always Validate Before You Finish
 
@@ -467,6 +469,76 @@ It is a **write tool**: only call it when the user has clearly asked for a dashb
 created, and say what you are about to create before calling. If it refuses, the response
 names the JSON Pointer for every problem; fix them and retry rather than falling back to
 handing over JSON.
+
+### Editing an existing dashboard
+
+```
+list-dashboards  →  get-dashboard-details  →  update-dashboard (panel_operations + preset_version)
+```
+
+`update-dashboard` takes `dashboard_id` plus any of `name`, `description`,
+`panel_operations` or `preset`. Like `create-dashboard` it is a **write tool**: say what
+you are about to change, and call it only when the user asked for the change. It needs
+edit access on the dashboard.
+
+**Edit panels with `panel_operations`, not a whole `preset`.** `get-dashboard-details`
+returns a projection — queries only, no layout, colours, axes or thresholds — so a preset
+rebuilt from it silently deletes all of those. `panel_operations` edits the stored
+document in place and keeps everything you never saw.
+
+`get-dashboard-details` gives what the operations need:
+
+- `position` — the panel's index within its section, from 0. Panels have no id.
+- `sub_grid_id` — the row (sub-grid) the panel is in; empty for a top-level panel.
+- `preset_version` — pass it back unchanged as `preset_version`. **Required** with
+  `panel_operations`.
+
+Each operation is one of:
+
+```json
+{"op": "update_panel", "position": 2, "panel": {"name": "p99 latency"}}
+{"op": "add_panel", "panel": { /* the whole new panel */ }, "grid_layout": {"w": 6, "h": 4}}
+{"op": "remove_panel", "position": 0}
+```
+
+Add `"sub_grid_id": "<id>"` to act inside a row; omit it for top-level panels.
+
+- `update_panel` is a JSON merge patch (RFC 7386): objects merge key by key, `null`
+  deletes a key, and **arrays are replaced whole** — to change one query, send the full
+  `queries` array. An optional `grid_layout` `{x, y, w, h}` moves or resizes the panel;
+  only the keys you give change. It needs a `panel` patch, a `grid_layout`, or both.
+- `add_panel` appends a whole panel, which must pass the same checks as
+  `create-dashboard`. It takes no `position`. Without `grid_layout` it goes in a new row
+  below everything else, sized like the section's first cell.
+- `remove_panel` takes only `position` (and `sub_grid_id`); it removes the panel and its
+  layout cell.
+
+**Positions refer to the dashboard as you read it**, even after an earlier operation in
+the same call removed a panel — do not re-count. Target each position at most once per
+call; combine two edits to one panel into one `update_panel`. All operations are applied
+in one write, and one bad operation refuses the whole call, naming
+`panel_operations[i]`.
+
+**Refusals to expect:**
+
+| Message says | Do |
+|---|---|
+| `the dashboard changed since it was read` / `was saved by someone else` | Call `get-dashboard-details` again and rebuild the edit from the new positions and `preset_version`. Never reuse the old ones. |
+| `position N does not exist` | Re-read; the position is out of range for that section. |
+| `sub-grids share id` / `panel(s) but … gridLayout entr(ies)` | That section cannot be edited by position — fall back to a whole `preset`. |
+| `preset and panel_operations cannot be combined` | Send one or the other. |
+
+On success it returns the id, name and a **new** `preset_version`; a further edit in the
+same conversation can use that without reading again.
+
+**Whole-preset rewrite** — only when the edit cannot be expressed as panel operations
+(reordering, restructuring rows, variables). Read with `get-dashboard-details raw=true`,
+which adds the full stored `preset`; change what you need; run it through
+`validate-dashboard-json`; send the whole object back as `preset`. Anything you leave out
+is deleted. Pass `preset_version` here too, so a concurrent save is refused instead of
+overwritten.
+
+A `name`- or `description`-only update needs neither.
 
 ### Handing over JSON to import
 

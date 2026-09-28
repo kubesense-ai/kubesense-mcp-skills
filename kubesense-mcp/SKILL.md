@@ -1,8 +1,8 @@
 ---
 name: kubesense-mcp
-description: The KubeSense MCP tool layer — connection and auth, the full 38-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
+description: The KubeSense MCP tool layer — connection and auth, the full 39-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth
@@ -23,6 +23,7 @@ each have to redefine it.
 | CPU, memory, disk, PromQL | [kubesense-metrics](../kubesense-metrics/SKILL.md) |
 | what's running, pod restarts, what changed | [kubesense-infra](../kubesense-infra/SKILL.md) |
 | alerts — list, investigate, create | [kubesense-alerts](../kubesense-alerts/SKILL.md) |
+| dashboards — read, create, edit | [kubesense-dashboards](../kubesense-dashboards/SKILL.md) |
 
 ## Connection
 
@@ -51,7 +52,7 @@ module. `analyze-telemetry` resolves every module its sub-queries touch.
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
 
-## Tools (38)
+## Tools (39)
 
 **Discovery — call before querying**
 
@@ -101,6 +102,12 @@ query is broken before it is run. See [kubesense-spl](../kubesense-spl/SKILL.md)
 `list-alert-rules` (rule definitions) · `get-alert-details` · `get-alert-history` ·
 `list-notification-channels` · `find-investigation-for-alert`
 
+**Dashboards** — see [kubesense-dashboards](../kubesense-dashboards/SKILL.md)
+
+`list-dashboards` (id, name, description) · `get-dashboard-details` (each panel's queries,
+plus the `position`, `sub_grid_id` and `preset_version` that `update-dashboard` needs;
+`raw=true` adds the whole stored preset)
+
 **Identity**
 
 `get-current-user` — returns `username`, `name`, `email`, `role`, `auth_type`. Note
@@ -118,10 +125,11 @@ hand through the matching one before creating it or handing it over.
 
 **Write — mutates state**
 
-`create-alert` · `create-dashboard`
+`create-alert` · `create-dashboard` · `update-dashboard`
 
-Both carry write annotations and expect user approval. State exactly what you are about
-to create before calling. Each validates against the same schema as the tool above and
+All carry write annotations and expect user approval. State exactly what you are about
+to create or change before calling. `update-dashboard` edits a dashboard by id: read it
+with `get-dashboard-details` first, and prefer `panel_operations` over a whole `preset`. Each validates against the same schema as the tool above and
 refuses with the same findings, so validating first turns a refusal into a fix.
 
 ## Discovery-First Rule

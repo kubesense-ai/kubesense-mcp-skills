@@ -24,7 +24,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | **kubesense-sql** | Raw ClickHouse SQL over logs and traces — joins, CTEs, window functions |
 | **kubesense-infra** | Cluster inventory: clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List, investigate, and create alert rules; generate import JSON; migrate Datadog monitors |
-| **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
+| **kubesense-dashboards** | Create or edit dashboards, or generate preset JSON to import |
 | **kubesense-slo** | Create and manage service level objectives; error budgets, burn-rate alerting, Datadog SLO migration |
 
 ## Routing
