@@ -128,14 +128,15 @@ Get these wrong and import is rejected with an error:
 3. Missing `gridLayout` or `panels`.
 4. A `gridLayout` item missing any of `i`, `x`, `y`, `w`, `h`, or with a wrong type
    (`"6"` instead of `6`).
-5. A panel missing `name`. (An empty `name: ""` is accepted — the editor allows it and stored dashboards carry it — but a nameless panel is unusable, so always set one.)
-6. A panel missing the `queries` array (it may be `[]`, but the key must exist).
-7. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `formula`.
-8. **A logs/traces query missing `columnFields`** — the single hard-required field on
+5. A panel with no queries (`queries` missing or `[]`) is refused by `validate-dashboard-json`, `create-dashboard` and `update-dashboard` (rule `panel_has_queries`) — it would open on an empty query builder and "No data". A dashboard with no panels at all is fine.
+6. A panel missing `name`. (An empty `name: ""` is accepted — the editor allows it and stored dashboards carry it — but a nameless panel is unusable, so always set one.)
+7. A panel missing the `queries` key entirely (an empty array parses, but is refused by the rule in item 5).
+8. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `formula`.
+9. **A logs/traces query missing `columnFields`** — the single hard-required field on
    those queries.
-9. A `columnFields[]` entry with `field: ""`.
-10. A formula missing `expression`, or one containing lowercase letters or a decimal point.
-11. A formula referencing an undefined label, referencing itself, placed *before* the
+10. A `columnFields[]` entry with `field: ""`.
+11. A formula missing `expression`, or one containing lowercase letters or a decimal point.
+12. A formula referencing an undefined label, referencing itself, placed *before* the
     queries it references, or with a multi-character label.
 
 ## What Silently Destroys Your Data
