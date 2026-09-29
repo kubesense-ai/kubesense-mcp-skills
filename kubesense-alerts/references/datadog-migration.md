@@ -86,8 +86,10 @@ Set `"unit": "nanoseconds"` — not `"ns"`, which is not a valid value and silen
 **Grouping "by service":** use `workload`. The engine also accepts `app_service`, but it has
 historically resolved to a rollup column populated only for SDK-instrumented services, which
 yields empty or single-blank-series alerts. `workload` is populated on essentially every
-span. (Note `service` itself is **rejected** by the alert engine, even though it is the
-preferred label in the query tools.)
+span. (Note `service` itself is **rejected** by the alert engine on traces, even though it is
+the preferred label in the query tools. The `create-alert` tool silently maps `service` to
+`app_service`, so when using the tool for a "by service" monitor, group by `workload`
+explicitly rather than passing `service`. On logs, `service` is accepted.)
 
 ### Composite monitors (`a && b`)
 

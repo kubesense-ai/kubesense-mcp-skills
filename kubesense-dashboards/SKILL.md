@@ -128,7 +128,7 @@ Get these wrong and import is rejected with an error:
 3. Missing `gridLayout` or `panels`.
 4. A `gridLayout` item missing any of `i`, `x`, `y`, `w`, `h`, or with a wrong type
    (`"6"` instead of `6`).
-5. A panel missing `name`, or `name: ""`.
+5. A panel missing `name`. (An empty `name: ""` is accepted — the editor allows it and stored dashboards carry it — but a nameless panel is unusable, so always set one.)
 6. A panel missing the `queries` array (it may be `[]`, but the key must exist).
 7. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `formula`.
 8. **A logs/traces query missing `columnFields`** — the single hard-required field on
@@ -163,8 +163,10 @@ omitted field takes the default; a wrong one can take out its siblings.
 
 > [!WARNING]
 > **`gridLayout` must have at least as many entries as `panels`.** Panels and layout are
-> matched **positionally by array index**, not by the `i` value. A short `gridLayout`
-> passes validation and then throws a TypeError when the dashboard renders. The `i` string
+> matched **positionally by array index**, not by the `i` value. A short top-level
+> `gridLayout` throws a TypeError when the dashboard renders. `validate-dashboard-json` and
+> `create-dashboard` refuse it (rule `grid_layout_covers_panels`); a server built before
+> that rule accepts it, so still check the count. Sub-grid layouts may be shorter. The `i` string
 > is only used to identify sub-grid rows (via a `sg-` prefix); real exports set it to the
 > index (`"0"`, `"1"`, …).
 
