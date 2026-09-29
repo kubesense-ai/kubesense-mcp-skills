@@ -62,6 +62,13 @@ path                        rule                 message
 
 Each `path` is a JSON Pointer to the value to fix. Repeat until `valid=true`.
 
+Beyond shape, it runs the same field allow-list the import uses (rule `engine_field`), so a
+group-by or filter key the engine would refuse — traces `service`, logs `type` — is reported
+here instead of at import. It also requires `compared_to` on `change`, `change_percent`
+and `new_value` rules, and `type: "float"` on the operand of a numeric `value_operation`.
+`severity` and `unit` are deliberately left open by the contract, so a bad value there still
+passes — use `critical`/`error`/`warning`/`info` and a real formatter unit.
+
 It validates the **wire document** — the export/import shape with `query_config`,
 `threshold_operator` and `frequency_type`. It is *not* for `create-alert`'s arguments;
 that tool validates its own input and rejects with the same findings.
@@ -135,10 +142,10 @@ monitors.
 ```json
 {
   "signal": "traces",
-  "name": "Checkout p95 latency high",
-  "description": "p95 above 500ms for 5 minutes",
-  "where": "service = checkout",
-  "value_operation": "p95",
+  "name": "Checkout average latency high",
+  "description": "average server latency above 500ms for 5 minutes",
+  "where": "service = checkout AND role = server",
+  "value_operation": "avg",
   "fields": [ { "field": "duration" } ],
   "group_by_fields": [ { "field": "workload" } ],
   "threshold_operator": "greater_than",
@@ -155,6 +162,11 @@ monitors.
   `value_operation`, plus `fields` for anything other than `row_count`.
 - `value_operation` here is narrower than the query tools: `row_count`, `unique_count`,
   `avg`, `sum`, `min`, `max` — **no percentiles**. For a p95 latency rule use import JSON.
+- `where`, `group_by_fields` and `fields` take the **query tools' catalog labels** (`service`,
+  `type`, `status_code`). Storage names such as `return_code` or `level` are refused with a
+  "use the catalog label" message — the opposite of import JSON, where `advanced_query`
+  strings and `raw_filters` use storage names. The tool maps labels to the engine's names
+  for you (`service` → `app_service` on traces, `type` → `level` on logs).
 - Required: `name`, `threshold_operator`, `threshold_value`, `notification_channels`.
 - Defaults: `severity=warning`, `threshold_frequency=at_least_once`,
   `evaluation_interval=1m`, `time_window=5m`.
