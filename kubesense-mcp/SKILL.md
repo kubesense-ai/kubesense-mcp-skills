@@ -58,7 +58,7 @@ the global log level.
 
 | Tool | Returns |
 |---|---|
-| `get-trace-or-log-fields` | Field catalog for logs or traces in a window |
+| `get-trace-or-log-fields` | Field catalog for logs, traces or events (`signal: "events"`) in a window |
 | `get-available-metrics` | Metric names |
 | `get-metric-labels` | Label names on one metric |
 
@@ -71,7 +71,7 @@ the global log level.
 | `analyze-logs` | Aggregated log series |
 | `analyze-traces` | Aggregated span series |
 | `analyze-metrics` | PromQL result |
-| `analyze-telemetry` | Multiple queries + formulas in one call |
+| `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics or events |
 | `get-distributed-trace` | Full span tree for one `trace_id` |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |

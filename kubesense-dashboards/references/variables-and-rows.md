@@ -25,7 +25,7 @@ required — omit `variables`, `subGrids`, and `subGridLayout` entirely and they
 |---|---|
 | `textbox` | — (`defaultValue`, `value` default to `""`) |
 | `custom` | `options: string[]` with ≥ 1 entry |
-| `logs` / `traces` | `fieldMeta: {field, type, is_attribute}` — all three; optional `filters`, `filterMode` (`MFD`\|`ADVANCED_QUERY`) |
+| `logs` / `traces` | `fieldMeta: {field, type, is_attribute}` — all three; optional `filters`, `filterMode` (`MFD`\|`ADVANCED_QUERY`). With `ADVANCED_QUERY`, the WHERE clause goes in `filters.advanced_query: ["<where>"]` |
 | `metrics` | `metric` (non-empty) **and** `fieldMeta`; **no `filterMode`** |
 
 `fieldMeta.type` and `fieldMeta.is_attribute` have no defaults — both must be present.
