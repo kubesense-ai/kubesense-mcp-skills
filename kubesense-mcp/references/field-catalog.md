@@ -139,7 +139,7 @@ pinning it for exhaustive pagination, but it is not in the catalog and is reject
 
 ```
 field "pod_name" is a storage column; use the catalog label "instance" instead
-  (call get-trace-or-log-fields to see all labels)
+  (call get-fields with signal=logs to see all labels)
 ```
 
 Act on the suggestion — do not retry the same name.
@@ -147,8 +147,8 @@ Act on the suggestion — do not retry the same name.
 **Unknown field:**
 
 ```
-unknown field "service" for signal=logs; call get-trace-or-log-fields to discover
-  valid fields (attributes carry an @ prefix)
+unknown field "service" for signal=logs; call get-fields with signal=logs to
+  discover valid fields (attributes carry an @ prefix)
 ```
 
 Errors are prefixed by the slot that failed: `where clause: …`,

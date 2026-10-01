@@ -88,7 +88,7 @@ GROUP BY bucket ORDER BY bucket
 ## Attribute breakdown
 
 Attributes are strings and are never validated, so confirm the key with
-`get-trace-or-log-fields` and treat an all-empty column as a wrong key.
+`get-fields` and treat an all-empty column as a wrong key.
 
 ```sql
 SELECT @http.route AS route,

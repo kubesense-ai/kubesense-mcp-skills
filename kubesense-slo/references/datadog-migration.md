@@ -10,7 +10,7 @@ Monitors are a different job — that is
 monitors it names exist in KubeSense.
 
 Always **rediscover real metric and field names** (`get-available-metrics`,
-`get-metric-labels`, `get-trace-or-log-fields`) before emitting anything. Datadog
+`get-metric-labels`, `get-fields`) before emitting anything. Datadog
 metric names almost never map one-to-one.
 
 ## Input shape

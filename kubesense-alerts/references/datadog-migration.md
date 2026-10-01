@@ -5,7 +5,7 @@ shape. See [import-json.md](./import-json.md) for the schema and [SKILL.md](../S
 for the field allow-lists.
 
 Always **discover the real KubeSense metric and field names** before emitting anything —
-`get-available-metrics`, `get-metric-labels`, `get-trace-or-log-fields`. Datadog metric
+`get-available-metrics`, `get-metric-labels`, `get-fields`. Datadog metric
 names rarely map one-to-one.
 
 ## Input Shape

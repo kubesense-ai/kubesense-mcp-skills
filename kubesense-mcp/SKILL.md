@@ -1,8 +1,8 @@
 ---
 name: kubesense-mcp
-description: The KubeSense MCP tool layer — connection and auth, the full 39-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
+description: The KubeSense MCP tool layer — connection and auth, the full 40-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth
@@ -52,15 +52,18 @@ module. `analyze-telemetry` resolves every module its sub-queries touch.
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
 
-## Tools (39)
+## Tools (40)
 
 **Discovery — call before querying**
 
 | Tool | Returns |
 |---|---|
-| `get-trace-or-log-fields` | Field catalog for logs, traces or events (`signal: "events"`) in a window |
+| `get-fields` | Field catalog for one `signal` (`logs`, `traces` or `events`) in a window |
 | `get-available-metrics` | Metric names |
 | `get-metric-labels` | Label names on one metric |
+
+`get-trace-or-log-fields` is a deprecated alias of `get-fields` with the same arguments and
+output. Use `get-fields`.
 
 **Query**
 
@@ -137,7 +140,7 @@ refuses with the same findings, so validating first turns a refusal into a fix.
 **Never guess a name.** Not a field, metric, cluster, or label.
 
 ```
-logs / traces:  get-trace-or-log-fields  →  search-* / analyze-*
+logs / traces:  get-fields (signal)       →  search-* / analyze-*
 metrics:        get-available-metrics     →  get-metric-labels  →  analyze-metrics
 clusters:       list-clusters             →  anything with a "clusters" filter
 ```
@@ -149,7 +152,7 @@ Two reasons this matters more than usual here:
 2. A wrong **cluster** name or **metric** name is *not* an error — it returns an empty
    result indistinguishable from "the value is zero".
 
-Pass the **same time window** to `get-trace-or-log-fields` that you will use for the
+Pass the **same `signal` and time window** to `get-fields` that you will use for the
 query: attribute keys are window-scoped and differ across windows.
 
 ## The Field-Name Contract
@@ -159,10 +162,10 @@ accept **catalog labels only**. Storage column names are rejected:
 
 ```
 field "pod_name" is a storage column; use the catalog label "instance" instead
-  (call get-trace-or-log-fields to see all labels)
+  (call get-fields with signal=logs to see all labels)
 
-unknown field "service" for signal=logs; call get-trace-or-log-fields to discover
-  valid fields (attributes carry an @ prefix)
+unknown field "service" for signal=logs; call get-fields with signal=logs to
+  discover valid fields (attributes carry an @ prefix)
 ```
 
 | Concept | Logs | Traces |
@@ -319,7 +322,7 @@ unreliable — and prefer aggregation whenever the answer is a number.
 ## Rules
 
 1. Discover before querying — fields, metrics, clusters. Never guess.
-2. Pass the same window to `get-trace-or-log-fields` that you'll query.
+2. Pass the same signal and window to `get-fields` that you'll query.
 3. Catalog labels only. On a field error, read the suggested label; don't retry the same
    name.
 4. Never carry a field name across signals (`node` vs `node_name`; `type` vs `status`;

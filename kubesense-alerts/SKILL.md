@@ -708,7 +708,7 @@ Never invent a metric name, field, or channel id.
 | You need | Call |
 |---|---|
 | A metric name | `get-available-metrics` → `get-metric-labels` |
-| Log/trace field names and values | `get-trace-or-log-fields` |
+| Log/trace field names and values | `get-fields` |
 | Channel ids | `list-notification-channels` |
 | Your own username | `get-current-user` |
 

@@ -61,7 +61,7 @@ never guess a metric, group-by, or filter field.
 |---|---|
 | Metric names | `get-available-metrics` |
 | Metric labels (for `by`) | `get-metric-labels` |
-| Log/trace fields | `get-trace-or-log-fields` |
+| Log, trace or event fields | `get-fields` with `signal` |
 
 Dashboard queries use **storage-level field names**, not the MCP catalog labels — the
 webapp posts these directly. Take field names from the discovery output's storage column
@@ -362,7 +362,7 @@ A WHERE clause is stored in the **filter store**, not in `query`:
   "ADVANCED_QUERY"` makes the panel open in the Advanced editor.
 - The WHERE syntax is the one the search/analyze tools accept: `=`, `!=`, `<`, `>`, `<=`,
   `>=`, `LIKE`, `ILIKE`, `IN (...)`, `NOT IN (...)`, combined with `AND`, `OR`, `NOT (...)`.
-  Field names are the catalog labels from `get-trace-or-log-fields`; prefix an attribute
+  Field names are the catalog labels from `get-fields` (same `signal`); prefix an attribute
   with `@` (`@http.route = /api/orders`).
 - **`query` is only for SPL or SQL text** (`filterMode: "SPL"` / `"SQL"`). A WHERE clause
   put in `query` is never run: the panel silently shows **every** row.
@@ -375,7 +375,7 @@ reviews, CI runs and jobs, deployments, security alerts, and events customers pu
 shape as a logs query (so `columnFields` is required), with these differences:
 
 - `filterMode` is `MFD` or `ADVANCED_QUERY`. Events have **no SPL or SQL**.
-- Fields come from `get-trace-or-log-fields` with `signal: "events"`: `timestamp`,
+- Fields come from `get-fields` with `signal: "events"`: `timestamp`,
   `severity` (`info` `success` `warning` `error` `critical`), `type`, `title`, `message`,
   `repository`, `actor`, `status`, `category`, `source`, `service`, `environment`,
   `namespace`, `cluster`, `workload`, `pod`, `container`, `event_id`. Anything else is an
