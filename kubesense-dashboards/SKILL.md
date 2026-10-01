@@ -104,8 +104,9 @@ The object you stringify:
 }
 ```
 
-Only `gridLayout` and `panels` are required; the rest default to `[]`. A sixth optional
-key, `publicDashboardPath` (string), also validates.
+Only `gridLayout` and `panels` are required; the rest default to `[]`. Two more optional
+keys validate: `publicDashboardPath` (string) and `eventOverlays` (see
+[Event Overlays](#event-overlays)).
 
 ## Minimal Valid Dashboard
 
@@ -511,6 +512,15 @@ filters) or **rows** (collapsible panel groups), read
 **[references/variables-and-rows.md](./references/variables-and-rows.md)** for the schemas.
 Two things to carry into that file: a variable's `description` is required (use `""`), and
 one invalid variable silently deletes every variable.
+
+## Event Overlays
+
+If the dashboard should mark **events** on its charts (deployments, releases, CI runs),
+read **[references/event-overlays.md](./references/event-overlays.md)** for the schema and
+a worked example. It covers the top-level `eventOverlays` array and each panel's
+`config.eventOverlay` (`inherit` | `custom` | `off`). Two things to carry into that file:
+`color` is a palette name (hex is refused), and only `timeSeries` and `bar` panels draw
+markers. On any other panel type an overlay validates and does nothing.
 
 ## Delivering It
 
