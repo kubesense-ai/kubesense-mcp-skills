@@ -40,7 +40,7 @@ It stores nothing, so call it as often as you need.
 ```
 # valid=false findings=2
 path                              rule   message
-/panels/0/queries/0/selectedMode  shape  value must be one of 'logs', 'metrics', 'traces', 'formula'
+/panels/0/queries/0/selectedMode  shape  value must be one of 'logs', 'metrics', 'traces', 'events', 'formula'
 /gridLayout/0                     shape  must have required property 'h'
 ```
 
@@ -61,7 +61,7 @@ never guess a metric, group-by, or filter field.
 |---|---|
 | Metric names | `get-available-metrics` |
 | Metric labels (for `by`) | `get-metric-labels` |
-| Log/trace fields | `get-trace-or-log-fields` |
+| Log, trace or event fields | `get-fields` with `signal` |
 
 Dashboard queries use **storage-level field names**, not the MCP catalog labels — the
 webapp posts these directly. Take field names from the discovery output's storage column
@@ -131,8 +131,8 @@ Get these wrong and import is rejected with an error:
 5. A panel with no queries (`queries` missing or `[]`) is refused by `validate-dashboard-json`, `create-dashboard` and `update-dashboard` (rule `panel_has_queries`) — it would open on an empty query builder and "No data". A dashboard with no panels at all is fine.
 6. A panel missing `name`. (An empty `name: ""` is accepted — the editor allows it and stored dashboards carry it — but a nameless panel is unusable, so always set one.)
 7. A panel missing the `queries` key entirely (an empty array parses, but is refused by the rule in item 5).
-8. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `formula`.
-9. **A logs/traces query missing `columnFields`** — the single hard-required field on
+8. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `events` | `formula`.
+9. **A logs/traces/events query missing `columnFields`** — the single hard-required field on
    those queries.
 10. A `columnFields[]` entry with `field: ""`.
 11. A formula missing `expression`, or one containing lowercase letters or a decimal point.
@@ -253,7 +253,7 @@ the formatter auto-scales ns → µs/ms/s. Full list in
 
 ## Queries
 
-Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `formula`. Note `spl` is
+Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `events` | `formula`. Note `spl` is
 **not** a valid `selectedMode` — use `panelType: "spl"` with a logs/traces query and
 `filterMode: "SPL"`.
 
@@ -320,8 +320,10 @@ supply is overwritten. Don't bother setting it.
   field, separate from the panel-level `panelType`. There is deliberately **no `treemap`
   arm**: the panel is not offered for SPL/SQL, so a `treemap` panel sets `chart_type` to
   `topList` the way a `stat` panel sets `table`.
-- `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` with a `query`
-  string for anything MFD's equality-only filters can't express (e.g. a latency threshold).
+- `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` for anything
+  MFD's equality-only filters can't express (e.g. a latency threshold). See **Filtering a
+  logs / traces / events query** below: the WHERE clause goes in `filters.advanced_query`,
+  **never** in `query`.
 - `groupBy` entries use the same shape as `columnFields`.
 - `list` (array) and `value` (string) are the SPL/SQL column fields. There is no
   `topListLabel`/`topListValue`.
@@ -340,6 +342,60 @@ supply is overwritten. Don't bother setting it.
 Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggregation, or
 `function: "count"` (not a valid name) — and the whole aggregation silently resets to
 `row_count`, giving you a row count where you asked for a percentile.
+
+### Filtering a logs / traces / events query
+
+A WHERE clause is stored in the **filter store**, not in `query`:
+
+```json
+{
+  "selectedMode": "traces",
+  "label": "A",
+  "columnFields": [],
+  "filterMode": "ADVANCED_QUERY",
+  "filters": { "advanced_query": ["service = checkout AND duration > 500"] },
+  "aggregation": { "function": "row_count" }
+}
+```
+
+- `filters.advanced_query` is an array holding **one** WHERE string. `filterMode:
+  "ADVANCED_QUERY"` makes the panel open in the Advanced editor.
+- The WHERE syntax is the one the search/analyze tools accept: `=`, `!=`, `<`, `>`, `<=`,
+  `>=`, `LIKE`, `ILIKE`, `IN (...)`, `NOT IN (...)`, combined with `AND`, `OR`, `NOT (...)`.
+  Field names are the catalog labels from `get-fields` (same `signal`); prefix an attribute
+  with `@` (`@http.route = /api/orders`).
+- **`query` is only for SPL or SQL text** (`filterMode: "SPL"` / `"SQL"`). A WHERE clause
+  put in `query` is never run: the panel silently shows **every** row.
+- `filterMode: "MFD"` panels keep plain equality filters as `filters: {"<field>": ["<value>", ...]}`.
+
+### Events query
+
+`selectedMode: "events"` reads **custom events**: GitHub pushes, pull requests, comments and
+reviews, CI runs and jobs, deployments, security alerts, and events customers push. Same
+shape as a logs query (so `columnFields` is required), with these differences:
+
+- `filterMode` is `MFD` or `ADVANCED_QUERY`. Events have **no SPL or SQL**.
+- Fields come from `get-fields` with `signal: "events"`: `timestamp`,
+  `severity` (`info` `success` `warning` `error` `critical`), `type`, `title`, `message`,
+  `repository`, `actor`, `status`, `category`, `source`, `service`, `environment`,
+  `namespace`, `cluster`, `workload`, `pod`, `container`, `event_id`. Anything else is an
+  attribute: `@vcs.ref.head.name`, `@cicd.pipeline.name`, `@vcs.actor.is_bot`.
+- Array paths (`@key[*]`) are refused. `url` and `timestamp` cannot be filtered on; use the
+  time range for time.
+
+```json
+{
+  "selectedMode": "events",
+  "label": "A",
+  "columnFields": [],
+  "filterMode": "ADVANCED_QUERY",
+  "filters": {
+    "advanced_query": ["category = deployment AND severity IN (error, critical) AND environment = production"]
+  },
+  "aggregation": { "function": "row_count" },
+  "groupBy": [{ "field": "repository", "type": "string", "is_attribute": false }]
+}
+```
 
 ### Formula query
 

@@ -21,7 +21,7 @@ Tools resolve RBAC against the **`traces`** module.
 
 | Tool | Use when |
 |---|---|
-| `get-trace-or-log-fields` (`signal: "traces"`) | Always, first |
+| `get-fields` (`signal: "traces"`) | Always, first |
 | `analyze-traces` | Latency percentiles, error rates, counts, trends |
 | `search-traces` | Read individual spans |
 | `get-distributed-trace` | You have a `trace_id` and need the full call chain |
@@ -277,7 +277,7 @@ Steps 4–5 use [kubesense-infra](../kubesense-infra/SKILL.md) and
 
 ## Rules
 
-1. `get-trace-or-log-fields` with `signal: "traces"` first, same window as the query.
+1. `get-fields` with `signal: "traces"` first, same window as the query.
 2. Catalog labels only: `service`, `instance`, `method`, `status_code`, `resource`,
    `role`, `protocol`. Never `app_service`, `pod_name`, `subtype`, `return_code`,
    `clustered_resource`, `kind`, `protocol_type`.

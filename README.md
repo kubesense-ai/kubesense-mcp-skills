@@ -147,7 +147,7 @@ rejects storage names at every input slot rather than silently returning nothing
 | span role | `role` | `kind` |
 | node | `node` | `host` |
 
-Run `get-trace-or-log-fields` to get the authoritative list for your window — attribute
+Run `get-fields` with `signal: "logs"` or `"traces"` to get the authoritative list for your window — attribute
 keys are window-scoped and differ between deployments.
 
 The **alert engine accepts a different set** from the query engine. See
