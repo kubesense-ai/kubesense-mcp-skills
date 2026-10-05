@@ -1,11 +1,11 @@
 ---
 name: kubesense-dashboards
-description: Create and edit KubeSense dashboards over metrics, logs, and traces — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
+description: Create and edit KubeSense dashboards over metrics, logs, traces and infrastructure host maps — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.5.0"
+  version: "2.6.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,dashboards,panels,json,import,preset,visualization
+  tags: kubesense,dashboards,panels,json,import,preset,visualization,host-map
 ---
 
 # KubeSense Dashboards
@@ -132,13 +132,18 @@ Get these wrong and import is rejected with an error:
 5. A panel with no queries (`queries` missing or `[]`) is refused by `validate-dashboard-json`, `create-dashboard` and `update-dashboard` (rule `panel_has_queries`) — it would open on an empty query builder and "No data". A dashboard with no panels at all is fine.
 6. A panel missing `name`. (An empty `name: ""` is accepted — the editor allows it and stored dashboards carry it — but a nameless panel is unusable, so always set one.)
 7. A panel missing the `queries` key entirely (an empty array parses, but is refused by the rule in item 5).
-8. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `events` | `formula`.
+8. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `events` | `formula` |
+   `infrastructure`.
 9. **A logs/traces/events query missing `columnFields`** — the single hard-required field on
    those queries.
 10. A `columnFields[]` entry with `field: ""`.
 11. A formula missing `expression`, or one containing lowercase letters or a decimal point.
 12. A formula referencing an undefined label, referencing itself, placed *before* the
     queries it references, or with a multi-character label.
+13. A host map whose levels break host > pod > container, use a signal their entity lacks,
+    size an outer level, group by something the first level does not carry, or filter on a
+    field host maps cannot narrow by (rules `infrastructure_*` and `host_map_query`) — see
+    [references/host-map.md](./references/host-map.md).
 
 ## What Silently Destroys Your Data
 
@@ -184,8 +189,8 @@ omitted field takes the default; a wrong one can take out its siblings.
 }
 ```
 
-`panelType` — 12 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
-`treemap`, `alert`, `spl`, `sql`, `slo`. Note camelCase `timeSeries`.
+`panelType` — 13 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
+`treemap`, `alert`, `spl`, `sql`, `slo`, `hostMap`. Note camelCase `timeSeries`.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
@@ -227,6 +232,13 @@ does not apply and its `chart_type` is `topList`. Datadog's fourth widget, Check
 Status, has no arm: the engine persists only `normal` and `firing`, so a four-state
 widget would have nothing to put in two of its cells.
 
+For a **host map** panel (`hostMap`), hosts are tiles with their pods and containers nested
+inside, each coloured by a signal such as CPU utilization or readiness. It takes exactly
+one `infrastructure` query and no PromQL; the server compiles it for Kubernetes and legacy
+hosts alike. Colours go in `config.hostMapColors`, keyed by entity. Levels, signals,
+grouping, filters and colours are in
+**[references/host-map.md](./references/host-map.md)**.
+
 Three config fields the old format got wrong:
 
 - **`thresholdDisplayMode`**, not `enableThresholds`. Values: `off` (default), `lines`,
@@ -254,7 +266,8 @@ the formatter auto-scales ns → µs/ms/s. Full list in
 
 ## Queries
 
-Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `events` | `formula`. Note `spl` is
+Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `events` | `formula` |
+`infrastructure` (host maps only, see [references/host-map.md](./references/host-map.md)). Note `spl` is
 **not** a valid `selectedMode` — use `panelType: "spl"` with a logs/traces query and
 `filterMode: "SPL"`.
 
@@ -362,7 +375,8 @@ A WHERE clause is stored in the **filter store**, not in `query`:
 - `filters.advanced_query` is an array holding **one** WHERE string. `filterMode:
   "ADVANCED_QUERY"` makes the panel open in the Advanced editor.
 - The WHERE syntax is the one the search/analyze tools accept: `=`, `!=`, `<`, `>`, `<=`,
-  `>=`, `LIKE`, `ILIKE`, `IN (...)`, `NOT IN (...)`, combined with `AND`, `OR`, `NOT (...)`.
+  `>=`, `LIKE`, `ILIKE`, `IN (...)`, combined with `AND`, `OR` and a prefix `NOT`: exclude a
+  list as `NOT namespace IN (a, b)`, never `namespace NOT IN (a, b)`.
   Field names are the catalog labels from `get-fields` (same `signal`); prefix an attribute
   with `@` (`@http.route = /api/orders`).
 - **`query` is only for SPL or SQL text** (`filterMode: "SPL"` / `"SQL"`). A WHERE clause
