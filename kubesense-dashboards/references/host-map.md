@@ -23,7 +23,7 @@ that to PromQL for both Kubernetes and legacy (Docker / VM) hosts.
     ],
     "groupByDimensions": ["cluster"],
     "filterMode": "ADVANCED_QUERY",
-    "filters": { "advanced_query": ["namespace = payments AND NOT (workload IN (canary))"] }
+    "filters": { "advanced_query": ["namespace = payments AND NOT workload IN (canary)"] }
   }],
   "config": {
     "hostMapColors": {
@@ -99,7 +99,8 @@ prefixed with `-` is excluded:
 ```
 
 - Operators: `=`, `!=`, `IN`, joined with `AND`, `OR`, `NOT` and parentheses.
-- **`namespace NOT IN (a, b)` is not understood.** Write `NOT (namespace IN (a, b))`.
+- `NOT` is a prefix that negates the comparison after it: exclude a list as
+  `NOT namespace IN (a, b)`, not `namespace NOT IN (a, b)`.
 - No `LIKE`, `>`, `<` or regexes; the filter compiles to exact PromQL label matches.
 - Expanded, the expression may have at most 16 OR-alternatives:
   `(a OR b) AND (c OR d) AND (e OR f)` is 8.

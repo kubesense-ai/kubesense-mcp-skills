@@ -375,7 +375,8 @@ A WHERE clause is stored in the **filter store**, not in `query`:
 - `filters.advanced_query` is an array holding **one** WHERE string. `filterMode:
   "ADVANCED_QUERY"` makes the panel open in the Advanced editor.
 - The WHERE syntax is the one the search/analyze tools accept: `=`, `!=`, `<`, `>`, `<=`,
-  `>=`, `LIKE`, `ILIKE`, `IN (...)`, `NOT IN (...)`, combined with `AND`, `OR`, `NOT (...)`.
+  `>=`, `LIKE`, `ILIKE`, `IN (...)`, combined with `AND`, `OR` and a prefix `NOT`: exclude a
+  list as `NOT namespace IN (a, b)`, never `namespace NOT IN (a, b)`.
   Field names are the catalog labels from `get-fields` (same `signal`); prefix an attribute
   with `@` (`@http.route = /api/orders`).
 - **`query` is only for SPL or SQL text** (`filterMode: "SPL"` / `"SQL"`). A WHERE clause
