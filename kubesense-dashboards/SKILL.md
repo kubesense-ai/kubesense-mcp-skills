@@ -659,7 +659,7 @@ in one write, and one bad operation refuses the whole call, naming
 | `sub-grids share id` / `panel(s) but … gridLayout entr(ies)` | That section cannot be edited by position — fall back to a whole `preset`. |
 | `preset and panel_operations cannot be combined` | Send one or the other. |
 | a missing or unknown `tab_id`, with the valid ids | Retry with one of the listed ids. |
-| `This dashboard has tabs that this client does not support` (409) | Your whole `preset` had no `tabs` key. Re-read with `raw=true` and send the preset back with its `tabs` array. |
+| `this dashboard has tabs and the preset has no tabs key` (409) | Your whole `preset` had no `tabs` key. Re-read with `raw=true` and send the preset back with its `tabs` array. |
 
 On success it returns the id, name and a **new** `preset_version`; a further edit in the
 same conversation can use that without reading again.
