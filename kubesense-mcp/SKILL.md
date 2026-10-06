@@ -2,7 +2,7 @@
 name: kubesense-mcp
 description: The KubeSense MCP tool layer — connection and auth, the full 40-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth
@@ -108,8 +108,9 @@ query is broken before it is run. See [kubesense-spl](../kubesense-spl/SKILL.md)
 **Dashboards** — see [kubesense-dashboards](../kubesense-dashboards/SKILL.md)
 
 `list-dashboards` (id, name, description) · `get-dashboard-details` (each panel's queries,
-plus the `position`, `sub_grid_id` and `preset_version` that `update-dashboard` needs;
-`raw=true` adds the whole stored preset)
+plus the `tab_id`, `sub_grid_id`, `position` and `preset_version` that `update-dashboard`
+needs, and `tab_title` and the tab list on a tabbed dashboard; `raw=true` adds the whole
+stored preset)
 
 **Identity**
 
@@ -132,7 +133,9 @@ hand through the matching one before creating it or handing it over.
 
 All carry write annotations and expect user approval. State exactly what you are about
 to create or change before calling. `update-dashboard` edits a dashboard by id: read it
-with `get-dashboard-details` first, and prefer `panel_operations` over a whole `preset`. Each validates against the same schema as the tool above and
+with `get-dashboard-details` first, and prefer `panel_operations` over a whole `preset`.
+On a tabbed dashboard each panel operation needs `tab_id`, and a whole `preset` must keep
+its `tabs` key. Each validates against the same schema as the tool above and
 refuses with the same findings, so validating first turns a refusal into a fix.
 
 ## Discovery-First Rule
