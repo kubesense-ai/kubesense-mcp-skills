@@ -2,7 +2,7 @@
 name: kubesense-dashboards
 description: Create and edit KubeSense dashboards over metrics, logs, traces and infrastructure host maps — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.6.0"
+  version: "2.7.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization,host-map
@@ -104,9 +104,9 @@ The object you stringify:
 }
 ```
 
-Only `gridLayout` and `panels` are required; the rest default to `[]`. Two more optional
-keys validate: `publicDashboardPath` (string) and `eventOverlays` (see
-[Event Overlays](#event-overlays)).
+Only `gridLayout` and `panels` are required; the rest default to `[]`. Three more optional
+keys validate: `publicDashboardPath` (string), `eventOverlays` (see
+[Event Overlays](#event-overlays)) and `tabs` (see [Tabs](#tabs)).
 
 ## Minimal Valid Dashboard
 
@@ -144,6 +144,15 @@ Get these wrong and import is rejected with an error:
     size an outer level, group by something the first level does not carry, or filter on a
     field host maps cannot narrow by (rules `infrastructure_*` and `host_map_query`) — see
     [references/host-map.md](./references/host-map.md).
+14. A `tabs[].id` that does not match `^[a-z0-9][a-z0-9-]{0,39}$`, or that repeats another
+    tab's id.
+15. A `tabs[].title` that is empty after trimming, longer than 50 characters, or equal to
+    another tab's title compared case-insensitively after trimming.
+16. A non-empty `tabs` array alongside a non-empty top-level `panels`, `gridLayout`,
+    `subGrids` or `subGridLayout`. A tabbed dashboard keeps those four empty.
+17. Two sub-grids with the same `id` anywhere in the dashboard, across all tabs.
+18. A tab whose `gridLayout` has a different number of entries than its `panels` (rule
+    `tab_grid_layout`). Unlike the top level, a tab's layout must match exactly.
 
 ## What Silently Destroys Your Data
 
@@ -516,6 +525,10 @@ validated — `w: 99` is accepted and renders broken.
 - `i`: the array index as a string. **Matching is positional**, so keep `gridLayout` in the
   same order as `panels`, and at least as long.
 
+The pairing is per **page**. A page is `{panels, gridLayout, subGrids, subGridLayout}`. An
+untabbed dashboard's top level is one page, and each tab carries its own page. Inside each
+page, `gridLayout[n]` positions `panels[n]`, and `y` starts at 0 again.
+
 ## Variables and Rows
 
 Both are optional and most dashboards need neither — omit `variables`, `subGrids`, and
@@ -526,6 +539,31 @@ filters) or **rows** (collapsible panel groups), read
 **[references/variables-and-rows.md](./references/variables-and-rows.md)** for the schemas.
 Two things to carry into that file: a variable's `description` is required (use `""`), and
 one invalid variable silently deletes every variable.
+
+## Tabs
+
+Tabs split a dashboard into pages the viewer switches between. They are optional, and a
+dashboard is either one page or a list of tabs, never both:
+
+```json
+{
+  "gridLayout": [], "panels": [], "subGrids": [], "subGridLayout": [],
+  "variables": [], "eventOverlays": [],
+  "tabs": [
+    { "id": "overview", "title": "Overview", "panels": [], "gridLayout": [], "subGrids": [], "subGridLayout": [] }
+  ]
+}
+```
+
+- Each tab is `{id, title}` plus its own page. Its panels, layout and rows live inside it.
+- On a tabbed dashboard the top-level `panels`, `gridLayout`, `subGrids` and
+  `subGridLayout` stay present and **empty**.
+- `variables`, `eventOverlays` and `publicDashboardPath` stay at the top level and apply to
+  every tab. There is no per-tab variable or overlay.
+- An untabbed dashboard omits `tabs` or sends `[]`.
+
+For a complete tabbed example, the id and title rules, and when to use tabs instead of rows,
+read **[references/tabs.md](./references/tabs.md)**.
 
 ## Event Overlays
 
@@ -573,6 +611,8 @@ document in place and keeps everything you never saw.
 
 - `position` — the panel's index within its section, from 0. Panels have no id.
 - `sub_grid_id` — the row (sub-grid) the panel is in; empty for a top-level panel.
+- `tab_id` and `tab_title` — the tab the panel is on; empty on an untabbed dashboard. The
+  response also lists the dashboard's tabs.
 - `preset_version` — pass it back unchanged as `preset_version`. **Required** with
   `panel_operations`.
 
@@ -584,7 +624,15 @@ Each operation is one of:
 {"op": "remove_panel", "position": 0}
 ```
 
-Add `"sub_grid_id": "<id>"` to act inside a row; omit it for top-level panels.
+A panel's address is `tab_id`, `sub_grid_id` and `position`. Add `"sub_grid_id": "<id>"`
+to act inside a row; omit it for the page's top-level panels. On a tabbed dashboard every
+operation, `add_panel` included, needs `"tab_id": "<id>"`. A missing or unknown `tab_id`
+refuses the call, and the error lists the valid tab ids. On an untabbed dashboard, omit
+`tab_id`.
+
+```json
+{"op": "update_panel", "tab_id": "node-health", "sub_grid_id": "row-disk", "position": 1, "panel": {"name": "Disk IO"}}
+```
 
 - `update_panel` is a JSON merge patch (RFC 7386): objects merge key by key, `null`
   deletes a key, and **arrays are replaced whole** — to change one query, send the full
@@ -593,8 +641,8 @@ Add `"sub_grid_id": "<id>"` to act inside a row; omit it for top-level panels.
 - `add_panel` appends a whole panel, which must pass the same checks as
   `create-dashboard`. It takes no `position`. Without `grid_layout` it goes in a new row
   below everything else, sized like the section's first cell.
-- `remove_panel` takes only `position` (and `sub_grid_id`); it removes the panel and its
-  layout cell.
+- `remove_panel` takes only `position` (and `tab_id`, `sub_grid_id`); it removes the panel
+  and its layout cell.
 
 **Positions refer to the dashboard as you read it**, even after an earlier operation in
 the same call removed a panel — do not re-count. Target each position at most once per
@@ -610,16 +658,23 @@ in one write, and one bad operation refuses the whole call, naming
 | `position N does not exist` | Re-read; the position is out of range for that section. |
 | `sub-grids share id` / `panel(s) but … gridLayout entr(ies)` | That section cannot be edited by position — fall back to a whole `preset`. |
 | `preset and panel_operations cannot be combined` | Send one or the other. |
+| a missing or unknown `tab_id`, with the valid ids | Retry with one of the listed ids. |
+| `this dashboard has tabs and the preset has no tabs key` (409) | Your whole `preset` had no `tabs` key. Re-read with `raw=true` and send the preset back with its `tabs` array. |
 
 On success it returns the id, name and a **new** `preset_version`; a further edit in the
 same conversation can use that without reading again.
 
 **Whole-preset rewrite** — only when the edit cannot be expressed as panel operations
-(reordering, restructuring rows, variables). Read with `get-dashboard-details raw=true`,
-which adds the full stored `preset`; change what you need; run it through
-`validate-dashboard-json`; send the whole object back as `preset`. Anything you leave out
-is deleted. Pass `preset_version` here too, so a concurrent save is refused instead of
-overwritten.
+(reordering, restructuring rows, variables, and adding, removing, renaming or reordering
+tabs). Read with `get-dashboard-details raw=true`, which adds the full stored `preset`;
+change what you need; run it through `validate-dashboard-json`; send the whole object back
+as `preset`. Anything you leave out is deleted. Pass `preset_version` here too, so a
+concurrent save is refused instead of overwritten.
+
+On a tabbed dashboard the preset you send **must keep the `tabs` key**. A preset with no
+`tabs` key over a tabbed dashboard looks like an old client that would drop the tabs, so
+the server refuses it with 409. Moving a panel to another tab is also a rewrite: take it
+out of one tab's `panels` and `gridLayout` and append it to the other's.
 
 A `name`- or `description`-only update needs neither.
 
@@ -658,6 +713,11 @@ is not a working dashboard — check these by hand before you hand it over.
    wrong one can reset its siblings.
 8. Validation checks shape, not existence. Discover metric and field names with MCP before
    writing queries, and tell the user to confirm on the panel preview.
+9. On a tabbed dashboard, put each panel's layout cell in the same tab as the panel, at the
+   same index. Every whole-preset rewrite keeps the `tabs` key, and every
+   `panel_operations` entry carries `tab_id`.
+10. Keep `variables` and `eventOverlays` at the top level of the preset, never inside a
+    tab. They apply to every tab.
 
 The one rule that spans both: `preset` is a stringified JSON string in the import envelope,
 but the plain object when passed to `create-dashboard` or `validate-dashboard-json`.
