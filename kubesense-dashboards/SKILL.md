@@ -2,7 +2,7 @@
 name: kubesense-dashboards
 description: Create and edit KubeSense dashboards over metrics, logs, traces and infrastructure host maps — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.6.0"
+  version: "2.7.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization,host-map
@@ -238,6 +238,13 @@ one `infrastructure` query and no PromQL; the server compiles it for Kubernetes 
 hosts alike. Colours go in `config.hostMapColors`, keyed by entity. Levels, signals,
 grouping, filters and colours are in
 **[references/host-map.md](./references/host-map.md)**.
+
+A panel follows the dashboard's time picker unless **`config.timeFrame`** gives it its own
+relative window: `last_5m` … `last_30d`, `week_to_date`, `month_to_date`, `previous_week`,
+`previous_month` (weeks Monday to Sunday, in the viewer's timezone). Use it only where the
+period is the point, such as a month-to-date cost stat beside hourly charts, and omit it
+everywhere else. Keys and exact boundaries are in
+[references/panel-config.md](./references/panel-config.md#timeframe).
 
 Three config fields the old format got wrong:
 

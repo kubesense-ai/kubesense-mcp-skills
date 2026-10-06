@@ -35,6 +35,7 @@ the default. Unknown keys are stripped.
 | `columnFormatting` | array, see below | `[]` |
 | `topListDisplayMode` | `flat` \| `stacked` | `flat` |
 | `visualFormattingRules` | array, see below | `[]` |
+| `timeFrame` | one of 15 keys, see below | absent — dashboard time |
 
 `step` must be an *integer* — `60.5` silently becomes `"auto"`.
 
@@ -294,6 +295,35 @@ multiple group-bys use the palette per series.
 > `topListDisplayMode` and `visualFormattingRules` ship with the top-list stacking release.
 > A server that predates them strips the keys (like any unknown field), so the panel renders
 > flat and unformatted rather than failing import.
+
+## `timeFrame`
+
+The panel's own time window. **Absent means the dashboard's time**, which is what almost
+every panel wants. Set it only when the period is part of what the panel means: a
+"Cost, month to date" stat beside hourly charts, or a "Deploys, previous week" count.
+
+| Key | Window |
+|---|---|
+| `last_5m` `last_15m` `last_30m` `last_1h` `last_3h` `last_6h` `last_12h` `last_24h` `last_2d` `last_7d` `last_30d` | rolling, ending now |
+| `week_to_date` | Monday 00:00 of this week → now |
+| `month_to_date` | the 1st 00:00 of this month → now |
+| `previous_week` | previous Monday 00:00 → Sunday 23:59:59.999 |
+| `previous_month` | the 1st → the last day 23:59:59.999 of last month |
+
+Weeks start on Monday. Calendar boundaries fall in the **viewer's** timezone, so two
+viewers in different zones see different month-to-date figures. There are no absolute
+ranges.
+
+```json
+{ "name": "Cost, month to date", "panelType": "stat", "queries": [ … ],
+  "config": { "timeFrame": "month_to_date" } }
+```
+
+Every query the panel makes uses the window, the dashboard's time picker no longer moves
+it, and drag-to-zoom is off on that panel. The panel shows a badge by its title.
+`validate-dashboard-json` refuses an unknown key: `last_90d`, `today` and `yesterday` do not
+exist. `get-dashboard-details` reports the window as the panel's `time_frame`; re-run that
+panel's queries over it, not over the dashboard's range.
 
 ## `yAxisLabelFormatter` — all 199 values
 
