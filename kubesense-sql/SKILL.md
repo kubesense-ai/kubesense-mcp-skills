@@ -18,7 +18,7 @@ matching the `signal` you pass.
 
 | Tool | Use when | Returns |
 |---|---|---|
-| `get-trace-or-log-fields` | Always, first | Field catalog for your window |
+| `get-fields` (`signal` matching the query) | Always, first | Field catalog for your window |
 | `validate-sql` | Before running anything non-trivial | `valid=true/false` + the SQL that would run |
 | `execute-sql` | The query is right | Result rows as TSV |
 
@@ -60,7 +60,7 @@ SQL tool. `signal` must match the table you select `FROM`.
 ## Field Names
 
 **Same catalog labels as every other KubeSense tool** — the set
-`get-trace-or-log-fields` returns. Storage column names are rejected:
+`get-fields` returns. Storage column names are rejected:
 
 | Write | Not |
 |---|---|
@@ -82,7 +82,7 @@ SQL tool. `signal` must match the table you select `FROM`.
 
 ### SQL accepts four things discovery does not list
 
-`get-trace-or-log-fields` hides fields flagged non-filterable, but SQL still takes them.
+`get-fields` hides fields flagged non-filterable, but SQL still takes them.
 Do not conclude a name is invalid because discovery omitted it:
 
 | Field | Signal | Note |
@@ -150,7 +150,7 @@ WHERE toFloat64OrNull(@latency_ms) > 500
 > not an error: it yields `NULL` on logs and `''` on traces. `validate-sql` will report
 > `valid=true`. A query returning all-empty values for one column almost always means the
 > attribute key is wrong, not that the data is missing. Confirm every key with
-> `get-trace-or-log-fields` first.
+> `get-fields` first.
 
 ## validate-sql
 
@@ -246,7 +246,7 @@ More patterns: [references/recipes.md](references/recipes.md).
 
 1. Try `analyze-*` first. Use SQL only for joins, CTEs, window functions, or arithmetic
    across aggregates.
-2. Call `get-trace-or-log-fields` for the window before writing the query.
+2. Call `get-fields` with the query's `signal` and window before writing the query.
 3. `validate-sql` before `execute-sql` for anything non-trivial, and **read the
    `rewritten_sql`** it returns.
 4. `FROM logs` / `FROM traces` only, matching `signal`. Never a database-qualified name.

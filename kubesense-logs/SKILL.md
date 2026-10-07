@@ -18,7 +18,7 @@ the **`logs`** module.
 
 | Tool | Use when | Returns |
 |---|---|---|
-| `get-trace-or-log-fields` (`signal: "logs"`) | Always, first | Field catalog for your window |
+| `get-fields` (`signal: "logs"`) | Always, first | Field catalog for your window |
 | `search-logs` | You want to *read* individual log lines | Up to `page_size` rows (default 10) |
 | `analyze-logs` | You want counts, rates, trends, percentiles | Aggregated series |
 
@@ -51,7 +51,7 @@ field "pod_name" is a storage column; use the catalog label "instance" instead
 | app version | `app_version` | — |
 | environment | `env_type` | — |
 
-That is the complete set of 13 fields `get-trace-or-log-fields` advertises for logs.
+That is the complete set of 13 fields `get-fields` advertises for logs.
 Three more parse but are hidden from discovery: `timestamp`, `pattern_id`, `body_length`.
 
 > [!WARNING]
@@ -74,7 +74,7 @@ Casing is significant — `type = error` matches nothing.
 `format` accepts `json`, `klog`, `nginx` — lowercase.
 
 > [!NOTE]
-> Read casing off the **`enum_values`** column of `get-trace-or-log-fields`, not the
+> Read casing off the **`enum_values`** column of `get-fields`, not the
 > `example` column. The example generator misses several enum fields (including `type`)
 > and returns a blank cell for them. `enum_values` is always correct.
 
@@ -92,7 +92,7 @@ Operators the WHERE parser actually accepts: `=` `!=` `<` `>` `<=` `>=` `LIKE` `
 `SUBSTR_ILIKE` `IN`, combined with `AND` / `OR` / `NOT` and parentheses.
 
 > [!WARNING]
-> The `operators` column of `get-trace-or-log-fields` **over-advertises**. `HAS_TOKEN`,
+> The `operators` column of `get-fields` **over-advertises**. `HAS_TOKEN`,
 > `HAS_ALL`, `HAS_ANY`, `LIKE_AND`, `ILIKE_LOG`, `IS_IP_ADDRESS` appear in the legend but
 > have **no WHERE-string syntax** — `body HAS_TOKEN oom` fails to parse. Stick to the
 > list above.
@@ -238,7 +238,7 @@ the top-N cap.
 
 ## Rules
 
-1. Call `get-trace-or-log-fields` with `signal: "logs"` first, passing the **same window**
+1. Call `get-fields` with `signal: "logs"` first, passing the **same window**
    you will query — attribute keys are window-scoped.
 2. Use catalog labels: `type`, `instance`, `container`, `node`. Never `level`, `pod_name`,
    `container_name`, `host`.

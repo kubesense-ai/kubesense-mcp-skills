@@ -1,11 +1,11 @@
 ---
 name: kubesense-dashboards
-description: Create KubeSense dashboards over metrics, logs, and traces — either directly with the create-dashboard MCP tool or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
+description: Create and edit KubeSense dashboards over metrics, logs, traces and infrastructure host maps — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.3.0"
+  version: "2.7.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,dashboards,panels,json,import,preset,visualization
+  tags: kubesense,dashboards,panels,json,import,preset,visualization,host-map
 ---
 
 # KubeSense Dashboards
@@ -29,6 +29,8 @@ Both go through the same server-side schema check, so a preset that passes
 - "Create a dashboard for…" / "Build a dashboard with panels for…" → `create-dashboard`
 - "Give me the dashboard JSON for…" → preset JSON
 - "Generate a dashboard preset" → preset JSON
+- "Change / fix / add a panel to the X dashboard" → `get-dashboard-details`, then
+  `update-dashboard` — see [Editing an existing dashboard](#editing-an-existing-dashboard)
 
 ## Always Validate Before You Finish
 
@@ -38,7 +40,7 @@ It stores nothing, so call it as often as you need.
 ```
 # valid=false findings=2
 path                              rule   message
-/panels/0/queries/0/selectedMode  shape  value must be one of 'logs', 'metrics', 'traces', 'formula'
+/panels/0/queries/0/selectedMode  shape  value must be one of 'logs', 'metrics', 'traces', 'events', 'formula'
 /gridLayout/0                     shape  must have required property 'h'
 ```
 
@@ -59,7 +61,7 @@ never guess a metric, group-by, or filter field.
 |---|---|
 | Metric names | `get-available-metrics` |
 | Metric labels (for `by`) | `get-metric-labels` |
-| Log/trace fields | `get-trace-or-log-fields` |
+| Log, trace or event fields | `get-fields` with `signal` |
 
 Dashboard queries use **storage-level field names**, not the MCP catalog labels — the
 webapp posts these directly. Take field names from the discovery output's storage column
@@ -102,8 +104,9 @@ The object you stringify:
 }
 ```
 
-Only `gridLayout` and `panels` are required; the rest default to `[]`. A sixth optional
-key, `publicDashboardPath` (string), also validates.
+Only `gridLayout` and `panels` are required; the rest default to `[]`. Three more optional
+keys validate: `publicDashboardPath` (string), `eventOverlays` (see
+[Event Overlays](#event-overlays)) and `tabs` (see [Tabs](#tabs)).
 
 ## Minimal Valid Dashboard
 
@@ -126,15 +129,30 @@ Get these wrong and import is rejected with an error:
 3. Missing `gridLayout` or `panels`.
 4. A `gridLayout` item missing any of `i`, `x`, `y`, `w`, `h`, or with a wrong type
    (`"6"` instead of `6`).
-5. A panel missing `name`, or `name: ""`.
-6. A panel missing the `queries` array (it may be `[]`, but the key must exist).
-7. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `formula`.
-8. **A logs/traces query missing `columnFields`** — the single hard-required field on
+5. A panel with no queries (`queries` missing or `[]`) is refused by `validate-dashboard-json`, `create-dashboard` and `update-dashboard` (rule `panel_has_queries`) — it would open on an empty query builder and "No data". A dashboard with no panels at all is fine.
+6. A panel missing `name`. (An empty `name: ""` is accepted — the editor allows it and stored dashboards carry it — but a nameless panel is unusable, so always set one.)
+7. A panel missing the `queries` key entirely (an empty array parses, but is refused by the rule in item 5).
+8. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `events` | `formula` |
+   `infrastructure`.
+9. **A logs/traces/events query missing `columnFields`** — the single hard-required field on
    those queries.
-9. A `columnFields[]` entry with `field: ""`.
-10. A formula missing `expression`, or one containing lowercase letters or a decimal point.
-11. A formula referencing an undefined label, referencing itself, placed *before* the
+10. A `columnFields[]` entry with `field: ""`.
+11. A formula missing `expression`, or one containing lowercase letters or a decimal point.
+12. A formula referencing an undefined label, referencing itself, placed *before* the
     queries it references, or with a multi-character label.
+13. A host map whose levels break host > pod > container, use a signal their entity lacks,
+    size an outer level, group by something the first level does not carry, or filter on a
+    field host maps cannot narrow by (rules `infrastructure_*` and `host_map_query`) — see
+    [references/host-map.md](./references/host-map.md).
+14. A `tabs[].id` that does not match `^[a-z0-9][a-z0-9-]{0,39}$`, or that repeats another
+    tab's id.
+15. A `tabs[].title` that is empty after trimming, longer than 50 characters, or equal to
+    another tab's title compared case-insensitively after trimming.
+16. A non-empty `tabs` array alongside a non-empty top-level `panels`, `gridLayout`,
+    `subGrids` or `subGridLayout`. A tabbed dashboard keeps those four empty.
+17. Two sub-grids with the same `id` anywhere in the dashboard, across all tabs.
+18. A tab whose `gridLayout` has a different number of entries than its `panels` (rule
+    `tab_grid_layout`). Unlike the top level, a tab's layout must match exactly.
 
 ## What Silently Destroys Your Data
 
@@ -161,8 +179,10 @@ omitted field takes the default; a wrong one can take out its siblings.
 
 > [!WARNING]
 > **`gridLayout` must have at least as many entries as `panels`.** Panels and layout are
-> matched **positionally by array index**, not by the `i` value. A short `gridLayout`
-> passes validation and then throws a TypeError when the dashboard renders. The `i` string
+> matched **positionally by array index**, not by the `i` value. A short top-level
+> `gridLayout` throws a TypeError when the dashboard renders. `validate-dashboard-json` and
+> `create-dashboard` refuse it (rule `grid_layout_covers_panels`); a server built before
+> that rule accepts it, so still check the count. Sub-grid layouts may be shorter. The `i` string
 > is only used to identify sub-grid rows (via a `sg-` prefix); real exports set it to the
 > index (`"0"`, `"1"`, …).
 
@@ -178,8 +198,8 @@ omitted field takes the default; a wrong one can take out its siblings.
 }
 ```
 
-`panelType` — 12 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
-`treemap`, `alert`, `spl`, `sql`, `slo`. Note camelCase `timeSeries`.
+`panelType` — 13 values: `timeSeries`, `stat`, `table`, `list`, `bar`, `pie`, `topList`,
+`treemap`, `alert`, `spl`, `sql`, `slo`, `hostMap`. Note camelCase `timeSeries`.
 
 `config` can never fail import (the whole object catches), so `{}` is always safe and
 inherits every default. For the full field list, defaults, and the `colorScheme` /
@@ -221,6 +241,20 @@ does not apply and its `chart_type` is `topList`. Datadog's fourth widget, Check
 Status, has no arm: the engine persists only `normal` and `firing`, so a four-state
 widget would have nothing to put in two of its cells.
 
+For a **host map** panel (`hostMap`), hosts are tiles with their pods and containers nested
+inside, each coloured by a signal such as CPU utilization or readiness. It takes exactly
+one `infrastructure` query and no PromQL; the server compiles it for Kubernetes and legacy
+hosts alike. Colours go in `config.hostMapColors`, keyed by entity. Levels, signals,
+grouping, filters and colours are in
+**[references/host-map.md](./references/host-map.md)**.
+
+A panel follows the dashboard's time picker unless **`config.timeFrame`** gives it its own
+relative window: `last_5m` … `last_30d`, `week_to_date`, `month_to_date`, `previous_week`,
+`previous_month` (weeks Monday to Sunday, in the viewer's timezone). Use it only where the
+period is the point, such as a month-to-date cost stat beside hourly charts, and omit it
+everywhere else. Keys and exact boundaries are in
+[references/panel-config.md](./references/panel-config.md#timeframe).
+
 Three config fields the old format got wrong:
 
 - **`thresholdDisplayMode`**, not `enableThresholds`. Values: `off` (default), `lines`,
@@ -248,7 +282,8 @@ the formatter auto-scales ns → µs/ms/s. Full list in
 
 ## Queries
 
-Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `formula`. Note `spl` is
+Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `events` | `formula` |
+`infrastructure` (host maps only, see [references/host-map.md](./references/host-map.md)). Note `spl` is
 **not** a valid `selectedMode` — use `panelType: "spl"` with a logs/traces query and
 `filterMode: "SPL"`.
 
@@ -272,6 +307,10 @@ Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `formula`. Note
 
 Every field is optional. `queryMode` is `builder` or `code` — use `code` with `promql`
 set, `builder` with `selectedMetric` + `functions`.
+
+A builder query can also shift its series selector with `selectorModifiers`:
+`{"offset": "1h"}`, `{"at": "end()"}` (`start()`, `end()` or a unix timestamp), or both.
+The Explorer renders them where the selector is used, e.g. `rate(m{…}[5m] offset 1h)`.
 
 `variables` is **auto-derived** from filters and promql (`$name` references) — anything you
 supply is overwritten. Don't bother setting it.
@@ -311,8 +350,10 @@ supply is overwritten. Don't bother setting it.
   field, separate from the panel-level `panelType`. There is deliberately **no `treemap`
   arm**: the panel is not offered for SPL/SQL, so a `treemap` panel sets `chart_type` to
   `topList` the way a `stat` panel sets `table`.
-- `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` with a `query`
-  string for anything MFD's equality-only filters can't express (e.g. a latency threshold).
+- `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` for anything
+  MFD's equality-only filters can't express (e.g. a latency threshold). See **Filtering a
+  logs / traces / events query** below: the WHERE clause goes in `filters.advanced_query`,
+  **never** in `query`.
 - `groupBy` entries use the same shape as `columnFields`.
 - `list` (array) and `value` (string) are the SPL/SQL column fields. There is no
   `topListLabel`/`topListValue`.
@@ -331,6 +372,61 @@ supply is overwritten. Don't bother setting it.
 Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggregation, or
 `function: "count"` (not a valid name) — and the whole aggregation silently resets to
 `row_count`, giving you a row count where you asked for a percentile.
+
+### Filtering a logs / traces / events query
+
+A WHERE clause is stored in the **filter store**, not in `query`:
+
+```json
+{
+  "selectedMode": "traces",
+  "label": "A",
+  "columnFields": [],
+  "filterMode": "ADVANCED_QUERY",
+  "filters": { "advanced_query": ["service = checkout AND duration > 500"] },
+  "aggregation": { "function": "row_count" }
+}
+```
+
+- `filters.advanced_query` is an array holding **one** WHERE string. `filterMode:
+  "ADVANCED_QUERY"` makes the panel open in the Advanced editor.
+- The WHERE syntax is the one the search/analyze tools accept: `=`, `!=`, `<`, `>`, `<=`,
+  `>=`, `LIKE`, `ILIKE`, `IN (...)`, combined with `AND`, `OR` and a prefix `NOT`: exclude a
+  list as `NOT namespace IN (a, b)`, never `namespace NOT IN (a, b)`.
+  Field names are the catalog labels from `get-fields` (same `signal`); prefix an attribute
+  with `@` (`@http.route = /api/orders`).
+- **`query` is only for SPL or SQL text** (`filterMode: "SPL"` / `"SQL"`). A WHERE clause
+  put in `query` is never run: the panel silently shows **every** row.
+- `filterMode: "MFD"` panels keep plain equality filters as `filters: {"<field>": ["<value>", ...]}`.
+
+### Events query
+
+`selectedMode: "events"` reads **custom events**: GitHub pushes, pull requests, comments and
+reviews, CI runs and jobs, deployments, security alerts, and events customers push. Same
+shape as a logs query (so `columnFields` is required), with these differences:
+
+- `filterMode` is `MFD` or `ADVANCED_QUERY`. Events have **no SPL or SQL**.
+- Fields come from `get-fields` with `signal: "events"`: `timestamp`,
+  `severity` (`info` `success` `warning` `error` `critical`), `type`, `title`, `message`,
+  `repository`, `actor`, `status`, `category`, `source`, `service`, `environment`,
+  `namespace`, `cluster`, `workload`, `pod`, `container`, `event_id`. Anything else is an
+  attribute: `@vcs.ref.head.name`, `@cicd.pipeline.name`, `@vcs.actor.is_bot`.
+- Array paths (`@key[*]`) are refused. `url` and `timestamp` cannot be filtered on; use the
+  time range for time.
+
+```json
+{
+  "selectedMode": "events",
+  "label": "A",
+  "columnFields": [],
+  "filterMode": "ADVANCED_QUERY",
+  "filters": {
+    "advanced_query": ["category = deployment AND severity IN (error, critical) AND environment = production"]
+  },
+  "aggregation": { "function": "row_count" },
+  "groupBy": [{ "field": "repository", "type": "string", "is_attribute": false }]
+}
+```
 
 ### Formula query
 
@@ -382,27 +478,17 @@ ever reads one, drops back to the panel scheme. Full shape in
 - Attribute keys are prefixed `@_@`, e.g. `"@_@user.id": ["abc"]`.
 - Exclusion is a `-` prefix on the **value**: `{"namespace": ["-kube-system"]}`.
 - A `$name` value is a dashboard-variable reference.
+- On a **metrics** query, a `~` prefix makes the value a regex, and `-~` a negated one:
+  `{"namespace": ["~kube-.*"], "pod": ["-~test-.*"]}` renders
+  `namespace=~"kube-.*", pod!~"test-.*"`. `-` alone gives `!=`, so `{"container": ["-"]}`
+  is `container!=""`.
 
 ## Metrics Query Functions
 
-`functions` is an ordered pipeline. **One malformed entry wipes the entire array**, and
-argument counts are exact tuples — so build these carefully.
-
-| type | names | arguments |
-|---|---|---|
-| `range` | `rate`, `increase`, `resets` | `[{arg_name:"over", arg_value:"5m"}]` — any string |
-| `aggregations` | `sum`, `avg`, `max`, `min`, `count`, `No_Aggregations` | `[{arg_name:"by", arg_value:["namespace"]}]` — must be an **array** |
-| `top_bottom` | `top`, `bottom` | `[{arg_name:"k",arg_value:5},{arg_name:"by",arg_value:"max"}]` — `by` ∈ `max\|min\|avg\|median\|last` |
-| `rollup` | `avg_over_time`, `sum_over_time`, `max_over_time`, `min_over_time`, `count_over_time`, `last_over_time`, `absent_over_time`, `present_over_time`, `increases_over_time`, `range_over_time`, `quantile_over_time` | `[{arg_name:"over", arg_value:"5m"}]` — **restricted to `30s\|1m\|5m\|30m\|1h\|1d`** |
-| `comparison` | `greater`, `lesser`, `greater_than_or_equal`, `less_than_or_equal`, `equal`, `not_equal` | `[{arg_name:"than"\|"to", arg_value:100}]` |
-| `transform` | `clamp` (`min`+`max`), `clamp_max` (`max`), `clamp_min` (`min`), `round` (`to_nearest`), `histogram_quantile` (`quantile`), `abs` / `sort` / `sort_desc` (none) | arg names in parens; the `arguments` key is **still required** — use `[]` for the zero-arg ones |
-
-> [!WARNING]
-> `range.over` accepts any string, but **`rollup.over` only accepts
-> `30s`, `1m`, `5m`, `30m`, `1h`, `1d`**. A `rollup` with `over: "7m"` silently deletes
-> every function on that query.
-
-Typical time-series pipeline: `rate` then `aggregations`.
+`functions` is an ordered pipeline: each entry applies to the result of the one before.
+Builder mode covers any single-query MetricsQL function (rollup, transform, label and
+aggregate functions, and scalar operators); a query that combines several series goes in
+`code` mode instead.
 
 ```json
 "functions": [
@@ -410,6 +496,27 @@ Typical time-series pipeline: `rate` then `aggregations`.
   { "type": "aggregations", "name": "sum", "arguments": [ { "arg_name": "by", "arg_value": ["namespace"] } ] }
 ]
 ```
+
+- `name` picks the function and fixes its `type` and its argument names.
+- `arguments` holds `{arg_name, arg_value}` entries in any order. Leave one out to take its
+  default, or, for an optional one, to leave it unrendered. The exception is a label list
+  marked **required** in the reference (`label_keep`, `labels_equal`, the `sort_by_label`
+  family, …): it must be present with at least that many labels, or the import fails.
+- A rollup's `over` window takes any duration (`"15m"`, `"1h30m"`) or a macro
+  (`"$__rate_interval"`); omit it and the query engine picks one.
+- Modifiers are arguments too:
+  - `by` / `without` (label lists) and `limit` on aggregates
+  - `keep_metric_names: true` on rollups, transforms and operators
+  - `bool: true` on comparisons
+  - `step` for a `[window:step]` subquery
+- Validation rejects an unknown `name` or `arg_name`, a value of the wrong kind, and a
+  malformed window, naming the function it objects to.
+
+**Before writing any function, read
+[references/metrics-functions.md](./references/metrics-functions.md)**. It lists every
+function with its `type`, each argument's name, kind and default, and a verified example of
+the PromQL it renders. Argument names differ between look-alike functions: `quantile` takes
+`phi`, while `quantile_over_time` and `histogram_quantile` take `quantile`.
 
 ## Grid Layout
 
@@ -425,6 +532,10 @@ validated — `w: 99` is accepted and renders broken.
 - `i`: the array index as a string. **Matching is positional**, so keep `gridLayout` in the
   same order as `panels`, and at least as long.
 
+The pairing is per **page**. A page is `{panels, gridLayout, subGrids, subGridLayout}`. An
+untabbed dashboard's top level is one page, and each tab carries its own page. Inside each
+page, `gridLayout[n]` positions `panels[n]`, and `y` starts at 0 again.
+
 ## Variables and Rows
 
 Both are optional and most dashboards need neither — omit `variables`, `subGrids`, and
@@ -435,6 +546,40 @@ filters) or **rows** (collapsible panel groups), read
 **[references/variables-and-rows.md](./references/variables-and-rows.md)** for the schemas.
 Two things to carry into that file: a variable's `description` is required (use `""`), and
 one invalid variable silently deletes every variable.
+
+## Tabs
+
+Tabs split a dashboard into pages the viewer switches between. They are optional, and a
+dashboard is either one page or a list of tabs, never both:
+
+```json
+{
+  "gridLayout": [], "panels": [], "subGrids": [], "subGridLayout": [],
+  "variables": [], "eventOverlays": [],
+  "tabs": [
+    { "id": "overview", "title": "Overview", "panels": [], "gridLayout": [], "subGrids": [], "subGridLayout": [] }
+  ]
+}
+```
+
+- Each tab is `{id, title}` plus its own page. Its panels, layout and rows live inside it.
+- On a tabbed dashboard the top-level `panels`, `gridLayout`, `subGrids` and
+  `subGridLayout` stay present and **empty**.
+- `variables`, `eventOverlays` and `publicDashboardPath` stay at the top level and apply to
+  every tab. There is no per-tab variable or overlay.
+- An untabbed dashboard omits `tabs` or sends `[]`.
+
+For a complete tabbed example, the id and title rules, and when to use tabs instead of rows,
+read **[references/tabs.md](./references/tabs.md)**.
+
+## Event Overlays
+
+If the dashboard should mark **events** on its charts (deployments, releases, CI runs),
+read **[references/event-overlays.md](./references/event-overlays.md)** for the schema and
+a worked example. It covers the top-level `eventOverlays` array and each panel's
+`config.eventOverlay` (`inherit` | `custom` | `off`). Two things to carry into that file:
+`color` is a palette name (hex is refused), and only `timeSeries` and `bar` panels draw
+markers. On any other panel type an overlay validates and does nothing.
 
 ## Delivering It
 
@@ -452,6 +597,93 @@ It is a **write tool**: only call it when the user has clearly asked for a dashb
 created, and say what you are about to create before calling. If it refuses, the response
 names the JSON Pointer for every problem; fix them and retry rather than falling back to
 handing over JSON.
+
+### Editing an existing dashboard
+
+```
+list-dashboards  →  get-dashboard-details  →  update-dashboard (panel_operations + preset_version)
+```
+
+`update-dashboard` takes `dashboard_id` plus any of `name`, `description`,
+`panel_operations` or `preset`. Like `create-dashboard` it is a **write tool**: say what
+you are about to change, and call it only when the user asked for the change. It needs
+edit access on the dashboard.
+
+**Edit panels with `panel_operations`, not a whole `preset`.** `get-dashboard-details`
+returns a projection — queries only, no layout, colours, axes or thresholds — so a preset
+rebuilt from it silently deletes all of those. `panel_operations` edits the stored
+document in place and keeps everything you never saw.
+
+`get-dashboard-details` gives what the operations need:
+
+- `position` — the panel's index within its section, from 0. Panels have no id.
+- `sub_grid_id` — the row (sub-grid) the panel is in; empty for a top-level panel.
+- `tab_id` and `tab_title` — the tab the panel is on; empty on an untabbed dashboard. The
+  response also lists the dashboard's tabs.
+- `preset_version` — pass it back unchanged as `preset_version`. **Required** with
+  `panel_operations`.
+
+Each operation is one of:
+
+```json
+{"op": "update_panel", "position": 2, "panel": {"name": "p99 latency"}}
+{"op": "add_panel", "panel": { /* the whole new panel */ }, "grid_layout": {"w": 6, "h": 4}}
+{"op": "remove_panel", "position": 0}
+```
+
+A panel's address is `tab_id`, `sub_grid_id` and `position`. Add `"sub_grid_id": "<id>"`
+to act inside a row; omit it for the page's top-level panels. On a tabbed dashboard every
+operation, `add_panel` included, needs `"tab_id": "<id>"`. A missing or unknown `tab_id`
+refuses the call, and the error lists the valid tab ids. On an untabbed dashboard, omit
+`tab_id`.
+
+```json
+{"op": "update_panel", "tab_id": "node-health", "sub_grid_id": "row-disk", "position": 1, "panel": {"name": "Disk IO"}}
+```
+
+- `update_panel` is a JSON merge patch (RFC 7386): objects merge key by key, `null`
+  deletes a key, and **arrays are replaced whole** — to change one query, send the full
+  `queries` array. An optional `grid_layout` `{x, y, w, h}` moves or resizes the panel;
+  only the keys you give change. It needs a `panel` patch, a `grid_layout`, or both.
+- `add_panel` appends a whole panel, which must pass the same checks as
+  `create-dashboard`. It takes no `position`. Without `grid_layout` it goes in a new row
+  below everything else, sized like the section's first cell.
+- `remove_panel` takes only `position` (and `tab_id`, `sub_grid_id`); it removes the panel
+  and its layout cell.
+
+**Positions refer to the dashboard as you read it**, even after an earlier operation in
+the same call removed a panel — do not re-count. Target each position at most once per
+call; combine two edits to one panel into one `update_panel`. All operations are applied
+in one write, and one bad operation refuses the whole call, naming
+`panel_operations[i]`.
+
+**Refusals to expect:**
+
+| Message says | Do |
+|---|---|
+| `the dashboard changed since it was read` / `was saved by someone else` | Call `get-dashboard-details` again and rebuild the edit from the new positions and `preset_version`. Never reuse the old ones. |
+| `position N does not exist` | Re-read; the position is out of range for that section. |
+| `sub-grids share id` / `panel(s) but … gridLayout entr(ies)` | That section cannot be edited by position — fall back to a whole `preset`. |
+| `preset and panel_operations cannot be combined` | Send one or the other. |
+| a missing or unknown `tab_id`, with the valid ids | Retry with one of the listed ids. |
+| `this dashboard has tabs and the preset has no tabs key` (409) | Your whole `preset` had no `tabs` key. Re-read with `raw=true` and send the preset back with its `tabs` array. |
+
+On success it returns the id, name and a **new** `preset_version`; a further edit in the
+same conversation can use that without reading again.
+
+**Whole-preset rewrite** — only when the edit cannot be expressed as panel operations
+(reordering, restructuring rows, variables, and adding, removing, renaming or reordering
+tabs). Read with `get-dashboard-details raw=true`, which adds the full stored `preset`;
+change what you need; run it through `validate-dashboard-json`; send the whole object back
+as `preset`. Anything you leave out is deleted. Pass `preset_version` here too, so a
+concurrent save is refused instead of overwritten.
+
+On a tabbed dashboard the preset you send **must keep the `tabs` key**. A preset with no
+`tabs` key over a tabbed dashboard looks like an old client that would drop the tabs, so
+the server refuses it with 409. Moving a panel to another tab is also a rewrite: take it
+out of one tab's `panels` and `gridLayout` and append it to the other's.
+
+A `name`- or `description`-only update needs neither.
 
 ### Handing over JSON to import
 
@@ -477,19 +709,22 @@ is not a working dashboard — check these by hand before you hand it over.
    resets to `row_count` — a row count where you asked for a percentile.
 3. `chart_type` is lowercase `timeseries`; `panelType` is camelCase `timeSeries`. Each
    resets to its own default (`table` / `timeSeries`) on a mismatch.
-4. `rollup.over` only accepts `30s`/`1m`/`5m`/`30m`/`1h`/`1d`; a bad value wipes every
-   function on that query.
-5. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
+4. Variables need `description` (use `""`) and a regex-valid `name` ≤ 20 chars — one bad
    variable deletes them all.
-6. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
+5. Use real y-axis units (`percentage`, `mCPU`, `bytes/sec`) — `percent`, `short`, `none`
    become `auto`.
-7. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
+6. Don't emit `enableThresholds`, `colorPalette`, `mergeTables: false`, `topListLabel`, or
    `topListValue` — none exist, and unknown keys are stripped without comment. On a **top
    list**, value colouring goes in `visualFormattingRules`, not `thresholds`.
-8. Prefer omitting an optional field to guessing it: an omitted field takes its default, a
+7. Prefer omitting an optional field to guessing it: an omitted field takes its default, a
    wrong one can reset its siblings.
-9. Validation checks shape, not existence. Discover metric and field names with MCP before
+8. Validation checks shape, not existence. Discover metric and field names with MCP before
    writing queries, and tell the user to confirm on the panel preview.
+9. On a tabbed dashboard, put each panel's layout cell in the same tab as the panel, at the
+   same index. Every whole-preset rewrite keeps the `tabs` key, and every
+   `panel_operations` entry carries `tab_id`.
+10. Keep `variables` and `eventOverlays` at the top level of the preset, never inside a
+    tab. They apply to every tab.
 
 The one rule that spans both: `preset` is a stringified JSON string in the import envelope,
 but the plain object when passed to `create-dashboard` or `validate-dashboard-json`.

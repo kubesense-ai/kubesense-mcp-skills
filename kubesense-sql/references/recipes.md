@@ -88,7 +88,7 @@ GROUP BY bucket ORDER BY bucket
 ## Attribute breakdown
 
 Attributes are strings and are never validated, so confirm the key with
-`get-trace-or-log-fields` and treat an all-empty column as a wrong key.
+`get-fields` and treat an all-empty column as a wrong key.
 
 ```sql
 SELECT @http.route AS route,
@@ -113,7 +113,7 @@ WHERE $__timeFilter(timestamp) AND $__clusters
 
 - **Join logs to traces.** They are separate tables; one statement cannot reach both. Run
   two queries and correlate, or use `analyze-telemetry`, which combines signals in one call.
-- **Query metrics.** Metrics live in VictoriaMetrics, not ClickHouse — use
+- **Query metrics.** Metrics live in the metrics store, not ClickHouse — use
   `analyze-metrics` with PromQL.
 - **Read more than 1000 rows** without an explicit `LIMIT`, and only ever as rows, not as
   a substitute for aggregating.
