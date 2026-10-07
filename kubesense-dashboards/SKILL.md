@@ -248,6 +248,13 @@ hosts alike. Colours go in `config.hostMapColors`, keyed by entity. Levels, sign
 grouping, filters and colours are in
 **[references/host-map.md](./references/host-map.md)**.
 
+A panel follows the dashboard's time picker unless **`config.timeFrame`** gives it its own
+relative window: `last_5m` … `last_30d`, `week_to_date`, `month_to_date`, `previous_week`,
+`previous_month` (weeks Monday to Sunday, in the viewer's timezone). Use it only where the
+period is the point, such as a month-to-date cost stat beside hourly charts, and omit it
+everywhere else. Keys and exact boundaries are in
+[references/panel-config.md](./references/panel-config.md#timeframe).
+
 Three config fields the old format got wrong:
 
 - **`thresholdDisplayMode`**, not `enableThresholds`. Values: `off` (default), `lines`,
