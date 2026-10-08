@@ -82,6 +82,11 @@ joins, CTE chains, window functions, arithmetic across aggregates. They take the
 catalog labels as everything else, plus a few fields discovery does not list. Refused for
 scope-restricted roles. See [kubesense-sql](../kubesense-sql/SKILL.md).
 
+A filter is never the reason to reach for SQL. If the condition fits the `where` string
+(the **Advanced** query language), use `search-*` / `analyze-*`: the server compiles it
+to use the indexes, while SQL runs it as typed — a bare `body LIKE '%…%'` in SQL scans
+every log line in the window.
+
 `execute-spl` / `validate-spl` are the Logs explorer's piped SPL language, logs only. Validate
 first: SPL's parser accepts unknown fields AND unknown functions, so a wrong name compiles and only
 fails once `execute-spl` has paid for the scan. Note SPL takes STORAGE column names
