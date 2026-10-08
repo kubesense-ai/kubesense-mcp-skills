@@ -180,6 +180,11 @@ table instead of the pre-aggregated rollups — slower, but the only way to see 
 text. It is computed automatically and reported in the output header. Column-only
 filters stay on the fast rollup path.
 
+`body ILIKE "…"` here is rewritten server-side to use the body text index. Raw SQL gets
+no such rewrite, so do not move a message search into `execute-sql` unless the shape
+needs it — and if it does, follow *Searching Log Text* in
+[kubesense-sql](../kubesense-sql/SKILL.md).
+
 ## analyze-logs
 
 ```json

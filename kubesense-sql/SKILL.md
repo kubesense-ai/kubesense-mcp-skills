@@ -2,7 +2,7 @@
 name: kubesense-sql
 description: Run raw ClickHouse SQL against KubeSense logs and traces via execute-sql / validate-sql — the queryable column set, the $__timeFilter/$__clusters macros, @attr access, and the joins, CTEs and window functions the analyze-* tools cannot express.
 metadata:
-  version: "2.0.0"
+  version: "2.0.1"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,sql,clickhouse,logs,traces,query,observability,mcp
@@ -45,6 +45,29 @@ is smaller. Reach for SQL only when the shape genuinely does not fit:
 
 If you find yourself writing `SELECT field, count(*) ... GROUP BY field`, stop — that is
 `analyze-*` with `value_operation: row_count`.
+
+### A filter condition is never the reason to use SQL
+
+The `where` argument of `search-*` / `analyze-*` is the same language as the **Advanced**
+query tab on the Logs and Traces pages. If a condition can be written there, write it
+there — the server rewrites `body` searches to the text-index form and routes
+column-only filters to the pre-aggregated rollup tables. SQL does neither: it always
+reads the raw table and runs your predicate as typed.
+
+Decide in this order:
+
+1. Can the **condition** be written as a `where` string — `=` `!=` `<` `>` `LIKE` `ILIKE`
+   `SUBSTR_ILIKE` `IN`, `AND` / `OR` / `NOT`, `@attr` filters, `body ILIKE "%…%"`? →
+   `search-*` / `analyze-*`. This covers nearly every "find / count lines where …".
+2. Is it only the **shape of the result** that does not fit (join, CTE, window function,
+   arithmetic across aggregates)? → SQL, keeping the same conditions and following
+   *Searching Log Text* below for anything on `body`.
+3. Does the condition itself need something the `where` language lacks — a regex, a
+   comparison between two columns, a function of a column? → SQL, with an indexed
+   predicate alongside it to narrow the scan first (a `workload` / `namespace` equality,
+   or a `hasToken(lower(body), …)` for a word the regex must contain).
+
+Several values for one field is `IN` or `OR` in the `where` string, not a reason for SQL.
 
 ## Tables
 
@@ -152,6 +175,52 @@ WHERE toFloat64OrNull(@latency_ms) > 500
 > attribute key is wrong, not that the data is missing. Confirm every key with
 > `get-trace-or-log-fields` first.
 
+## Searching Log Text (`body`)
+
+> [!CAUTION]
+> **In SQL, a predicate on bare `body` scans every log line in the window.** The body
+> indexes are built on `lower(body)`. `body LIKE`, `body ILIKE`, `position(body, …)`,
+> `match(body, …)` — and `position(lower(body), …)` — match no index, so the query
+> decompresses the whole message column. On a production cluster a multi-day search
+> written this way has read terabytes and stalled ingestion for everyone.
+
+`search-logs` and `analyze-logs` rewrite `body ILIKE "…"` to the indexed form for you.
+**SQL does not** — it runs the predicate exactly as written. So prefer those tools for
+"find lines containing X", and when the search has to live inside SQL, write one of:
+
+| Looking for | Write | Index |
+|---|---|---|
+| one word or ID | `hasToken(lower(body), 'abc123')` | text index — best |
+| any of several | `hasAnyTokens(lower(body), ['abc123', 'def456'])` | text index |
+| all of several | `hasAllTokens(lower(body), ['connection', 'refused'])` | text index |
+| exact substring, punctuation included | `lower(body) LIKE '%connection refused%'` | n-gram filter |
+
+- **Lowercase the needle.** The index holds lowercased text; `hasToken(lower(body), 'OOM')`
+  matches nothing.
+- A token is a run of letters and digits. `hasToken` takes exactly one — `'node-agent'`
+  or `'a b'` is an error. Split on the punctuation and use `hasAllTokens`, or fall back to
+  `lower(body) LIKE`.
+- `hasAllTokens` means "contains all these words", not "contains this phrase". Add a
+  `lower(body) LIKE '%…%'` alongside it only when adjacency matters.
+- Tokens must be whole: `hasToken(lower(body), 'timeo')` does not match `timeout`. For a
+  partial word, use `lower(body) LIKE '%timeo%'`.
+
+```sql
+SELECT toDate(timestamp) AS d, workload, count(*) AS n
+FROM logs
+WHERE $__timeFilter(timestamp) AND $__clusters
+  AND hasAnyTokens(lower(body), ['6abffe8am1sw6', '636ce0fe6khta'])
+GROUP BY d, workload ORDER BY d, n DESC
+```
+
+Measured on one hour of a production cluster (9,640 granules after time pruning):
+bare `body LIKE '%…%'` read all 9,640; `lower(body) LIKE` 213; `hasToken` 202.
+
+**Narrow before you widen.** Add `workload` / `namespace` / `type` when you know them and
+start with an hour, not days. Run **one** body search at a time — do not fan the same
+search out across time slices in parallel; each one competes with ingestion for the same
+disk. `validate-sql` cannot warn you: an unindexed body scan is perfectly valid SQL.
+
 ## validate-sql
 
 Call it before `execute-sql` for anything with a CTE, a join, or a field you have not used
@@ -245,7 +314,8 @@ More patterns: [references/recipes.md](references/recipes.md).
 ## Rules
 
 1. Try `analyze-*` first. Use SQL only for joins, CTEs, window functions, or arithmetic
-   across aggregates.
+   across aggregates. If the condition can be written as a `where` string (the Advanced
+   query language), it does not belong in SQL.
 2. Call `get-trace-or-log-fields` for the window before writing the query.
 3. `validate-sql` before `execute-sql` for anything non-trivial, and **read the
    `rewritten_sql`** it returns.
@@ -261,3 +331,8 @@ More patterns: [references/recipes.md](references/recipes.md).
 11. Aggregate in SQL; never paginate rows to compute a total. 1000-row cap.
 12. Logs and traces cannot be joined in one statement — they are different tables.
 13. If the call is refused for a scoped role, switch to `search-*` / `analyze-*`.
+14. Never filter on bare `body` in SQL. Use `hasToken` / `hasAnyTokens` / `hasAllTokens`
+    on `lower(body)` with a lowercased needle, or `lower(body) LIKE '%…%'` — anything
+    else is a full scan of the message column.
+15. One body search at a time, on the narrowest window and filters that answer the
+    question. Never run them in parallel.
