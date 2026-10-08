@@ -99,6 +99,26 @@ WHERE $__timeFilter(timestamp) AND $__clusters AND @http.route != ''
 GROUP BY route ORDER BY calls DESC LIMIT 50
 ```
 
+## Text search inside an aggregate
+
+Where a message search has to feed a `GROUP BY`. The body indexes are on `lower(body)`,
+so the predicate must be too — bare `body LIKE '%…%'` scans every line in the window.
+Lowercase the needle; one token per `hasToken`.
+
+```sql
+SELECT workload,
+       countIf(hasToken(lower(body), 'timeout'))                      AS timeouts,
+       countIf(hasAllTokens(lower(body), ['connection', 'refused']))  AS refused
+FROM logs
+WHERE $__timeFilter(timestamp) AND $__clusters
+  AND hasAnyTokens(lower(body), ['timeout', 'refused'])
+GROUP BY workload ORDER BY timeouts DESC
+```
+
+The `WHERE` carries the indexed predicate that prunes; the `countIf`s only split what
+survived. For a plain "show me the lines", use `search-logs` instead — it applies the
+indexed form automatically.
+
 ## Cardinality check before a group-by
 
 Cheap guard against grouping by something with a million values.
