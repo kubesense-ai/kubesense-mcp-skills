@@ -1,8 +1,8 @@
 ---
 name: kubesense-mcp
-description: The KubeSense MCP tool layer — connection and auth, the full 40-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
+description: The KubeSense MCP tool layer — connection and auth, the full 41-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
 metadata:
-  version: "2.3.0"
+  version: "2.4.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth
@@ -42,6 +42,9 @@ claude mcp add --scope user --transport http kubesense \
   --header "Authorization: Bearer <access-token>"
 ```
 
+An API key only works in `x-api-key`. Sent as `Authorization: Bearer <api-key>` it is
+read as a JWT and refused with 401.
+
 Liveness: `GET /mcp_health`. To confirm *who* you are authenticated as, call
 `get-current-user` — no arguments, cheap, resolved from the request credentials.
 
@@ -52,7 +55,7 @@ module. `analyze-telemetry` resolves every module its sub-queries touch.
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
 
-## Tools (40)
+## Tools (41)
 
 **Discovery — call before querying**
 
@@ -99,6 +102,15 @@ query is broken before it is run. See [kubesense-spl](../kubesense-spl/SKILL.md)
 `list-workloads` · `get-workload-detail` · `list-issues` · `get-infra-issues` ·
 `get-recent-changes`
 
+**Cloud inventory** — see [kubesense-metrics](../kubesense-metrics/SKILL.md)
+
+`list-cloud-integrations` — every connected cloud account (AWS, GCP, Azure, MongoDB Atlas,
+Confluent Cloud, Kong) with its `provider`, `account_id`, `status` and last sync, plus
+`reporting`: each `resource_type` with series in the last hour and how many resources
+report it. Call it before any cloud metric query: it gives the real `provider`,
+`account_id` and `resource_type` label values, and it explains an empty result (an account
+`paused` or in `error`, or one with nothing reporting). Optional `provider` filter.
+
 **Alerts** — see [kubesense-alerts](../kubesense-alerts/SKILL.md)
 
 `list-alerts` (external Alertmanager) · `list-active-alerts` (native store, firing) ·
@@ -107,10 +119,14 @@ query is broken before it is run. See [kubesense-spl](../kubesense-spl/SKILL.md)
 
 **Dashboards** — see [kubesense-dashboards](../kubesense-dashboards/SKILL.md)
 
-`list-dashboards` (id, name, description) · `get-dashboard-details` (each panel's queries,
-plus the `tab_id`, `sub_grid_id`, `position` and `preset_version` that `update-dashboard`
-needs, and `tab_title` and the tab list on a tabbed dashboard; `raw=true` adds the whole
-stored preset)
+`list-dashboards` (id, name, description, `type` and `integration_id`; optional
+`type: "system" | "user"` filter) · `get-dashboard-details` (each panel's queries, plus the
+`tab_id`, `sub_grid_id`, `position` and `preset_version` that `update-dashboard` needs, and
+`tab_title` and the tab list on a tabbed dashboard; `raw=true` adds the whole stored preset)
+
+A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
+`rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
+`$name`. Resolve those against the variables table and run it with `analyze-metrics`.
 
 **Identity**
 
@@ -299,8 +315,11 @@ starts a labelled sub-table (e.g. `## services`, `## silences`).
   carries a bare `values` array aligned positionally — `values[i]` is the value at
   `timestamps[i]`, `null` = no data in that bucket.
 - `instant`: no `timestamps`; each series carries a single scalar `value`.
-- `total_series` / `truncated` report how many non-zero series existed **before** the
-  top-N cap.
+- Every series has `labels`; an unlabelled one (an ungrouped `sum`) has `labels: {}`.
+- `analyze-logs` / `analyze-traces` only: `total_series` / `truncated` report how many
+  non-zero series existed **before** the top-N cap. `analyze-metrics` has no `limit`.
+- A failed query's `error_message` keeps the reason (`connection refused`, `i/o timeout`)
+  but not the metrics store's internal address, which reads `<metrics store>`.
 
 **Record with sub-tables** (`get-*-detail`) — `field<TAB>value` lines for scalars, `## name`
 TSV blocks for nested arrays, compact JSON for maps. Empty fields omitted.

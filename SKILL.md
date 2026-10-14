@@ -35,6 +35,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | "p99 latency / slow requests / which service is failing" | kubesense-traces |
 | "CPU, memory, disk, saturation, capacity" | kubesense-metrics |
 | "how is my RDS / EC2 / Azure VM / Atlas cluster doing" | kubesense-metrics |
+| "which cloud accounts are connected / why is my AWS dashboard empty" | kubesense-metrics (`list-cloud-integrations`) |
 | "what's running / why is this pod restarting / what changed" | kubesense-infra |
 | "alert me when… / what's firing / convert this Datadog monitor" | kubesense-alerts |
 | "build me a dashboard" | kubesense-dashboards |
