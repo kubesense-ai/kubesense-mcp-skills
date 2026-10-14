@@ -54,6 +54,11 @@ matches nothing here.
 
 ## Discovery
 
+Start with the `list-cloud-integrations` tool. It answers the first three questions below
+in one call — which providers and accounts exist, what state each is in, and which
+resource types are reporting, with a resource count — from the account table and the
+last hour of data. Use the PromQL below for the rest: metric names, dimensions, resources.
+
 `get-available-metrics` and `get-metric-labels` are the wrong tools for cloud metrics:
 the first returns one name (`kubesense_cloud_resource_metric`) no matter how many
 thousand cloud series exist, and the second returns label *names* only. Everything

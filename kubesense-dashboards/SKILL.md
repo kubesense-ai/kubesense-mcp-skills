@@ -609,6 +609,14 @@ list-dashboards  →  get-dashboard-details  →  update-dashboard (panel_operat
 you are about to change, and call it only when the user asked for the change. It needs
 edit access on the dashboard.
 
+**System dashboards are read-only.** `list-dashboards` reports `type`: `system` for a
+dashboard KubeSense ships (one per integration service, such as "AWS RDS Overview" or
+"Kubernetes Pods Overview"), `user` for one a person made. `update-dashboard` refuses a
+system dashboard for everyone. To change one, the user clones it in the UI (Clone on the
+dashboard or on the integration's Dashboards tab) and you edit the copy, which is a `user`
+dashboard with the same name; filter with `type: "user"` to find it. A system dashboard
+with an `integration_id` is listed only while that integration has a connected account.
+
 **Edit panels with `panel_operations`, not a whole `preset`.** `get-dashboard-details`
 returns a projection — queries only, no layout, colours, axes or thresholds — so a preset
 rebuilt from it silently deletes all of those. `panel_operations` edits the stored
@@ -622,6 +630,9 @@ document in place and keeps everything you never saw.
   response also lists the dashboard's tabs.
 - `preset_version` — pass it back unchanged as `preset_version`. **Required** with
   `panel_operations`.
+- `rendered_promql` — on a builder-mode metrics query, the PromQL the panel runs (the
+  stored `promql` is empty in builder mode). Read-only: it is not part of the stored query,
+  so never send it back in a panel patch.
 
 Each operation is one of:
 

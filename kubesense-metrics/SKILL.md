@@ -216,7 +216,10 @@ Fixed labels: `provider` (`aws` | `gcp` | `azure` | `mongodbatlas` | `confluent`
 collector dimensions such as `region`. There is **no `clusterId`, `namespace` or `pod`**,
 so a selector copied from a Kubernetes query matches nothing.
 
-Discovery is a PromQL step, not a tool call, because the values live in labels:
+Start with **`list-cloud-integrations`**: it lists every connected account with its
+`provider`, `account_id`, status, and the `resource_type`s reporting in the last hour. An
+empty cloud query is usually explained there (account paused, in error, or nothing
+reporting). Then discover metric names with PromQL, because those live in a label:
 
 ```promql
 count by (resource_type) (kubesense_cloud_resource_metric{provider="aws"})
