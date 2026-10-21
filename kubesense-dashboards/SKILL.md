@@ -1,11 +1,11 @@
 ---
 name: kubesense-dashboards
-description: Create and edit KubeSense dashboards over metrics, logs, traces and infrastructure host maps — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
+description: Create and edit KubeSense dashboards over metrics, logs, traces, real user monitoring (RUM) and infrastructure host maps — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
 metadata:
-  version: "2.7.0"
+  version: "2.8.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,dashboards,panels,json,import,preset,visualization,host-map
+  tags: kubesense,dashboards,panels,json,import,preset,visualization,host-map,rum
 ---
 
 # KubeSense Dashboards
@@ -40,7 +40,7 @@ It stores nothing, so call it as often as you need.
 ```
 # valid=false findings=2
 path                              rule   message
-/panels/0/queries/0/selectedMode  shape  value must be one of 'logs', 'metrics', 'traces', 'events', 'formula'
+/panels/0/queries/0/selectedMode  shape  value must be one of 'logs', 'metrics', 'traces', 'events', 'rum', 'formula'
 /gridLayout/0                     shape  must have required property 'h'
 ```
 
@@ -61,7 +61,7 @@ never guess a metric, group-by, or filter field.
 |---|---|
 | Metric names | `get-available-metrics` |
 | Metric labels (for `by`) | `get-metric-labels` |
-| Log, trace or event fields | `get-fields` with `signal` |
+| Log, trace, event or RUM fields | `get-fields` with `signal` (`rum_view`, … for RUM) |
 
 Dashboard queries use **storage-level field names**, not the MCP catalog labels — the
 webapp posts these directly. Take field names from the discovery output's storage column
@@ -132,10 +132,11 @@ Get these wrong and import is rejected with an error:
 5. A panel with no queries (`queries` missing or `[]`) is refused by `validate-dashboard-json`, `create-dashboard` and `update-dashboard` (rule `panel_has_queries`) — it would open on an empty query builder and "No data". A dashboard with no panels at all is fine.
 6. A panel missing `name`. (An empty `name: ""` is accepted — the editor allows it and stored dashboards carry it — but a nameless panel is unusable, so always set one.)
 7. A panel missing the `queries` key entirely (an empty array parses, but is refused by the rule in item 5).
-8. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `events` | `formula` |
-   `infrastructure`.
-9. **A logs/traces/events query missing `columnFields`** — the single hard-required field on
-   those queries.
+8. A query whose `selectedMode` is not `metrics` | `logs` | `traces` | `events` | `rum` |
+   `formula` | `infrastructure`. A RUM signal name from the MCP tools (`rum_view`) is
+   not a `selectedMode` here; see [RUM query](#rum-query).
+9. **A logs/traces/events/rum query missing `columnFields`** — the single hard-required
+   field on those queries. A `rum` query also needs `rumEventType`.
 10. A `columnFields[]` entry with `field: ""`.
 11. A formula missing `expression`, or one containing lowercase letters or a decimal point.
 12. A formula referencing an undefined label, referencing itself, placed *before* the
@@ -282,7 +283,7 @@ the formatter auto-scales ns → µs/ms/s. Full list in
 
 ## Queries
 
-Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `events` | `formula` |
+Discriminated on `selectedMode`: `metrics` | `logs` | `traces` | `events` | `rum` | `formula` |
 `infrastructure` (host maps only, see [references/host-map.md](./references/host-map.md)). Note `spl` is
 **not** a valid `selectedMode` — use `panelType: "spl"` with a logs/traces query and
 `filterMode: "SPL"`.
@@ -352,7 +353,7 @@ supply is overwritten. Don't bother setting it.
   `topList` the way a `stat` panel sets `table`.
 - `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` for anything
   MFD's equality-only filters can't express (e.g. a latency threshold). See **Filtering a
-  logs / traces / events query** below: the WHERE clause goes in `filters.advanced_query`,
+  logs / traces / events / rum query** below: the WHERE clause goes in `filters.advanced_query`,
   **never** in `query`.
 - `groupBy` entries use the same shape as `columnFields`.
 - `list` (array) and `value` (string) are the SPL/SQL column fields. There is no
@@ -373,7 +374,7 @@ Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggreg
 `function: "count"` (not a valid name) — and the whole aggregation silently resets to
 `row_count`, giving you a row count where you asked for a percentile.
 
-### Filtering a logs / traces / events query
+### Filtering a logs / traces / events / rum query
 
 A WHERE clause is stored in the **filter store**, not in `query`:
 
@@ -425,6 +426,49 @@ shape as a logs query (so `columnFields` is required), with these differences:
   },
   "aggregation": { "function": "row_count" },
   "groupBy": [{ "field": "repository", "type": "string", "is_attribute": false }]
+}
+```
+
+### RUM query
+
+`selectedMode: "rum"` reads **real user monitoring** events from browser and mobile apps.
+The event type picks the table, so it is a second field, `rumEventType`:
+`session` | `view` | `action` | `error` | `resource` | `long_task`. Same shape as a logs
+query (so `columnFields` is required), with these differences:
+
+- `rumEventType` is required. A `rum` query without it fails validation and is refused on
+  save. The webapp repairs a missing one to `view`, silently changing the table.
+- **The stored form differs from the MCP form.** `analyze-telemetry` takes the event type
+  inside the mode (`selectedMode: "rum_view"`). A panel stores `selectedMode: "rum"` plus
+  `rumEventType: "view"`. To turn a tested `analyze-telemetry` query into a panel, split
+  the mode and keep everything else.
+- `filterMode` is `ADVANCED_QUERY`. RUM has **no SPL or SQL**, and the panel editor has no
+  mode toggle for it. The WHERE clause goes in `filters.advanced_query`.
+- Fields and rules come from [kubesense-rum](../kubesense-rum/SKILL.md): `get-fields` with
+  the matching signal, LIKE only on low-cardinality fields, array fields filter-only, no
+  group-by on a raw duration, `feature_flag.<key>` group-by on view and error only.
+- **Measure durations through the `_ms` / `_s` twins** (`lcp_ms`, `duration_ms`). Raw
+  columns are nanoseconds. Set `fieldConfig.unit` to `milliseconds` for an `_ms` measure
+  and `seconds` for `_s`, so the chart labels the value. The editor sets it when a user
+  picks the measure; set it yourself in generated JSON.
+- Numeric aggregations (`avg`, `sum`, `min`, `max`, `p50`, `p75`, `p90`, `p95`, `p99`)
+  need `fields` with `type: "float"`, as on logs.
+- RUM is not offered on alert rules; see [kubesense-alerts](../kubesense-alerts/SKILL.md).
+
+```json
+{
+  "selectedMode": "rum",
+  "rumEventType": "view",
+  "label": "A",
+  "columnFields": [],
+  "filterMode": "ADVANCED_QUERY",
+  "filters": { "advanced_query": ["browser_name = Chrome AND env = production"] },
+  "aggregation": {
+    "function": "p90",
+    "fields": [ { "field": "lcp_ms", "type": "float", "is_attribute": false } ]
+  },
+  "groupBy": [ { "field": "view_name", "type": "string", "is_attribute": false } ],
+  "fieldConfig": { "unit": "milliseconds" }
 }
 ```
 
