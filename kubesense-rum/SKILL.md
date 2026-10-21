@@ -12,7 +12,9 @@ metadata:
 
 Requires the KubeSense MCP server; see **[kubesense-mcp](../kubesense-mcp/SKILL.md)** for
 connection, auth, and the shared WHERE-clause reference. RUM queries resolve RBAC against
-the **RUM** module.
+the **RUM** module (`rbac(rum)`). A key without it fails with
+`rbac(rum): this API key does not have access to this resource`; ask for the RUM grant
+rather than retrying.
 
 ## Signals
 
@@ -50,10 +52,25 @@ LIKE on `rum_view` but not elsewhere. The full catalog for every event type is i
 **[references/field-catalog.md](./references/field-catalog.md)**; use it to check a name
 before the call, and `get-fields` as the authority for the deployment you are talking to.
 
-`get-fields` for RUM returns the static catalog only. It does **not** list attribute
-keys, because RUM has no attribute-key scan. When the user needs a custom attribute, ask
-for the key or infer it from their instrumentation, and type it with the `@` prefix. A
-wrong key matches nothing and returns an empty result, not an error.
+`get-fields` for RUM returns the static catalog only, in the usual TSV:
+
+- The header line is `# signal=rum_view total_count=<N> truncated=<bool> note=RUM has no
+  attribute-key scan; ...`. There is no `attribute_scan_error`. The note says to type a
+  custom attribute as `@key` (no LIKE on attributes) and a feature flag as
+  `feature_flag.<key>`.
+- Operators come as sets (`# ops.o1=EQ|NEQ|IN|NIN|LT|GT|LTE|GTE`). A field that allows
+  LIKE has a set that includes `LIKE` / `ILIKE`; an exact field such as `user_email` does
+  not. Trust the set over any assumption about the field.
+- A trailing `notes` column appears when some field has a note, for example
+  `measure-only: aggregate or filter it, never group by it (milliseconds); platform: browser`
+  on `lcp_ms` and `filter-only: not groupable; platform: browser` on `lcp_target_selector`.
+- `enum_values` carries `severity`'s `crash` and `error`.
+- Pass `search` to narrow the list (`search=lcp` returns `lcp`, `lcp_ms`, `lcp_s` and
+  `lcp_target_selector`).
+
+There is no attribute-key discovery. When the user needs a custom attribute, ask for the
+key or infer it from their instrumentation, and type it with the `@` prefix. A wrong key
+matches nothing and returns an empty result, not an error.
 
 ## WHERE Syntax
 
@@ -82,7 +99,8 @@ Quote values that contain `/`, `:`, `%` or a space. Write `NOT (x IN (...))`, no
    `error_message`, `view_name` on the other event types) takes `=` and `IN`. A LIKE on
    them is refused with `LIKE is not supported on <field>; use = or IN`.
 2. **No LIKE on `@attribute` fields.** Attributes take `=`, `!=`, `IN`, `<`, `>`, `<=`
-   and `>=`. Comparisons need a number.
+   and `>=`. Comparisons need a number. `@plan LIKE ...` is refused with
+   `operator "LIKE" not allowed for rum_view attribute field "plan"`.
 3. **Array fields filter only.** `service`, `state`, `city`, `network_connectivity` and
    `ip` on `rum_session`, `ip` on `rum_view`, and `action_id` on `rum_error`,
    `rum_resource` and `rum_long_task` hold lists. `=` and `IN` test membership. They
@@ -97,7 +115,9 @@ Quote values that contain `/`, `:`, `%` or a space. Write `NOT (x IN (...))`, no
 6. **`feature_flag.<key>`** filters on every event type. It groups or measures only on
    `rum_view` and `rum_error`, where the flag value is stored on the row. On the other
    four it is stored per session, so a group-by there is refused. Keys are
-   case-sensitive and values are text (`true`, `dark`, `5`).
+   case-sensitive and values are text (`true`, `dark`, `5`). A group-by on a flag key
+   (`feature_flag.new-checkout`) is confirmed on `rum_view`. The `where` form follows the
+   engine source and has not been run against a live server.
 7. **Attributes need `@`** in `where` (`@checkout.step`) and `is_attribute: true`
    without `@` in `group_by_fields` / `fields`. There is no discovery for the key.
 8. **`severity`** on `rum_error` is `crash` or `error`, lowercase. It is the label for
@@ -107,7 +127,7 @@ Quote values that contain `/`, `:`, `%` or a space. Write `NOT (x IN (...))`, no
     `battery_level` is mobile-only. Filtering on one for the wrong application type matches
     nothing and raises no error.
 11. **`value_operation`** is `row_count`, `unique_count`, `avg`, `sum`, `min`, `max`,
-    `p50`, `p90`, `p95` or `p99`. `row_count` takes no field. Everything else takes
+    `p50`, `p75`, `p90`, `p95` or `p99`. `row_count` takes no field. Everything else takes
     exactly one `fields` entry. The numeric operations need a number field or an
     attribute; `unique_count` takes any non-list field.
 12. **`alert_mode`, `group_by_present_only` and `lookback_seconds` are refused** for RUM.
@@ -211,12 +231,23 @@ with `analyze-telemetry` first, then translate it.
 
 ## Failure Messages
 
+Seen from a live server:
+
+| Message | Cause |
+|---|---|
+| `unknown field "services" for signal=rum_session ...` | A storage name; type the catalog name (`service`) |
+| `analysis failed: cannot group by lcp_ms` | Rule 4: `_ms` / `_s` twins are measure and filter only |
+| `analysis failed: LIKE is not supported on user_email; use = or IN` | Rule 1 |
+| `operator "LIKE" not allowed for rum_view attribute field "plan" — use one of: EQ, NEQ, ...` | Rule 2 |
+| `rbac(rum): this API key does not have access to this resource` | The key lacks the RUM module |
+
+Worded from the kubeapi source, not seen live:
+
 | Message | Cause |
 |---|---|
 | `<field> is not a filterable field for <type>` | The field belongs to another event type, or is hidden |
-| `LIKE is not supported on <field>; use = or IN` | Rule 1 |
 | `<field> holds a list and cannot be grouped or measured; filter on it instead` | Rule 3 |
-| `cannot group by <field>; it is a duration in nanoseconds` | Rule 4 |
+| `cannot group by <field>; it is a duration in nanoseconds` | Rule 4, on a raw column such as `lcp` |
 | `cannot group by <field>` | Rule 5 |
 | `feature flags are stored per session for <type>; filter on them instead` | Rule 6 |
 | `<op> needs a numeric field; <field> is not numeric` | Measure on a string or boolean |
