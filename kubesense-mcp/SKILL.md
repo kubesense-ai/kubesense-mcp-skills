@@ -1,8 +1,8 @@
 ---
 name: kubesense-mcp
-description: The KubeSense MCP tool layer — connection and auth, the full 41-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
+description: The KubeSense MCP tool layer — connection and auth, the full 41-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces/RUM query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
 metadata:
-  version: "2.4.0"
+  version: "2.5.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth
@@ -24,6 +24,7 @@ each have to redefine it.
 | what's running, pod restarts, what changed | [kubesense-infra](../kubesense-infra/SKILL.md) |
 | alerts — list, investigate, create | [kubesense-alerts](../kubesense-alerts/SKILL.md) |
 | dashboards — read, create, edit | [kubesense-dashboards](../kubesense-dashboards/SKILL.md) |
+| real user monitoring — sessions, page views, web vitals, frontend errors, slow requests | [kubesense-rum](../kubesense-rum/SKILL.md) |
 
 ## Connection
 
@@ -49,7 +50,7 @@ Liveness: `GET /mcp_health`. To confirm *who* you are authenticated as, call
 `get-current-user` — no arguments, cheap, resolved from the request credentials.
 
 **RBAC** is resolved per tool call against the modules `logs`, `traces`,
-`infrastructure` (metrics + nodes/pods), and `alerts`. A permission error names the
+`infrastructure` (metrics + nodes/pods), `alerts`, and `rum`. A permission error names the
 module. `analyze-telemetry` resolves every module its sub-queries touch.
 
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
@@ -61,9 +62,13 @@ the global log level.
 
 | Tool | Returns |
 |---|---|
-| `get-fields` | Field catalog for one `signal` (`logs`, `traces` or `events`) in a window |
+| `get-fields` | Field catalog for one `signal` (`logs`, `traces`, `events`, or a RUM signal: `rum_session`, `rum_view`, `rum_action`, `rum_error`, `rum_resource`, `rum_long_task`) in a window |
 | `get-available-metrics` | Metric names |
 | `get-metric-labels` | Label names on one metric |
+
+RUM data (browser and mobile sessions, views, actions, errors, resources, long tasks) is
+queried only through `analyze-telemetry`; there is no `analyze-rum` or `search-rum`. See
+[kubesense-rum](../kubesense-rum/SKILL.md).
 
 `get-trace-or-log-fields` is a deprecated alias of `get-fields` with the same arguments and
 output. Use `get-fields`.
@@ -77,7 +82,7 @@ output. Use `get-fields`.
 | `analyze-logs` | Aggregated log series |
 | `analyze-traces` | Aggregated span series |
 | `analyze-metrics` | PromQL result |
-| `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics or events |
+| `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics, events or RUM (`selectedMode: rum_<type>`) |
 | `get-distributed-trace` | Full span tree for one `trace_id` |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |
@@ -160,6 +165,7 @@ refuses with the same findings, so validating first turns a refusal into a fix.
 
 ```
 logs / traces:  get-fields (signal)       →  search-* / analyze-*
+rum:            get-fields (rum_<type>)   →  analyze-telemetry
 metrics:        get-available-metrics     →  get-metric-labels  →  analyze-metrics
 clusters:       list-clusters             →  anything with a "clusters" filter
 ```
@@ -204,7 +210,9 @@ unknown field "service" for signal=logs; call get-fields with signal=logs to
 | latency | — | `duration` |
 
 The full per-signal tables, including hidden-but-accepted fields and every storage
-mapping, are in **[references/field-catalog.md](./references/field-catalog.md)**.
+mapping, are in **[references/field-catalog.md](./references/field-catalog.md)**. The
+six RUM event types have their own field sets, listed in
+[kubesense-rum/references/field-catalog.md](../kubesense-rum/references/field-catalog.md).
 
 > [!WARNING]
 > The two signals disagree on `node`/`node_name` and on severity name *and* casing, and
@@ -256,6 +264,11 @@ signal.
 
 **`duration` is millisecond-in, nanosecond-out** — see
 [kubesense-traces](../kubesense-traces/SKILL.md).
+
+**RUM** takes the same operators but differs on three points: `LIKE`
+and `ILIKE` work only on low-cardinality fields (the catalog's `LIKE` column), `@attr`
+filters never take `LIKE`, and raw durations are nanoseconds with `_ms` / `_s` twins.
+See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 
 ## Choosing a Tool
 

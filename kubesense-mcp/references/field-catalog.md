@@ -3,6 +3,11 @@
 The complete, exact field catalog the KubeSense MCP server accepts. Source of truth:
 `kubeapi/observability/fieldcatalog/{logs,traces}.go`.
 
+> [!NOTE]
+> This page covers logs and traces. RUM has six event types with their own catalogs,
+> generated from `kubeapi/observability/fieldcatalog/rum.go`:
+> [kubesense-rum/references/field-catalog.md](../../kubesense-rum/references/field-catalog.md).
+
 **Type the "Label" column.** The "Storage column" is what the backend uses internally; it
 is **rejected** at every input slot with a message naming the correct label.
 
