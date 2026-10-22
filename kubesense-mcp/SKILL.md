@@ -350,7 +350,7 @@ Timestamps are always RFC3339 UTC at millisecond precision — exactly the forma
 Take the **minimum** timestamp from the page (`timestamp` for logs, `start_timestamp` for
 traces) and pass it verbatim as the next `to_time`. Copy the millisecond precision exactly.
 
-`search-rum` is the exception: it returns a `next_cursor` that you pass back unchanged. See
+`search-rum` is the exception: it returns a `next_cursor`, a page token bound to the query, that you pass back with the same query arguments. See
 [kubesense-rum](../kubesense-rum/SKILL.md#search-rum).
 
 Inventory and alert tools *do* paginate conventionally, with `page`/`page_size` (default

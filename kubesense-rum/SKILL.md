@@ -14,7 +14,9 @@ Requires the KubeSense MCP server; see **[kubesense-mcp](../kubesense-mcp/SKILL.
 connection, auth, and the shared WHERE-clause reference. RUM queries resolve RBAC against
 the **RUM** module (`rbac(rum)`). A key without it fails with
 `rbac(rum): this API key does not have access to this resource`; ask for the RUM grant
-rather than retrying. `search-rum` needs the same grant.
+rather than retrying. `search-rum` needs the same grant. So do the RUM list routes it reads through
+(`POST /rum/explorer/{sessions,views,actions,errors,resources,longtasks}`), which also
+guard the RUM pages.
 
 ## Signals
 
@@ -120,33 +122,37 @@ back in nanoseconds; ask for `duration_ms` or `duration_s` instead.
 `# total_count=unknown returned_rows=<N> truncated=<bool> next_cursor=<c> window_clamped=<bool> ...`,
 followed by `# notice=<n>` lines when something needs saying, a header, and one line per
 row. Every row also carries `application_id`, `session_id`, `row_id` (the event's own id),
-`timestamp`, `has_replay` (sessions and views) and `severity` (errors).
+`timestamp`, `has_replay` (set when the session has a stored replay) and `severity` (errors: `error` or `crash`).
+Whatever `required_fields` you ask for, every row also carries the columns that identify it, always present: sessions `application_id`, `session_id`, `session_start`, `session_has_replay`; views add `view_id`, `view_start`; actions `action_id`, `action_start`; errors `error_id`, `error_start`, `is_crash`; resources `resource_id`, `resource_start`; long tasks `task_id`, `task_start` (each with `view_id` except sessions).
 
 **Paging.** There is no total (`total_count=unknown`). While `next_cursor` is non-empty,
-call again with the same `from_time`, `to_time`, `where`, `sort_by` and `sort_order`, and
-`cursor=<next_cursor>`. A cursor replayed under a different query is refused.
+call again with the same `from_time`, `to_time`, `where`, `sort_by`, `sort_order`,
+`page_size` and `required_fields`, and `cursor=<next_cursor>`. The cursor is a page token
+bound to the query, so a cursor replayed under a different query is refused.
 
-- The default order (`start_timestamp`, newest first) pages by keyset, with no depth limit.
-- Any other `sort_by` reaches at most 1000 rows deep and then returns
-  `notice=ranked_depth_cap`. Narrow the window or add a filter instead of paging past it.
-- `page_size` defaults to 10 and is clamped to 200. The Data Explorer List panel uses 50.
+- Paging is page-based with no depth limit, for every `sort_by`. There is no keyset.
+- `page_size` defaults to 10 and is clamped to 200. The Data Explorer List panel loads 50
+  rows per page.
 
 **What a row is**
 
-- Sessions and views are deduplicated (read `FINAL`). The other types keep one row per id.
-- Live (still open) views are left out, as are views of system sessions.
+- Rows match the RUM page tables. Sessions and views are deduplicated. Live (still open)
+  views are listed.
+- Actions, errors, resources and long tasks are grouped by id: one row per id, start is the
+  first occurrence, resource durations are medians and long-task durations are averages.
 - `rum_error` lists only errors (`type = 3`).
 - Blob fields cannot be listed or sorted by: `error_stack`, `handling_stack`, `threads`,
   `graphql`, `display`, `tags`.
-- Strings are cut at 2048 characters.
+- Each cell in the TSV output is cut at 2048 bytes. The list API itself does not cut strings.
 
-**Window.** A `from_time` older than raw retention (30 days for sessions and views, 7 days
-for the rest) is moved up to the retention edge, and the header says `window_clamped=true`.
-A window entirely older than retention is refused.
+**Window.** The window is clamped and snapped by the RUM data window. A `from_time` older
+than raw retention (30 days for sessions and views, 7 days for the rest) is moved up to the
+retention edge, and the window widens to the bucket boundaries of the RUM data. The header
+says `window_clamped=true` when the window changed. A window entirely older than retention
+is left as asked.
 
-**Too much data.** A read that touches too much data fails with a message to narrow the
-time range or add a filter. Do the same: shorten the window or filter on `application_id`,
-`env` or `session_id`.
+**No read-budget errors.** The list reads have no read-budget limit. A slow read can still
+time out; shorten the window or filter on `application_id`, `env` or `session_id`.
 
 ## WHERE Syntax
 
@@ -299,8 +305,8 @@ with `analyze-telemetry` first, then translate it.
   `rum_resource` and `rum_long_task`, and 30 days for `rum_session` and `rum_view`, by
   default. A longer window returns only what is still stored (`search-rum` reports it as
   `window_clamped=true`); deployments can change the retention.
-- **Row reads are bounded.** `search-rum` returns at most 200 rows a call, has no total,
-  and reaches 1000 rows deep on any non-time sort. For questions that are a number,
+- **Row reads are bounded per call.** `search-rum` returns at most 200 rows a call and has
+  no total. Paging has no depth limit. For questions that are a number,
   aggregate instead.
 - **No alerts, SQL or SPL.** RUM is not a datasource for alert rules, `execute-sql` or
   `execute-spl`. Say so rather than approximating with logs.
