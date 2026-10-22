@@ -143,6 +143,8 @@ bound to the query, so a cursor replayed under a different query is refused.
 - `rum_error` lists only errors (`type = 3`).
 - Blob fields cannot be listed or sorted by: `error_stack`, `handling_stack`, `threads`,
   `graphql`, `display`, `tags`.
+- Array fields (`service`, `state`, `city`, `network_connectivity`, `ip`, `action_id`) cannot be
+  sorted by.
 - Each cell in the TSV output is cut at 2048 bytes. The list API itself does not cut strings.
 
 **Window.** The window is clamped and snapped by the RUM data window. A `from_time` older
