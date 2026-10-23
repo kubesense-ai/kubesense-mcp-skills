@@ -478,6 +478,8 @@ ever reads one, drops back to the panel scheme. Full shape in
 - Attribute keys are prefixed `@_@`, e.g. `"@_@user.id": ["abc"]`.
 - Exclusion is a `-` prefix on the **value**: `{"namespace": ["-kube-system"]}`.
 - A `$name` value is a dashboard-variable reference.
+- A `"$$name": ["$$name"]` entry is a field reference: the variable's field, filtered to
+  its selection. See [references/variables-and-rows.md](./references/variables-and-rows.md).
 - On a **metrics** query, a `~` prefix makes the value a regex, and `-~` a negated one:
   `{"namespace": ["~kube-.*"], "pod": ["-~test-.*"]}` renders
   `namespace=~"kube-.*", pod!~"test-.*"`. `-` alone gives `!=`, so `{"container": ["-"]}`
@@ -631,7 +633,8 @@ document in place and keeps everything you never saw.
 - `preset_version` — pass it back unchanged as `preset_version`. **Required** with
   `panel_operations`.
 - `rendered_promql` — on a builder-mode metrics query, the PromQL the panel runs (the
-  stored `promql` is empty in builder mode). Read-only: it is not part of the stored query,
+  stored `promql` is empty in builder mode), with `$$name` filters expanded to
+  `<field>="$name"`. Read-only: it is not part of the stored query,
   so never send it back in a panel patch.
 
 Each operation is one of:

@@ -127,6 +127,8 @@ report it. Call it before any cloud metric query: it gives the real `provider`,
 A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
 `$name`. Resolve those against the variables table and run it with `analyze-metrics`.
+A `$$name` elsewhere in a query (a filter key, an advanced query, a code-mode selector) is a
+field reference: `<that variable's field> = $name`, dropped when nothing is selected.
 
 **Identity**
 
