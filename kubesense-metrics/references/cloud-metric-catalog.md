@@ -2,12 +2,12 @@
 
 Metrics KubeSense pulls from cloud providers' own monitoring APIs — AWS CloudWatch,
 Google Cloud Monitoring, Azure Monitor, the MongoDB Atlas Administration API, the
-Confluent Cloud Metrics API, and Kong. They land in the same VictoriaMetrics instance
+Confluent Cloud Metrics API, and Kong. They land in the same metrics store
 as the Kubernetes metrics, but under a **completely different naming and label
 convention**, so nothing in the main catalog transfers.
 
-Source of truth: `kubecol/controller/db/victoriametrics/vm_writer.go` (the label set)
-and `kubecol/controller/cloud/*` (the metric definitions).
+Source of truth: kubecol's metrics writer (the label set) and
+`kubecol/controller/cloud/*` (the metric definitions).
 
 ---
 
@@ -53,6 +53,11 @@ Kubernetes label namespace entirely; a selector copied from a kube-state-metrics
 matches nothing here.
 
 ## Discovery
+
+Start with the `list-cloud-integrations` tool. It answers the first three questions below
+in one call — which providers and accounts exist, what state each is in, and which
+resource types are reporting, with a resource count — from the account table and the
+last hour of data. Use the PromQL below for the rest: metric names, dimensions, resources.
 
 `get-available-metrics` and `get-metric-labels` are the wrong tools for cloud metrics:
 the first returns one name (`kubesense_cloud_resource_metric`) no matter how many
@@ -162,7 +167,7 @@ types (`target_group`, `storage_type` and `filter_id` on S3, `operation` on Dyna
 > | RDS Performance Insights (`db.*`, `os.*`) | `RdsInstance` |
 >
 > There is no `resource_type="PerformanceInsights"`, no `"NetworkLoadBalancer"`, and no
-> `"MskBroker"` in VictoriaMetrics.
+> `"MskBroker"` in the metrics store.
 
 | `resource_type` | Core metrics (Expanded tier adds more) |
 |---|---|
@@ -352,7 +357,7 @@ Expanded adds connection-state gauges, per-status-class counts (`kong.service.4x
 `control_plane`. Self-managed gateways need the Prometheus plugin enabled; without it
 nothing is published.
 
-## What is *not* in VictoriaMetrics
+## What is *not* in the metrics store
 
 Per-query database telemetry — GCP Cloud SQL **Query Insights** and AWS RDS
 **Performance Insights top-N queries** — is too high-cardinality for a metric series

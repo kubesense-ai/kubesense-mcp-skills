@@ -39,6 +39,7 @@ Query keys are single-letter labels: `A`, `B`, `C`, …
 |---|---|
 | logs | `"selectedMode": "logs"` |
 | traces | `"selectedMode": "traces"` |
+| events | `"selectedMode": "events"` (custom events: GitHub, CI, deploys; fields from `get-fields` with `signal: "events"`) |
 | metrics | `"selectedMode": "metrics"` |
 | formula | `"query_type": "formula"` (or `"queryType": "formula"`) |
 
