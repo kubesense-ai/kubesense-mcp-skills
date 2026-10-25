@@ -43,6 +43,32 @@ A variable is referenced as `$name` in a query `filters` value:
 { "namespace": ["$service"] }
 ```
 
+### Field references (`$$name`)
+
+`$$name` stands for the whole condition: the variable's `fieldMeta.field` as the key, its
+selection as the values. Prefer it whenever the filter key is the same field the variable
+lists — it cannot drift from the variable's field.
+
+```json
+{ "$$namespace": ["$$namespace"], "phase": ["Running"] }
+```
+
+With variable `namespace` (`fieldMeta.field: "namespace"`) and `kubesense` selected, that
+renders `{namespace="kubesense", phase="Running"}`.
+
+- The **key** makes it a field reference; write `["$$name"]` as the value, as the UI does.
+  `{"namespace": ["$$namespace"]}` is not one — there the value is read as a literal `$`
+  followed by `$namespace`.
+- Only `logs`, `traces` and `metrics` variables have a field. A `$$name` naming a `textbox`
+  or `custom` variable, or no variable at all, is silently dropped from the query.
+- An attribute field (`is_attribute: true`) expands to the `@_@` key for you.
+- Nothing selected → the condition is dropped, not matched against an empty set.
+- It also works inside `filters.advanced_query` (`"status = error AND $$namespace"` runs as
+  `status = error AND namespace IN (…)`) and inside a code-mode PromQL selector
+  (`kube_pod_status_phase{$$namespace, phase="Running"}`). Outside `{…}` in PromQL it is not
+  expanded.
+- Not expanded in SQL or SPL panels.
+
 A metrics query's own `variables` key is **auto-derived** from its filters and promql — do
 not set it by hand, anything you supply is overwritten.
 
