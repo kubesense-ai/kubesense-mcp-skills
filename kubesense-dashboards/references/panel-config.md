@@ -28,7 +28,7 @@ the default. Unknown keys are stripped.
 | `step` | `"auto"` \| **positive integer** | `auto` |
 | `thresholds` | array, see below | one default entry |
 | `thresholdDisplayMode` | see below | `off` |
-| `valueOptions` | `{show, calculation}` | `{show:"calculate",calculation:"last"}` |
+| `valueOptions` | `{show, calculation}` | `{show:"calculate"}` |
 | `colorScheme` | 5-variant union, see below | `{type:"palette",palette:"default"}` |
 | `tableSettings` | `{columnWidths: Record<string, number>}` | `{columnWidths:{}}` |
 | `alignColumns` | array, see below | `[]` |
@@ -127,16 +127,18 @@ otherwise (stat panels always carry a default base threshold) → the panel `col
 { "show": "calculate", "calculation": "last" }
 ```
 
-`show` is the literal `"calculate"`. `calculation` — 11 values:
+`show` is the literal `"calculate"`. `calculation` is optional, with 10 values:
 
 ```
-mean | standard_deviation | sum | max | min | median | last | first | range | min_above_zero | total
+mean | standard_deviation | sum | max | min | median | last | first | range | min_above_zero
 ```
 
-`total` ("Whole range") computes one exact aggregate over the whole time range instead of
-reducing the buckets, so a unique count or percentile is right. Use it on RUM, logs, traces
-and events stat panels. Metrics queries cannot compute it; a panel with a metrics query
-renders it as `last`.
+Leave `calculation` unset for an exact number over the whole range. Empty means "Whole range":
+the webapp sends `aggregator: "total"` for ClickHouse-backed queries (RUM, logs, traces,
+events, synthetics) and the server computes one aggregate over the whole time range, so a
+unique count or percentile is right. Any `calculation` you set reduces the per-bucket values
+instead. Metrics panels treat empty as `last`. `"total"` is not a valid value and fails
+validation.
 
 ## `alignColumns[]`
 

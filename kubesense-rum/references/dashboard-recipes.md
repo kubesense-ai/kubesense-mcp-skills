@@ -13,26 +13,28 @@ Fragments below show only the fields that matter. Add `label`, `columnFields: []
 `{"selectedMode": "formula", "label": "C", "expression": "..."}` and comes after the queries
 it uses.
 
-## Exact single numbers: calculation `total`
+## Exact single numbers: leave `calculation` unset
 
 A stat panel reduces a range query's per-bucket values to one number. With `mean`, `sum` or
 `last` that overcounts uniques (a user seen in two buckets counts twice) and averages
-percentiles (the mean of per-bucket p75s is not the p75). Set
-`config.valueOptions.calculation` to **`total`** instead. Each query is then sent with
-`aggregator: "total"`, and the server computes the value over the whole range in one
-aggregate, alongside the range series that still draws the trend. Formulas on a `total`
-stat use those exact scalars.
+percentiles (the mean of per-bucket p75s is not the p75). Leave
+`config.valueOptions.calculation` **unset** instead. Empty means "Whole range": each query is
+sent with `aggregator: "total"`, and the server computes the value over the whole range in
+one aggregate, alongside the range series that still draws the trend. Formulas on a
+whole-range stat use those exact scalars. Any `calculation` you do set (`mean`, `sum`, `last`
+and so on) reduces the per-bucket values instead. Metrics panels treat empty as `last`.
+`"total"` is not a valid `calculation` value.
 
 ```json
 {
   "panelType": "stat",
-  "config": { "valueOptions": { "show": "calculate", "calculation": "total" } },
+  "config": { "valueOptions": { "show": "calculate" } },
   "queries": [ { "...": "..." } ]
 }
 ```
 
-Use `total` for anything distinct or percentile: `unique_count`, `p50` to `p99`. For a plain
-`row_count` or `sum`, `sum` gives the same number. `total` applies to ClickHouse sources
+Leave it unset for anything distinct or percentile: `unique_count`, `p50` to `p99`. For a plain
+`row_count` or `sum`, `sum` gives the same number. The whole-range aggregate applies to ClickHouse sources
 (RUM, logs, traces, events), not to metrics queries. It also applies to a grouped
 `table` or `topList` panel's per-group value; a group the whole-range query ranks outside
 its cap shows no value.
@@ -65,7 +67,7 @@ a unitless score, not a duration: p75 of `cls` needs no unit.
 
 ## Crash-free users %
 
-Formula `(1 - A/B) * 100` with calculation `total` (stat panel, unit `percentage`):
+Formula `(1 - A/B) * 100` with `calculation` unset (stat panel, unit `percentage`):
 
 | Query | Event | WHERE | Aggregation |
 |---|---|---|---|
@@ -185,7 +187,7 @@ field catalog lists no enum values, so confirm with a group-by on `error_categor
 | B | `session` | none | `row_count` |
 | C | formula | | `(A/B)*100` |
 
-ANR-free sessions % is `(1 - A/B) * 100`. Use calculation `total` on the stat. B must carry
+ANR-free sessions % is `(1 - A/B) * 100`. Leave `calculation` unset on the stat. B must carry
 the same `env` / `application_id` filter as A.
 
 ## Sessions by city, state or service
@@ -203,5 +205,5 @@ views and count the distinct sessions:
 }
 ```
 
-A session that visits views in two cities counts once in each. With calculation `total` on
+A session that visits views in two cities counts once in each. With `calculation` unset on
 a `table` or `topList` panel the per-group value is the exact distinct count.
