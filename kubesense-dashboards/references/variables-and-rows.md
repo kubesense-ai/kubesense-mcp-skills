@@ -135,9 +135,11 @@ A `rum` variable lists the top 50 values of one RUM field over the dashboard tim
 
 - `rumEventType` is required. Without it, or with any other value, the variable fails
   validation and the whole `variables` array is dropped.
-- `fieldMeta.field` must be a groupable, non-numeric field of that event type: `get-fields`
-  with `signal: "rum_<rumEventType>"`. Unit twins such as `loading_time_ms` are filter-only
-  and cannot be a variable's field. Prefer `application_id`, `browser_name`, `device_type`,
+- `fieldMeta.field` must be a filterable, non-numeric field of that event type: `get-fields`
+  with `signal: "rum_<rumEventType>"`. Free-search ids and unit twins such as
+  `loading_time_ms` cannot be a variable's field. List fields such as session `state`, `city`
+  and `service` can: their values are listed one by one, and a selection matches rows whose
+  list contains it. Prefer `application_id`, `browser_name`, `device_type`,
   `country`; `app_name` is in the catalog but empty in stored data.
 - `filters` scopes which rows the values come from, as field chips
   (`{"application_id": ["shop"]}`, `MFD`) or typed (`filterMode: "ADVANCED_QUERY"`,
