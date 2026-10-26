@@ -326,7 +326,7 @@ def render(catalogs, nanos):
         lines.append("")
         if unit_bases:
             lines.append(
-                "Duration variants: `<name>_ms` and `<name>_s` (number; filter and measure only) for "
+                "Duration variants: `<name>_ms` and `<name>_s` (number; filter-only, never aggregated or grouped) for "
                 + ", ".join(f"`{n}`" for n in unit_bases)
                 + "."
             )

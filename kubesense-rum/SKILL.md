@@ -62,7 +62,7 @@ before the call, and `get-fields` as the authority for the deployment you are ta
   LIKE has a set that includes `LIKE` / `ILIKE`; an exact field such as `user_email` does
   not. Trust the set over any assumption about the field.
 - A trailing `notes` column appears when some field has a note, for example
-  `measure-only: aggregate or filter it, never group by it (milliseconds); platform: browser`
+  `filter-only: use it in WHERE only (milliseconds); aggregate the base field lcp instead; platform: browser`
   on `lcp_ms` and `filter-only: not groupable; platform: browser` on `lcp_target_selector`.
 - `enum_values` carries `severity`'s `crash` and `error`.
 - Pass `search` to narrow the list (`search=lcp` returns `lcp`, `lcp_ms`, `lcp_s` and
@@ -107,9 +107,10 @@ Quote values that contain `/`, `:`, `%` or a space. Write `NOT (x IN (...))`, no
    cannot be grouped or measured.
 4. **Durations are nanoseconds.** Raw columns (`lcp`, `duration`, `loading_time`,
    `time_spent`, …) are stored and returned in nanoseconds, and cannot be a group-by.
-   Each has an `_ms` and an `_s` twin (`lcp_ms`, `duration_s`) that you can filter on and
-   measure in the unit you read. Prefer the twin everywhere: `lcp_ms > 2500` filters at
-   2.5 seconds. The twins are measure and filter only, never a group-by.
+   Each has an `_ms` and an `_s` twin (`lcp_ms`, `duration_s`) that is **filter-only**: use
+   it in `where` (`lcp_ms > 2500` filters at 2.5 seconds), never as an aggregation field,
+   group-by or list column. To aggregate a duration, use the base field (`p75` of `lcp`);
+   the result is nanoseconds.
 5. **Group-by is `no` for free-search ids and text** (`session_id`, `view_id`,
    `view_url`, `error_message`, `trace_id`, …). Group by a low-cardinality field instead.
 6. **`feature_flag.<key>`** filters on every event type. It groups or measures only on
@@ -149,7 +150,7 @@ Set `selectedMode` to the signal. Omitting it makes the sub-query a metrics quer
       "where": "browser_name = Chrome",
       "group_by_fields": [ { "field": "view_name", "is_attribute": false } ],
       "value_operation": "p90",
-      "fields": [ { "field": "lcp_ms", "is_attribute": false } ],
+      "fields": [ { "field": "lcp", "is_attribute": false } ],
       "sort_direction": "DESC",
       "limit": 10
     }
@@ -193,7 +194,7 @@ Set `selectedMode` to the signal. Omitting it makes the sub-query a metrics quer
 **Slowest hosts by p95 request time, failed requests only**
 `selectedMode: rum_resource`, `where: "status_code >= 500"`,
 `group_by_fields: [{"field":"resource_host"}]`, `value_operation: p95`,
-`fields: [{"field":"duration_ms"}]`
+`fields: [{"field":"duration"}]` (nanoseconds)
 
 **Errors by feature flag value**
 `selectedMode: rum_error`, `group_by_fields: [{"field":"feature_flag.new_checkout"}]`,
@@ -236,7 +237,7 @@ Seen from a live server:
 | Message | Cause |
 |---|---|
 | `unknown field "services" for signal=rum_session ...` | A storage name; type the catalog name (`service`) |
-| `analysis failed: cannot group by lcp_ms` | Rule 4: `_ms` / `_s` twins are measure and filter only |
+| `analysis failed: cannot group by lcp_ms` | Rule 4: `_ms` / `_s` twins are filter-only; aggregate the base field |
 | `analysis failed: LIKE is not supported on user_email; use = or IN` | Rule 1 |
 | `operator "LIKE" not allowed for rum_view attribute field "plan" — use one of: EQ, NEQ, ...` | Rule 2 |
 | `rbac(rum): this API key does not have access to this resource` | The key lacks the RUM module |

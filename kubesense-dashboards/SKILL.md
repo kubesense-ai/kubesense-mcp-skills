@@ -447,10 +447,11 @@ query (so `columnFields` is required), with these differences:
 - Fields and rules come from [kubesense-rum](../kubesense-rum/SKILL.md): `get-fields` with
   the matching signal, LIKE only on low-cardinality fields, array fields filter-only, no
   group-by on a raw duration, `feature_flag.<key>` group-by on view and error only.
-- **Measure durations through the `_ms` / `_s` twins** (`lcp_ms`, `duration_ms`). Raw
-  columns are nanoseconds. Set `fieldConfig.unit` to `milliseconds` for an `_ms` measure
-  and `seconds` for `_s`, so the chart labels the value. The editor sets it when a user
-  picks the measure; set it yourself in generated JSON.
+- **Measure durations on the base field** (`lcp`, `duration`), which is stored in
+  nanoseconds. The `_ms` / `_s` twins (`lcp_ms`) are filter-only: use them in the
+  WHERE clause, never as an aggregation field or group-by. Leave `fieldConfig.unit`
+  unset: the chart detects a base duration and shows it as a readable duration. A
+  fixed `nanoseconds` unit prints the raw count (`12500000000.00ns`).
 - Numeric aggregations (`avg`, `sum`, `min`, `max`, `p50`, `p75`, `p90`, `p95`, `p99`)
   need `fields` with `type: "float"`, as on logs.
 - RUM is not offered on alert rules; see [kubesense-alerts](../kubesense-alerts/SKILL.md).
@@ -465,10 +466,9 @@ query (so `columnFields` is required), with these differences:
   "filters": { "advanced_query": ["browser_name = Chrome AND env = production"] },
   "aggregation": {
     "function": "p90",
-    "fields": [ { "field": "lcp_ms", "type": "float", "is_attribute": false } ]
+    "fields": [ { "field": "lcp", "type": "float", "is_attribute": false } ]
   },
-  "groupBy": [ { "field": "view_name", "type": "string", "is_attribute": false } ],
-  "fieldConfig": { "unit": "milliseconds" }
+  "groupBy": [ { "field": "view_name", "type": "string", "is_attribute": false } ]
 }
 ```
 
