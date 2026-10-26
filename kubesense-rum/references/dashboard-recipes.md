@@ -37,12 +37,6 @@ Use `total` for anything distinct or percentile: `unique_count`, `p50` to `p99`.
 `table` or `topList` panel's per-group value; a group the whole-range query ranks outside
 its cap shows no value.
 
-> Status: `total` is part of the kubeapi contract (`aggregator: "total"`). The webapp
-> `VALUE_CALCULATION_OPTIONS` and the `valueOptions.calculation` zod enum on this branch
-> list only the ten values in [panel-config](../../kubesense-dashboards/references/panel-config.md#valueoptions)
-> until the webapp change lands; an unknown value falls back to `last`. Check that the
-> deployed webapp accepts `total` before you rely on it in saved dashboards.
-
 **Unique users** (`user_id` on `rum_session`, also on every other event type):
 
 ```json

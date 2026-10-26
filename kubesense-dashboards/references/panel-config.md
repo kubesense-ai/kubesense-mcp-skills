@@ -127,11 +127,16 @@ otherwise (stat panels always carry a default base threshold) → the panel `col
 { "show": "calculate", "calculation": "last" }
 ```
 
-`show` is the literal `"calculate"`. `calculation` — 10 values:
+`show` is the literal `"calculate"`. `calculation` — 11 values:
 
 ```
-mean | standard_deviation | sum | max | min | median | last | first | range | min_above_zero
+mean | standard_deviation | sum | max | min | median | last | first | range | min_above_zero | total
 ```
+
+`total` ("Whole range") computes one exact aggregate over the whole time range instead of
+reducing the buckets, so a unique count or percentile is right. Use it on RUM, logs, traces
+and events stat panels. Metrics queries cannot compute it; a panel with a metrics query
+renders it as `last`.
 
 ## `alignColumns[]`
 
