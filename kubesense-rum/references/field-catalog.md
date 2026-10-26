@@ -10,7 +10,8 @@ The fields each RUM event type accepts in `where`, `group_by_fields`, `fields` a
 - **LIKE**: `yes` means `LIKE` / `ILIKE` are accepted. `no` means the column is not
   low-cardinality, so use `=` or `IN`. `-` means not a string.
 - **Group**: `yes` means the field can be a `group_by_fields` entry. Array fields,
-  free-search ids and text, raw nanosecond durations and `_ms` / `_s` fields are `no`.
+  free-search ids and text (except `error_message`, `fingerprint`, `issue_id`, `view_url`
+  and `resource_url`, which group on a trimmed value), raw nanosecond durations and `_ms` / `_s` fields are `no`.
 - **Platform**: `browser` or `mobile` means only that platform's SDK sends the field.
   Empty means every platform. Explorer queries do not enforce it: a field the
   application's SDK never sends is just empty.
@@ -134,7 +135,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`.
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | no |  |  | list; filter only (`=` is membership) |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | no |  |  | free search |
+| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
 | `view_name` | string | yes | yes |  |  |  |
 | `loading_type` | string | yes | yes |  |  |  |
 | `lcp_target_selector` | string | no | no | browser |  | free search |
@@ -229,7 +230,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | yes |  |  |  |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | no |  |  | free search |
+| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
 | `view_name` | string | no | yes |  |  |  |
 | `action_type` | string | yes | yes |  |  |  |
 | `action_name` | string | yes | yes |  |  |  |
@@ -296,7 +297,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | yes |  |  |  |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | no |  |  | free search |
+| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
 | `view_name` | string | no | yes |  |  |  |
 | `action_id` | string | no | no |  | `actions_id` | list; filter only (`=` is membership); free search |
 | `resource_method` | string | yes | yes |  |  |  |
@@ -304,7 +305,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `clustered_resource` | string | no | yes |  |  |  |
 | `resource_host` | string | no | yes |  |  |  |
 | `provider_type` | string | no | yes |  |  |  |
-| `resource_url` | string | no | no |  |  | free search |
+| `resource_url` | string | no | yes |  |  | free search; group label is the path without query string |
 | `resource_path` | string | no | no |  |  | free search |
 | `status_code` | number | - | yes |  |  |  |
 | `duration` | number | - | no |  |  | nanoseconds; use `duration_ms` / `_s` to filter |
@@ -314,11 +315,11 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `source_type` | string | yes | yes |  |  |  |
 | `status` | string | yes | yes |  |  |  |
 | `error_id` | string | no | no |  |  | free search |
-| `error_message` | string | no | no |  |  | free search |
-| `fingerprint` | string | no | no |  |  | free search |
+| `error_message` | string | no | yes |  |  | free search; group label is the first 200 characters |
+| `fingerprint` | string | no | yes |  |  | free search; groupable |
 | `handling` | string | no | yes |  |  |  |
 | `is_crash` | boolean | - | yes |  |  |  |
-| `issue_id` | string | no | no |  |  | free search |
+| `issue_id` | string | no | yes |  |  | free search; groupable |
 | `severity` | string | no | yes |  | `is_crash` | values: `crash` `error` |
 | `view_in_foreground` | boolean | - | yes | mobile |  |  |
 | `was_truncated` | boolean | - | yes |  |  |  |
@@ -375,7 +376,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | yes |  |  |  |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | no |  |  | free search |
+| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
 | `view_name` | string | no | yes |  |  |  |
 | `action_id` | string | no | no |  | `actions_id` | list; filter only (`=` is membership); free search |
 | `resource_method` | string | yes | yes |  |  |  |
@@ -383,7 +384,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `clustered_resource` | string | no | yes |  |  |  |
 | `resource_host` | string | no | yes |  |  |  |
 | `provider_type` | string | no | yes |  |  |  |
-| `resource_url` | string | no | no |  |  | free search |
+| `resource_url` | string | no | yes |  |  | free search; group label is the path without query string |
 | `resource_path` | string | no | no |  |  | free search |
 | `status_code` | number | - | yes |  |  |  |
 | `duration` | number | - | no |  |  | nanoseconds; use `duration_ms` / `_s` to filter |
@@ -464,7 +465,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | yes |  |  |  |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | no |  |  | free search |
+| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
 | `view_name` | string | no | yes |  |  |  |
 | `action_id` | string | no | no |  | `actions_id` | list; filter only (`=` is membership); free search |
 | `duration` | number | - | no |  |  | nanoseconds; use `duration_ms` / `_s` to filter |

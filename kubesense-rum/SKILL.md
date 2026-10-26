@@ -196,7 +196,12 @@ Quote values that contain `/`, `:`, `%` or a space. Write `NOT (x IN (...))`, no
    group-by or list column. To aggregate a duration, use the base field (`p75` of `lcp`);
    the result is nanoseconds.
 5. **Group-by is `no` for free-search ids and text** (`session_id`, `view_id`,
-   `view_url`, `error_message`, `trace_id`, …). Group by a low-cardinality field instead.
+   `trace_id`, …). Group by a low-cardinality field instead. Five are groupable and return
+   the top N groups (the page size): `error_message` (grouped by its first 200
+   characters), `fingerprint`, `issue_id`, and `view_url` / `resource_url` (grouped by the
+   path, without query string or fragment). Filters still read the full value, so a URL
+   group label is a path, and `view_url = "<path>"` matches only URLs that have no query
+   string.
 6. **`feature_flag.<key>`** filters on every event type. It groups or measures only on
    `rum_view` and `rum_error`, where the flag value is stored on the row. On the other
    four it is stored per session, so a group-by there is refused. Keys are
@@ -301,6 +306,10 @@ A panel with `selectedMode: "rum_view"` fails validation, and `"rum"` without
 `rumEventType` is refused on save. The panel shape, with a `_ms` measure and its unit, is
 in **[kubesense-dashboards](../kubesense-dashboards/SKILL.md#rum-query)**. Test the query
 with `analyze-telemetry` first, then translate it.
+
+Panel recipes for the usual RUM questions (unique users, crash-free users, Web Vitals
+good/poor shares, Apdex, top errors and URLs, ANR rate) are in
+**[references/dashboard-recipes.md](./references/dashboard-recipes.md)**.
 
 ## Limits
 
