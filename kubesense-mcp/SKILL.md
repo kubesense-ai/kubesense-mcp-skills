@@ -270,7 +270,7 @@ signal.
 
 **RUM** takes the same operators but differs on three points: `LIKE`
 and `ILIKE` work only on low-cardinality fields (the catalog's `LIKE` column), `@attr`
-filters never take `LIKE`, and raw durations are nanoseconds with `_ms` / `_s` twins.
+filters never take `LIKE`, and raw durations are nanoseconds, and their `_ms` / `_s` twins are filter-only.
 See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 
 ## Choosing a Tool

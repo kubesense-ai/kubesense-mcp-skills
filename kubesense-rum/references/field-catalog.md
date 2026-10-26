@@ -83,7 +83,7 @@ The fields each RUM event type accepts in `where`, `group_by_fields`, `fields` a
 | `slow_rendered_count` | number | - | yes | mobile |  |  |
 | `frustration_count` | number | - | yes |  |  |  |
 
-Duration variants: `<name>_ms` and `<name>_s` (number; filter and measure only) for `time_spent`.
+Duration variants: `<name>_ms` and `<name>_s` (number; filter-only, never aggregated or grouped) for `time_spent`.
 
 Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`.
 
@@ -178,7 +178,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`.
 | `load_event` | number | - | no | browser |  | nanoseconds; use `load_event_ms` / `_s` to filter |
 | `first_byte` | number | - | no | browser |  | nanoseconds; use `first_byte_ms` / `_s` to filter |
 
-Duration variants: `<name>_ms` and `<name>_s` (number; filter and measure only) for `view_time_spent`, `network_settled_time`, `interaction_to_next_view_time`, `loading_time`, `fcp`, `lcp`, `fid`, `fit`, `inp`, `inp_time`, `cls_time`, `dom_complete`, `dom_content_loaded`, `dom_interactive`, `load_event`, `first_byte`.
+Duration variants: `<name>_ms` and `<name>_s` (number; filter-only, never aggregated or grouped) for `view_time_spent`, `network_settled_time`, `interaction_to_next_view_time`, `loading_time`, `fcp`, `lcp`, `fid`, `fit`, `inp`, `inp_time`, `cls_time`, `dom_complete`, `dom_content_loaded`, `dom_interactive`, `load_event`, `first_byte`.
 
 Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longitude`, `latitude`, `display`.
 
@@ -245,7 +245,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `long_task_count` | number | - | yes |  |  |  |
 | `resource_count` | number | - | yes |  |  |  |
 
-Duration variants: `<name>_ms` and `<name>_s` (number; filter and measure only) for `loading_time`.
+Duration variants: `<name>_ms` and `<name>_s` (number; filter-only, never aggregated or grouped) for `loading_time`.
 
 Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longitude`, `latitude`.
 
@@ -324,7 +324,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `was_truncated` | boolean | - | yes |  |  |  |
 | `time_since_app_start` | number | - | no | mobile |  | nanoseconds; use `time_since_app_start_ms` / `_s` to filter |
 
-Duration variants: `<name>_ms` and `<name>_s` (number; filter and measure only) for `duration`, `time_since_app_start`.
+Duration variants: `<name>_ms` and `<name>_s` (number; filter-only, never aggregated or grouped) for `duration`, `time_since_app_start`.
 
 Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longitude`, `latitude`, `error_stack`, `handling_stack`, `threads`.
 
@@ -413,7 +413,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `redirect_start` | number | - | no | browser |  | nanoseconds; use `redirect_start_ms` / `_s` to filter |
 | `redirect_duration` | number | - | no | browser |  | nanoseconds; use `redirect_duration_ms` / `_s` to filter |
 
-Duration variants: `<name>_ms` and `<name>_s` (number; filter and measure only) for `duration`, `worker_start`, `worker_duration`, `dns_start`, `dns_duration`, `connect_start`, `connect_duration`, `ssl_start`, `ssl_duration`, `first_byte_start`, `first_byte_duration`, `download_start`, `download_duration`, `redirect_start`, `redirect_duration`.
+Duration variants: `<name>_ms` and `<name>_s` (number; filter-only, never aggregated or grouped) for `duration`, `worker_start`, `worker_duration`, `dns_start`, `dns_duration`, `connect_start`, `connect_duration`, `ssl_start`, `ssl_duration`, `first_byte_start`, `first_byte_duration`, `download_start`, `download_duration`, `redirect_start`, `redirect_duration`.
 
 Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longitude`, `latitude`, `graphql`.
 
@@ -476,6 +476,6 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `render_start` | number | - | no | browser |  | nanoseconds; use `render_start_ms` / `_s` to filter |
 | `style_and_layout_start` | number | - | no | browser |  | nanoseconds; use `style_and_layout_start_ms` / `_s` to filter |
 
-Duration variants: `<name>_ms` and `<name>_s` (number; filter and measure only) for `duration`, `blocking_duration`, `render_start`, `style_and_layout_start`.
+Duration variants: `<name>_ms` and `<name>_s` (number; filter-only, never aggregated or grouped) for `duration`, `blocking_duration`, `render_start`, `style_and_layout_start`.
 
 Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longitude`, `latitude`, `first_ui_event_timestamp`.
