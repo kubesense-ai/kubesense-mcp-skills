@@ -141,8 +141,13 @@ panel's saved sort order and columns, from its first visible query. It returns a
 rows, and `truncated=true` means the panel has more. SPL and SQL panels run their saved
 text, with dashboard variables substituted and the `$__timeFilter` / `$__clusters` macros
 expanded, and return one TSV block per query in the `execute-spl` / `execute-sql` format.
-The header shows the exact text that ran. Any other panel (hostMap, SLO, alert, synthetics
-monitor) returns an error that names the tool to use instead.
+The header shows the exact text that ran. SLO panels return what the widget shows: status
+counts (summary), the SLO table (list, at most 50 rows) or one SLO's compliance and error
+budget per window (single). They use the SLO's own windows, not `from_time` / `to_time`, and
+need SLO access. Alert panels return the rule's chart with its thresholds (graph, the
+engine's view of the rule's queries over the panel's window), the rule's state and active
+alerts (value), or the alert counts and active alerts matching the panel's filters (summary).
+Host map and synthetics monitor panels return an error that names the tool to use instead.
 
 A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
