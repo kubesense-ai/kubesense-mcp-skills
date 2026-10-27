@@ -458,6 +458,9 @@ query (so `columnFields` is required), with these differences:
 - Numeric aggregations (`avg`, `sum`, `min`, `max`, `p50`, `p75`, `p90`, `p95`, `p99`)
   need `fields` with `type: "float"`, as on logs.
 - RUM is not offered on alert rules; see [kubesense-alerts](../kubesense-alerts/SKILL.md).
+- Recipes (exact unique users and p75 with a `total` stat, crash-free users, Web Vital
+  good/poor shares, Apdex, top errors and URLs, ANR rate):
+  [kubesense-rum/references/dashboard-recipes.md](../kubesense-rum/references/dashboard-recipes.md).
 
 ```json
 {
