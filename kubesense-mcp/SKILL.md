@@ -136,8 +136,10 @@ variables and the exact query each label ran, so you can re-run one with `analyz
 over another range. A name that matches no panel, or several, returns the candidate
 panels. Pick one and retry by its exact name or address. It runs metrics, logs, traces,
 events, synthetics and formula queries on timeSeries, bar, stat, pie, topList, table and
-treemap panels. Any other panel (list, hostMap, SLO, alert, synthetics monitor, SPL or SQL)
-returns an error that names the tool to use instead.
+treemap panels. A list panel returns its rows (log lines, events or spans) as TSV, in the
+panel's saved sort order and columns, from its first visible query. It returns at most 50
+rows, and `truncated=true` means the panel has more. Any other panel (hostMap, SLO, alert,
+synthetics monitor, SPL or SQL) returns an error that names the tool to use instead.
 
 A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
