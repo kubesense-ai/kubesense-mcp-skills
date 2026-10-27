@@ -331,8 +331,9 @@ it, and drag-to-zoom is off on that panel. The panel shows a badge by its title.
 Do not set it on `hostMap` or `slo` panels, or on an `alert` panel whose widget is not
 `graph`: the webapp ignores it there and the panel follows the dashboard's time.
 `validate-dashboard-json` refuses an unknown key: `last_90d`, `today` and `yesterday` do not
-exist. `get-dashboard-details` reports the window as the panel's `time_frame`; re-run that
-panel's queries over it, not over the dashboard's range.
+exist. `get-dashboard-details` reports the window as the panel's `time_frame`.
+`run-dashboard-panel` always runs that panel over it. When you re-run its queries by hand,
+use that window, not the dashboard's range.
 
 ## `yAxisLabelFormatter` — all 199 values
 
