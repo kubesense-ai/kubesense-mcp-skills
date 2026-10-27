@@ -2,7 +2,7 @@
 name: kubesense-alerts
 description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes validate-alert-json for checking hand-built rule JSON, the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors. Also covers multi-query formula rules, composite AND/OR conditions (bands, cross-query joins with join_by), two-level warning/critical thresholds, the Alert. placeholder namespace, manual resolve, and maintenance windows.
 metadata:
-  version: "2.4.0"
+  version: "2.4.1"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels,composite-conditions
@@ -33,6 +33,7 @@ Two distinct jobs, don't confuse them:
 | "why did this fire but page nobody?" | channel cadence first, then whether a **maintenance window** covers it |
 | "put these rules in a list / folder" | UI-only grouping — no MCP surface, say so rather than guessing |
 | you hand-built rule JSON and want it checked | `validate-alert-json` before handing it over |
+| "alert on page load time / frontend errors / crashes" (RUM) | not supported: alert rules cover metrics, logs and traces only. Say so; offer a [dashboard panel](../kubesense-dashboards/SKILL.md#rum-query) over the RUM data instead, and do not approximate with logs |
 | "error budget", "burn rate", "are we meeting 99.9%" | [kubesense-slo](../kubesense-slo/SKILL.md) — burn-rate rules are generated from an SLO's `alert_types`, not hand-written |
 
 ## Reading Alerts
