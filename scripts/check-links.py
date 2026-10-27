@@ -13,7 +13,8 @@ FENCE = re.compile(r"^\s*```")
 
 
 def slug(heading):
-    h = re.sub(r"[`*_]", "", heading.strip().lower())
+    # GitHub keeps underscores in anchors: `by_count` -> by_count.
+    h = re.sub(r"[`*]", "", heading.strip().lower())
     h = re.sub(r"[^\w\s-]", "", h)
     return re.sub(r"\s", "-", h)
 
