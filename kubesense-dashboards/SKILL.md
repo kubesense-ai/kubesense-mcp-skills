@@ -29,6 +29,9 @@ Both go through the same server-side schema check, so a preset that passes
 - "Create a dashboard for…" / "Build a dashboard with panels for…" → `create-dashboard`
 - "Give me the dashboard JSON for…" → preset JSON
 - "Generate a dashboard preset" → preset JSON
+- "What does the X panel show" / "show me the X panel on the Y dashboard" →
+  `list-dashboards` for the id, then `run-dashboard-panel` with the panel's name. It runs
+  the saved queries with the dashboard's variables and the panel's time frame applied.
 - "Change / fix / add a panel to the X dashboard" → `get-dashboard-details`, then
   `update-dashboard` — see [Editing an existing dashboard](#editing-an-existing-dashboard)
 
