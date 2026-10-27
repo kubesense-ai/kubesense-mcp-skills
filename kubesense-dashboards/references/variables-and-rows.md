@@ -27,6 +27,7 @@ required — omit `variables`, `subGrids`, and `subGridLayout` entirely and they
 | `custom` | `options: string[]` with ≥ 1 entry |
 | `logs` / `traces` | `fieldMeta: {field, type, is_attribute}` — all three; optional `filters`, `filterMode` (`MFD`\|`ADVANCED_QUERY`). With `ADVANCED_QUERY`, the WHERE clause goes in `filters.advanced_query: ["<where>"]` |
 | `metrics` | `metric` (non-empty) **and** `fieldMeta`; **no `filterMode`** |
+| `rum` | `rumEventType` (`session`\|`view`\|`action`\|`error`\|`resource`\|`long_task`) **and** `fieldMeta`; optional `filters`, `filterMode` |
 
 `fieldMeta.type` and `fieldMeta.is_attribute` have no defaults — both must be present.
 
@@ -59,7 +60,7 @@ renders `{namespace="kubesense", phase="Running"}`.
 - The **key** makes it a field reference; write `["$$name"]` as the value, as the UI does.
   `{"namespace": ["$$namespace"]}` is not one — there the value is read as a literal `$`
   followed by `$namespace`.
-- Only `logs`, `traces` and `metrics` variables have a field. A `$$name` naming a `textbox`
+- Only `logs`, `traces`, `rum` and `metrics` variables have a field. A `$$name` naming a `textbox`
   or `custom` variable, or no variable at all, is silently dropped from the query.
 - An attribute field (`is_attribute: true`) expands to the `@_@` key for you.
 - Nothing selected → the condition is dropped, not matched against an empty set.
@@ -113,6 +114,40 @@ A `metrics` variable populated from a label on a metric — note it needs both `
   }
 }
 ```
+
+A `rum` variable lists the top 50 values of one RUM field over the dashboard time range:
+
+```json
+{
+  "name": "app",
+  "description": "",
+  "meta": {
+    "variableType": "rum",
+    "rumEventType": "view",
+    "fieldMeta": { "field": "application_id", "type": "string", "is_attribute": false },
+    "value": [],
+    "selectType": "multiple",
+    "filters": {},
+    "filterMode": "MFD"
+  }
+}
+```
+
+- `rumEventType` is required. Without it, or with any other value, the variable fails
+  validation and the whole `variables` array is dropped.
+- `fieldMeta.field` must be a filterable, non-numeric field of that event type: `get-fields`
+  with `signal: "rum_<rumEventType>"`. Free-search ids and unit twins such as
+  `loading_time_ms` cannot be a variable's field. List fields such as session `state`, `city`
+  and `service` can: their values are listed one by one, and a selection matches rows whose
+  list contains it. Prefer `application_id`, `browser_name`, `device_type`,
+  `country`; `app_name` is in the catalog but empty in stored data.
+- `filters` scopes which rows the values come from, as field chips
+  (`{"application_id": ["shop"]}`, `MFD`) or typed (`filterMode: "ADVANCED_QUERY"`,
+  `{"advanced_query": ["application_id = $app"]}`). A filter may reference another variable,
+  which makes this one **dependent**: a `dev` variable on `device_type` filtered by
+  `application_id = $app` lists only the chosen app's device types.
+- In a `rum` panel, filter with `application_id = $app` in `filters.advanced_query`, or use
+  `"$$app": ["$$app"]`.
 
 ## Sub-Grids (Rows)
 

@@ -28,7 +28,7 @@ the default. Unknown keys are stripped.
 | `step` | `"auto"` \| **positive integer** | `auto` |
 | `thresholds` | array, see below | one default entry |
 | `thresholdDisplayMode` | see below | `off` |
-| `valueOptions` | `{show, calculation}` | `{show:"calculate",calculation:"last"}` |
+| `valueOptions` | `{show, calculation}` | `{show:"calculate"}` |
 | `colorScheme` | 5-variant union, see below | `{type:"palette",palette:"default"}` |
 | `tableSettings` | `{columnWidths: Record<string, number>}` | `{columnWidths:{}}` |
 | `alignColumns` | array, see below | `[]` |
@@ -127,11 +127,18 @@ otherwise (stat panels always carry a default base threshold) → the panel `col
 { "show": "calculate", "calculation": "last" }
 ```
 
-`show` is the literal `"calculate"`. `calculation` — 10 values:
+`show` is the literal `"calculate"`. `calculation` is optional, with 10 values:
 
 ```
 mean | standard_deviation | sum | max | min | median | last | first | range | min_above_zero
 ```
+
+Leave `calculation` unset for an exact number over the whole range. Empty means "Whole range":
+the webapp sends `aggregator: "total"` for ClickHouse-backed queries (RUM, logs, traces,
+events, synthetics) and the server computes one aggregate over the whole time range, so a
+unique count or percentile is right. Any `calculation` you set reduces the per-bucket values
+instead. Metrics panels treat empty as `last`. `"total"` is not a valid value and fails
+validation.
 
 ## `alignColumns[]`
 
@@ -324,8 +331,9 @@ it, and drag-to-zoom is off on that panel. The panel shows a badge by its title.
 Do not set it on `hostMap` or `slo` panels, or on an `alert` panel whose widget is not
 `graph`: the webapp ignores it there and the panel follows the dashboard's time.
 `validate-dashboard-json` refuses an unknown key: `last_90d`, `today` and `yesterday` do not
-exist. `get-dashboard-details` reports the window as the panel's `time_frame`; re-run that
-panel's queries over it, not over the dashboard's range.
+exist. `get-dashboard-details` reports the window as the panel's `time_frame`.
+`run-dashboard-panel` always runs that panel over it. When you re-run its queries by hand,
+use that window, not the dashboard's range.
 
 ## `yAxisLabelFormatter` — all 199 values
 

@@ -40,6 +40,7 @@ Query keys are single-letter labels: `A`, `B`, `C`, …
 | logs | `"selectedMode": "logs"` |
 | traces | `"selectedMode": "traces"` |
 | events | `"selectedMode": "events"` (custom events: GitHub, CI, deploys; fields from `get-fields` with `signal: "events"`) |
+| rum | `"selectedMode": "rum_session"`, `"rum_view"`, `"rum_action"`, `"rum_error"`, `"rum_resource"` or `"rum_long_task"` (fields from `get-fields` with the same signal; see [kubesense-rum](../../kubesense-rum/SKILL.md)) |
 | metrics | `"selectedMode": "metrics"` |
 | formula | `"query_type": "formula"` (or `"queryType": "formula"`) |
 
@@ -48,6 +49,10 @@ Query keys are single-letter labels: `A`, `B`, `C`, …
 > `datasource` field — the tool's own description shows
 > `{"datasource": "formula", "expression": "(A/B)*100"}`, which is **wrong**; `datasource`
 > is never read.
+>
+> **The RUM event type is in `selectedMode`**, as `rum_view`. A dashboard panel stores the
+> same query as `selectedMode: "rum"` plus `rumEventType: "view"`. Do not send the stored
+> form to `analyze-telemetry`, and do not send `rum_view` in a panel.
 >
 > **An omitted `selectedMode` silently defaults to `metrics`.** A logs sub-query missing it
 > is parsed as a metrics query and returns nothing useful. Always set it explicitly.
