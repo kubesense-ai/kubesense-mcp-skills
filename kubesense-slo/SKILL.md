@@ -33,7 +33,7 @@ Follow it in order. Steps 5 and 6 are the ones people skip, and they are the one
 catch an SLO that stored cleanly and evaluates nothing.
 
 1. **Discover.** Real metric names (`get-available-metrics`, `get-metric-labels`) and
-   real field names (`get-trace-or-log-fields`). Channel ids for the burn-rate alerts
+   real field names (`get-fields`). Channel ids for the burn-rate alerts
    (`list-notification-channels`). Alert rule uuids if it is an alert SLO.
 2. **Construct** the body — the type, the two queries, the window, `alert_types`.
 3. **Preview** with `POST /api/slo/preview`, knowing what preview does and does not
@@ -366,7 +366,7 @@ of "this number looks wrong".
 ## Rules
 
 1. Discover real metric and field names first (`get-available-metrics`,
-   `get-trace-or-log-fields`). Never invent one.
+   `get-fields`). Never invent one.
 2. Use the **alert engine's** field vocabulary in `unified_filter` — `app_service`,
    not `service`; `level`, not `type`.
 3. Always `POST /api/slo/preview` before creating, and show the user the compliance

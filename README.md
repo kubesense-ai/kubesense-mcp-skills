@@ -14,11 +14,12 @@ skill for the tool layer they share.
 | **kubesense-logs** | Search and aggregate logs |
 | **kubesense-traces** | Spans, latency percentiles, error rates, distributed traces |
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes and infrastructure metrics |
+| **kubesense-rum** | Real user monitoring: sessions, views, actions, errors, resources, long tasks |
 | **kubesense-sql** | Raw ClickHouse SQL over logs and traces — joins, CTEs, window functions |
 | **kubesense-spl** | SPL — the piped log query language, and its inverted field contract |
 | **kubesense-infra** | Clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List/investigate/create alerts, generate import JSON, migrate Datadog monitors |
-| **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
+| **kubesense-dashboards** | Create or edit dashboards, or generate preset JSON to import |
 | **kubesense-slo** | SLOs: error budgets, burn-rate alerting, Datadog SLO migration |
 
 ## Install
@@ -26,7 +27,7 @@ skill for the tool layer they share.
 > [!IMPORTANT]
 > **Always pass `--full-depth`.** This repo has a root `SKILL.md` (the umbrella index), and
 > the installer stops there unless told to search deeper — so without the flag it finds
-> **1** skill instead of **11**, and does so *silently*. Every command below includes it.
+> **1** skill instead of **12**, and does so *silently*. Every command below includes it.
 >
 > `references/` directories are **not** the reason for the flag. They are copied
 > automatically as part of a skill, nested subdirectories included.
@@ -49,6 +50,7 @@ npx skills add kubesense-ai/kubesense-mcp-skills \
   --skill kubesense-logs \
   --skill kubesense-traces \
   --skill kubesense-metrics \
+  --skill kubesense-rum \
   --skill kubesense-sql \
   --skill kubesense-spl \
   --skill kubesense-infra \
@@ -70,7 +72,7 @@ npx skills add kubesense-ai/kubesense-mcp-skills --skill kubesense-dashboards --
 npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth
 ```
 
-Should report **11 skills**. If it says 1, the `--full-depth` flag is missing.
+Should report **12 skills**. If it says 1, the `--full-depth` flag is missing.
 
 ### Unattended installs
 
@@ -116,7 +118,7 @@ claude mcp add --scope user --transport http kubesense \
 Verify with `GET /mcp_health`, then ask your agent to call `get-current-user` — it
 returns the identity the session resolved to and needs no arguments.
 
-Access is scoped by the same RBAC as the UI: `logs`, `traces`, `infrastructure`, and
+Access is scoped by the same RBAC as the UI: `logs`, `traces`, `infrastructure`, `rum`, and
 `alerts` modules are resolved per tool call. A permission error names the module.
 
 ## Which Skill Do I Want?
@@ -126,6 +128,7 @@ Access is scoped by the same RBAC as the UI: `logs`, `traces`, `infrastructure`,
 | "show me errors in checkout" | kubesense-logs |
 | "p99 latency by service", "which hop is slow" | kubesense-traces |
 | "memory usage", "am I near the limit" | kubesense-metrics |
+| "how slow is the checkout page", "which browsers crash", "sessions with errors" | kubesense-rum |
 | "what's running", "why is this pod restarting", "did we deploy" | kubesense-infra |
 | "alert me when 5xx > 1%", "what's firing", "port this Datadog monitor" | kubesense-alerts |
 | "build a dashboard for the payments service" | kubesense-dashboards |
@@ -147,8 +150,11 @@ rejects storage names at every input slot rather than silently returning nothing
 | span role | `role` | `kind` |
 | node | `node` | `host` |
 
-Run `get-trace-or-log-fields` to get the authoritative list for your window — attribute
+Run `get-fields` with `signal: "logs"` or `"traces"` to get the authoritative list for your window — attribute
 keys are window-scoped and differ between deployments.
+
+RUM has six event types (`rum_session` … `rum_long_task`), each with its own field set; see
+[kubesense-rum](./kubesense-rum/SKILL.md).
 
 The **alert engine accepts a different set** from the query engine. See
 [kubesense-alerts](./kubesense-alerts/SKILL.md).
@@ -164,6 +170,8 @@ kubesense-logs/SKILL.md
 kubesense-traces/SKILL.md
 kubesense-metrics/SKILL.md
   references/metric-catalog.md
+kubesense-rum/SKILL.md
+  references/field-catalog.md       hand-maintained; mirrors kubeapi rum_catalog.go
 kubesense-infra/SKILL.md
 kubesense-alerts/SKILL.md
   references/import-json.md

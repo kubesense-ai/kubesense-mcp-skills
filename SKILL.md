@@ -1,11 +1,11 @@
 ---
 name: kubesense-skills
-description: KubeSense observability skills for AI agents — query logs, traces, and metrics from Kubernetes clusters, inspect cluster inventory, manage service level objectives, and generate alert and dashboard configuration.
+description: KubeSense observability skills for AI agents — query logs, traces, metrics and real user monitoring (RUM) data from Kubernetes clusters and the apps on them, inspect cluster inventory, manage service level objectives, and generate alert and dashboard configuration.
 metadata:
   version: "2.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,observability,kubernetes,logs,traces,metrics,alerts,dashboards,slo,mcp,cloud,aws,gcp,azure
+  tags: kubesense,observability,kubernetes,logs,traces,metrics,rum,alerts,dashboards,slo,mcp,cloud,aws,gcp,azure
 ---
 
 # KubeSense Skills
@@ -20,11 +20,12 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | **kubesense-logs** | Search and aggregate logs |
 | **kubesense-traces** | Spans, latency percentiles, error rates, distributed-trace waterfalls |
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes, infrastructure and cloud-provider (AWS/GCP/Azure/Atlas/Confluent/Kong) metrics |
+| **kubesense-rum** | Real user monitoring: sessions, page views, web vitals, frontend errors, slow requests from browser and mobile apps |
 | **kubesense-spl** | SPL — the piped log query language, and its inverted field contract |
 | **kubesense-sql** | Raw ClickHouse SQL over logs and traces — joins, CTEs, window functions |
 | **kubesense-infra** | Cluster inventory: clusters, nodes, pods, workloads, infra failures, recent deploys |
 | **kubesense-alerts** | List, investigate, and create alert rules; generate import JSON; migrate Datadog monitors |
-| **kubesense-dashboards** | Create dashboards, or generate preset JSON to import |
+| **kubesense-dashboards** | Create or edit dashboards, or generate preset JSON to import |
 | **kubesense-slo** | Create and manage service level objectives; error budgets, burn-rate alerting, Datadog SLO migration |
 
 ## Routing
@@ -34,7 +35,9 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | "show me errors / grep the logs" | kubesense-logs |
 | "p99 latency / slow requests / which service is failing" | kubesense-traces |
 | "CPU, memory, disk, saturation, capacity" | kubesense-metrics |
+| "page load time / LCP / frontend errors / crashes / user sessions / slow requests in the browser or app" | kubesense-rum |
 | "how is my RDS / EC2 / Azure VM / Atlas cluster doing" | kubesense-metrics |
+| "which cloud accounts are connected / why is my AWS dashboard empty" | kubesense-metrics (`list-cloud-integrations`) |
 | "what's running / why is this pod restarting / what changed" | kubesense-infra |
 | "alert me when… / what's firing / convert this Datadog monitor" | kubesense-alerts |
 | "build me a dashboard" | kubesense-dashboards |
@@ -84,10 +87,10 @@ npx skills add kubesense-ai/kubesense-mcp-skills --full-depth -y
 
 > [!IMPORTANT]
 > **`--full-depth` is required.** Without it the installer stops at this root `SKILL.md`
-> and installs only this index — 1 skill instead of 11 — with no warning.
+> and installs only this index — 1 skill instead of 12 — with no warning.
 >
 > If you are reading this as the *only* installed KubeSense skill, that is what happened.
 > Re-run the command above with `--full-depth`.
 
 Verify with `npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth`, which
-should report 11 skills. Or pick individual skills — see the [README](./README.md).
+should report 12 skills. Or pick individual skills — see the [README](./README.md).

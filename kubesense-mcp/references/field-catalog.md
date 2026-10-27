@@ -3,6 +3,11 @@
 The complete, exact field catalog the KubeSense MCP server accepts. Source of truth:
 `kubeapi/observability/fieldcatalog/{logs,traces}.go`.
 
+> [!NOTE]
+> This page covers logs and traces. RUM has six event types with their own catalogs,
+> generated from `kubeapi/observability/fieldcatalog/rum.go`:
+> [kubesense-rum/references/field-catalog.md](../../kubesense-rum/references/field-catalog.md).
+
 **Type the "Label" column.** The "Storage column" is what the backend uses internally; it
 is **rejected** at every input slot with a message naming the correct label.
 
@@ -139,7 +144,7 @@ pinning it for exhaustive pagination, but it is not in the catalog and is reject
 
 ```
 field "pod_name" is a storage column; use the catalog label "instance" instead
-  (call get-trace-or-log-fields to see all labels)
+  (call get-fields with signal=logs to see all labels)
 ```
 
 Act on the suggestion — do not retry the same name.
@@ -147,8 +152,8 @@ Act on the suggestion — do not retry the same name.
 **Unknown field:**
 
 ```
-unknown field "service" for signal=logs; call get-trace-or-log-fields to discover
-  valid fields (attributes carry an @ prefix)
+unknown field "service" for signal=logs; call get-fields with signal=logs to
+  discover valid fields (attributes carry an @ prefix)
 ```
 
 Errors are prefixed by the slot that failed: `where clause: …`,

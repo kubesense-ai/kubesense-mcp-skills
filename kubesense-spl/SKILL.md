@@ -21,7 +21,7 @@ and auth. Tools here resolve RBAC against the **`logs`** module.
 
 | Tool | Use when | Returns |
 |---|---|---|
-| `get-trace-or-log-fields` (`signal: "logs"`) | To find dynamic attribute keys — **not** column names, see below | Field catalog for your window |
+| `get-fields` (`signal: "logs"`) | To find dynamic attribute keys — **not** column names, see below | Field catalog for your window |
 | `validate-spl` | Before handing any query over | `valid` + the ClickHouse SQL it compiles to |
 | `execute-spl` | To answer a question yourself | Rows (TSV), capped at 1000 |
 
@@ -59,7 +59,7 @@ The complete set SPL knows: `timestamp` (or `@timestamp`) · `body` (or `@messag
 > name, so the query parses, compiles, and fails only when someone runs it.
 
 > [!WARNING]
-> **`get-trace-or-log-fields` returns the wrong names for SPL.** It reports catalog labels — `type`,
+> **`get-fields` returns the wrong names for SPL.** It reports catalog labels — `type`,
 > `instance`, `domain` — which SPL does not accept. Use it **only** to discover dynamic attribute
 > keys, and address those as `log_processed.<key>`. For columns, use the table above.
 
@@ -137,7 +137,7 @@ row, and returns the compiled SQL under `## translated_sql`. **Read it** — it 
 
 Attribute keys are the one thing it cannot check: a wrong `log_processed.<key>` returns nulls
 silently, exactly as a wrong `@attr` does on the SQL side. Confirm keys with
-`get-trace-or-log-fields` first.
+`get-fields` (`signal: "logs"`) first.
 
 ## Limits
 
@@ -188,7 +188,7 @@ filter log_processed.duration_ms > 0
 
 1. Storage names, never catalog labels: `level` not `type`, `pod_name` not `instance`, `cluster` not
    `domain`.
-2. `get-trace-or-log-fields` is for attribute keys only — its column names are wrong for SPL.
+2. `get-fields` is for attribute keys only — its column names are wrong for SPL.
 3. Call `validate-spl` before handing a query over or running it, and read the `translated_sql` it
    returns.
 4. `perc95(x)`, never `p95(x)`.
