@@ -138,8 +138,11 @@ panels. Pick one and retry by its exact name or address. It runs metrics, logs, 
 events, synthetics and formula queries on timeSeries, bar, stat, pie, topList, table and
 treemap panels. A list panel returns its rows (log lines, events or spans) as TSV, in the
 panel's saved sort order and columns, from its first visible query. It returns at most 50
-rows, and `truncated=true` means the panel has more. Any other panel (hostMap, SLO, alert,
-synthetics monitor, SPL or SQL) returns an error that names the tool to use instead.
+rows, and `truncated=true` means the panel has more. SPL and SQL panels run their saved
+text, with dashboard variables substituted and the `$__timeFilter` / `$__clusters` macros
+expanded, and return one TSV block per query in the `execute-spl` / `execute-sql` format.
+The header shows the exact text that ran. Any other panel (hostMap, SLO, alert, synthetics
+monitor) returns an error that names the tool to use instead.
 
 A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
