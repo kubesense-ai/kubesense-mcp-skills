@@ -1,6 +1,6 @@
 ---
 name: kubesense-mcp
-description: The KubeSense MCP tool layer — connection and auth, the full 41-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces/RUM query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
+description: The KubeSense MCP tool layer — connection and auth, the full tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces/RUM query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
 metadata:
   version: "2.5.0"
   author: kubesense
@@ -128,10 +128,36 @@ report it. Call it before any cloud metric query: it gives the real `provider`,
 `type: "system" | "user"` filter) · `get-dashboard-details` (each panel's queries, plus the
 `tab_id`, `sub_grid_id`, `position` and `preset_version` that `update-dashboard` needs, and
 `tab_title` and the tab list on a tabbed dashboard; `raw=true` adds the whole stored preset)
+· `run-dashboard-panel` (runs one saved panel and returns its data)
+
+To show what a panel says, call `run-dashboard-panel` with the `dashboard_id` and the
+panel's name (`panel`, case-insensitive, exact match first and then substring) or its
+`tab_id` / `sub_grid_id` / `position`. It runs the panel's saved queries the way the
+dashboard draws them. It resolves dashboard variables from their saved values, takes
+optional `variables` overrides as `[{"name": "cluster", "values": ["prod"]}]` (an empty
+`values` means All), uses the panel's own `time_frame` over `from_time` / `to_time` (default
+the last hour), and applies the stat reducer. The result names the window, the resolved
+variables and the exact query each label ran, so you can re-run one with `analyze-*`
+over another range. A name that matches no panel, or several, returns the candidate
+panels. Pick one and retry by its exact name or address. It runs metrics, logs, traces,
+events, synthetics and formula queries on timeSeries, bar, stat, pie, topList, table and
+treemap panels. A list panel returns its rows (log lines, events or spans) as TSV, in the
+panel's saved sort order and columns, from its first visible query. It returns at most 50
+rows, and `truncated=true` means the panel has more. SPL and SQL panels run their saved
+text, with dashboard variables substituted and the `$__timeFilter` / `$__clusters` macros
+expanded, and return one TSV block per query in the `execute-spl` / `execute-sql` format.
+The header shows the exact text that ran. SLO panels return what the widget shows: status
+counts (summary), the SLO table (list, at most 50 rows) or one SLO's compliance and error
+budget per window (single). They use the SLO's own windows, not `from_time` / `to_time`, and
+need SLO access. Alert panels return the rule's chart with its thresholds (graph, the
+engine's view of the rule's queries over the panel's window), the rule's state and active
+alerts (value), or the alert counts and active alerts matching the panel's filters (summary).
+Host map and synthetics monitor panels return an error that names the tool to use instead.
 
 A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
-`$name`. Resolve those against the variables table and run it with `analyze-metrics`.
+`$name`. To run a panel as it is, prefer `run-dashboard-panel`, which resolves them. To run
+the query by hand, resolve them against the variables table and use `analyze-metrics`.
 A `$$name` elsewhere in a query (a filter key, an advanced query, a code-mode selector) is a
 field reference: `<that variable's field> = $name`, dropped when nothing is selected.
 
