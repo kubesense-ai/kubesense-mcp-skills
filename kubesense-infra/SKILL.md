@@ -2,7 +2,7 @@
 name: kubesense-infra
 description: Inventory and topology of the monitored Kubernetes estate via KubeSense MCP — clusters, nodes, pods, workloads, detected issues, infra failures (OOM/CrashLoop/probe/scheduling), and recent deploys/scaling changes. Use for "what is running", "what is broken at the k8s layer", and "what changed".
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,kubernetes,inventory,topology,pods,nodes,workloads,issues,oomkill,crashloop,changes,deploys
@@ -29,6 +29,7 @@ for connection and auth.
 | "node pressure / eviction / scheduling failures" | `list-nodes`, then `get-node-detail` | `analyze-metrics` (use it to confirm, not to discover) |
 | "service health: RPS, p95, error rate per app" | `list-workloads` | `analyze-traces` (right answer for arbitrary slicing, overkill for a health sweep) |
 | "container exit code / last state / restart reason" | `get-pod-detail` | `list-pods` |
+| "show me a host map / a heat map of my hosts and pods" (something to keep, not an answer now) | a `hostMap` dashboard panel, see **kubesense-dashboards** `references/host-map.md` | a table of `list-nodes` output |
 
 **Discovery order.** `list-clusters` → `list-workloads` / `list-pods` → `get-*-detail`.
 Names flow forward: never type a cluster, namespace, workload, or pod name you have

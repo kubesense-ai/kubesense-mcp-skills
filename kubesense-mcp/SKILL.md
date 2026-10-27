@@ -1,8 +1,8 @@
 ---
 name: kubesense-mcp
-description: The KubeSense MCP tool layer — connection and auth, the full 38-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
+description: The KubeSense MCP tool layer — connection and auth, the full 41-tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
 metadata:
-  version: "2.0.0"
+  version: "2.4.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth
@@ -23,6 +23,7 @@ each have to redefine it.
 | CPU, memory, disk, PromQL | [kubesense-metrics](../kubesense-metrics/SKILL.md) |
 | what's running, pod restarts, what changed | [kubesense-infra](../kubesense-infra/SKILL.md) |
 | alerts — list, investigate, create | [kubesense-alerts](../kubesense-alerts/SKILL.md) |
+| dashboards — read, create, edit | [kubesense-dashboards](../kubesense-dashboards/SKILL.md) |
 
 ## Connection
 
@@ -41,6 +42,9 @@ claude mcp add --scope user --transport http kubesense \
   --header "Authorization: Bearer <access-token>"
 ```
 
+An API key only works in `x-api-key`. Sent as `Authorization: Bearer <api-key>` it is
+read as a JWT and refused with 401.
+
 Liveness: `GET /mcp_health`. To confirm *who* you are authenticated as, call
 `get-current-user` — no arguments, cheap, resolved from the request credentials.
 
@@ -51,15 +55,18 @@ module. `analyze-telemetry` resolves every module its sub-queries touch.
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
 
-## Tools (38)
+## Tools (41)
 
 **Discovery — call before querying**
 
 | Tool | Returns |
 |---|---|
-| `get-trace-or-log-fields` | Field catalog for logs or traces in a window |
+| `get-fields` | Field catalog for one `signal` (`logs`, `traces` or `events`) in a window |
 | `get-available-metrics` | Metric names |
 | `get-metric-labels` | Label names on one metric |
+
+`get-trace-or-log-fields` is a deprecated alias of `get-fields` with the same arguments and
+output. Use `get-fields`.
 
 **Query**
 
@@ -70,7 +77,7 @@ the global log level.
 | `analyze-logs` | Aggregated log series |
 | `analyze-traces` | Aggregated span series |
 | `analyze-metrics` | PromQL result |
-| `analyze-telemetry` | Multiple queries + formulas in one call |
+| `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics or events |
 | `get-distributed-trace` | Full span tree for one `trace_id` |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |
@@ -95,11 +102,33 @@ query is broken before it is run. See [kubesense-spl](../kubesense-spl/SKILL.md)
 `list-workloads` · `get-workload-detail` · `list-issues` · `get-infra-issues` ·
 `get-recent-changes`
 
+**Cloud inventory** — see [kubesense-metrics](../kubesense-metrics/SKILL.md)
+
+`list-cloud-integrations` — every connected cloud account (AWS, GCP, Azure, MongoDB Atlas,
+Confluent Cloud, Kong) with its `provider`, `account_id`, `status` and last sync, plus
+`reporting`: each `resource_type` with series in the last hour and how many resources
+report it. Call it before any cloud metric query: it gives the real `provider`,
+`account_id` and `resource_type` label values, and it explains an empty result (an account
+`paused` or in `error`, or one with nothing reporting). Optional `provider` filter.
+
 **Alerts** — see [kubesense-alerts](../kubesense-alerts/SKILL.md)
 
 `list-alerts` (external Alertmanager) · `list-active-alerts` (native store, firing) ·
 `list-alert-rules` (rule definitions) · `get-alert-details` · `get-alert-history` ·
 `list-notification-channels` · `find-investigation-for-alert`
+
+**Dashboards** — see [kubesense-dashboards](../kubesense-dashboards/SKILL.md)
+
+`list-dashboards` (id, name, description, `type` and `integration_id`; optional
+`type: "system" | "user"` filter) · `get-dashboard-details` (each panel's queries, plus the
+`tab_id`, `sub_grid_id`, `position` and `preset_version` that `update-dashboard` needs, and
+`tab_title` and the tab list on a tabbed dashboard; `raw=true` adds the whole stored preset)
+
+A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
+`rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
+`$name`. Resolve those against the variables table and run it with `analyze-metrics`.
+A `$$name` elsewhere in a query (a filter key, an advanced query, a code-mode selector) is a
+field reference: `<that variable's field> = $name`, dropped when nothing is selected.
 
 **Identity**
 
@@ -118,10 +147,13 @@ hand through the matching one before creating it or handing it over.
 
 **Write — mutates state**
 
-`create-alert` · `create-dashboard`
+`create-alert` · `create-dashboard` · `update-dashboard`
 
-Both carry write annotations and expect user approval. State exactly what you are about
-to create before calling. Each validates against the same schema as the tool above and
+All carry write annotations and expect user approval. State exactly what you are about
+to create or change before calling. `update-dashboard` edits a dashboard by id: read it
+with `get-dashboard-details` first, and prefer `panel_operations` over a whole `preset`.
+On a tabbed dashboard each panel operation needs `tab_id`, and a whole `preset` must keep
+its `tabs` key. Each validates against the same schema as the tool above and
 refuses with the same findings, so validating first turns a refusal into a fix.
 
 ## Discovery-First Rule
@@ -129,7 +161,7 @@ refuses with the same findings, so validating first turns a refusal into a fix.
 **Never guess a name.** Not a field, metric, cluster, or label.
 
 ```
-logs / traces:  get-trace-or-log-fields  →  search-* / analyze-*
+logs / traces:  get-fields (signal)       →  search-* / analyze-*
 metrics:        get-available-metrics     →  get-metric-labels  →  analyze-metrics
 clusters:       list-clusters             →  anything with a "clusters" filter
 ```
@@ -141,7 +173,7 @@ Two reasons this matters more than usual here:
 2. A wrong **cluster** name or **metric** name is *not* an error — it returns an empty
    result indistinguishable from "the value is zero".
 
-Pass the **same time window** to `get-trace-or-log-fields` that you will use for the
+Pass the **same `signal` and time window** to `get-fields` that you will use for the
 query: attribute keys are window-scoped and differ across windows.
 
 ## The Field-Name Contract
@@ -151,10 +183,10 @@ accept **catalog labels only**. Storage column names are rejected:
 
 ```
 field "pod_name" is a storage column; use the catalog label "instance" instead
-  (call get-trace-or-log-fields to see all labels)
+  (call get-fields with signal=logs to see all labels)
 
-unknown field "service" for signal=logs; call get-trace-or-log-fields to discover
-  valid fields (attributes carry an @ prefix)
+unknown field "service" for signal=logs; call get-fields with signal=logs to
+  discover valid fields (attributes carry an @ prefix)
 ```
 
 | Concept | Logs | Traces |
@@ -285,8 +317,11 @@ starts a labelled sub-table (e.g. `## services`, `## silences`).
   carries a bare `values` array aligned positionally — `values[i]` is the value at
   `timestamps[i]`, `null` = no data in that bucket.
 - `instant`: no `timestamps`; each series carries a single scalar `value`.
-- `total_series` / `truncated` report how many non-zero series existed **before** the
-  top-N cap.
+- Every series has `labels`; an unlabelled one (an ungrouped `sum`) has `labels: {}`.
+- `analyze-logs` / `analyze-traces` only: `total_series` / `truncated` report how many
+  non-zero series existed **before** the top-N cap. `analyze-metrics` has no `limit`.
+- A failed query's `error_message` keeps the reason (`connection refused`, `i/o timeout`)
+  but not the metrics store's internal address, which reads `<metrics store>`.
 
 **Record with sub-tables** (`get-*-detail`) — `field<TAB>value` lines for scalars, `## name`
 TSV blocks for nested arrays, compact JSON for maps. Empty fields omitted.
@@ -311,7 +346,7 @@ unreliable — and prefer aggregation whenever the answer is a number.
 ## Rules
 
 1. Discover before querying — fields, metrics, clusters. Never guess.
-2. Pass the same window to `get-trace-or-log-fields` that you'll query.
+2. Pass the same signal and window to `get-fields` that you'll query.
 3. Catalog labels only. On a field error, read the suggested label; don't retry the same
    name.
 4. Never carry a field name across signals (`node` vs `node_name`; `type` vs `status`;
