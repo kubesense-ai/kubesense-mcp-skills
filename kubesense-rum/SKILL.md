@@ -1,6 +1,6 @@
 ---
 name: kubesense-rum
-description: Aggregate real user monitoring (RUM) data via KubeSense MCP — sessions, views, actions, errors, resources and long tasks from browser and mobile apps. Covers the rum_<type> signals, the per-event-type field catalog, which fields accept LIKE or group-by, nanosecond durations and their _ms/_s twins, feature flags and attributes, and the dashboard panel shape. Counts, rates and percentiles only; there is no row search, alerting, SQL or SPL for RUM.
+description: Aggregate and read real user monitoring (RUM) data via KubeSense MCP — sessions, views, actions, errors, resources and long tasks from browser and mobile apps. Covers the rum_<type> signals, the per-event-type field catalog, which fields accept LIKE or group-by, nanosecond durations and their _ms/_s twins, feature flags and attributes, and the dashboard panel shape. Counts, rates and percentiles with analyze-telemetry, raw rows with search-rum. There is no alerting, SQL or SPL for RUM.
 metadata:
   version: "1.0.0"
   author: kubesense
@@ -14,7 +14,9 @@ Requires the KubeSense MCP server; see **[kubesense-mcp](../kubesense-mcp/SKILL.
 connection, auth, and the shared WHERE-clause reference. RUM queries resolve RBAC against
 the **RUM** module (`rbac(rum)`). A key without it fails with
 `rbac(rum): this API key does not have access to this resource`; ask for the RUM grant
-rather than retrying.
+rather than retrying. `search-rum` needs the same grant. So do the RUM list routes it reads through
+(`POST /rum/explorer/{sessions,views,actions,errors,resources,longtasks}`), which also
+guard the RUM pages.
 
 ## Signals
 
@@ -37,11 +39,12 @@ its own `start_timestamp`, so a long session is counted in the window where it s
 | Tool | Use when | Notes |
 |---|---|---|
 | `get-fields` (`signal: "rum_view"`, …) | Always, first | Field catalog for that event type |
-| `analyze-telemetry` | Every RUM question | One sub-query per signal, set with `selectedMode` |
+| `analyze-telemetry` | Counts, rates, percentiles, trends | One sub-query per signal, set with `selectedMode` |
+| `search-rum` | Reading individual sessions, errors, requests | Raw rows for one signal; see [search-rum](#search-rum) |
 
-There is no `analyze-rum` and no `search-rum`. `analyze-logs` and `analyze-traces`
-do not take RUM signals. To compare RUM with logs or traces, or to compute a rate, put
-several sub-queries in one `analyze-telemetry` call and add a formula; see
+There is no `analyze-rum`. `analyze-logs` and `analyze-traces` do not take RUM signals.
+To compare RUM with logs or traces, or to compute a rate, put several sub-queries in one
+`analyze-telemetry` call and add a formula; see
 [multi-query](../kubesense-mcp/references/multi-query.md).
 
 ## Discover First
@@ -71,6 +74,87 @@ before the call, and `get-fields` as the authority for the deployment you are ta
 There is no attribute-key discovery. When the user needs a custom attribute, ask for the
 key or infer it from their instrumentation, and type it with the `@` prefix. A wrong key
 matches nothing and returns an empty result, not an error.
+
+## search-rum
+
+`search-rum` reads raw rows for one signal: the same rows the Data Explorer List panel
+shows. Use it to look at individual events (which sessions crashed, what the slowest
+requests were, the text of an error). Use `analyze-telemetry` for anything that is a number:
+counts, rates, percentiles and trends. Reading rows to compute a count is slower and cuts
+off at the page limit.
+
+Call `get-fields` with the same `signal` first. `where` and `required_fields` take catalog
+labels, `@key` for an attribute and `feature_flag.<key>` for a flag (views and errors only).
+`from_time`, `to_time` and `signal` are required. There is no `clusters` argument; passing
+one is refused. Scope to an app with `application_id = "<id>"` or `env = production`.
+
+**The slowest failed requests in the last hour, 20 per page**
+
+```json
+{
+  "signal": "rum_resource",
+  "from_time": "2026-10-20T10:00:00Z",
+  "to_time": "2026-10-20T11:00:00Z",
+  "where": "status_code >= 500",
+  "sort_by": "duration_ms",
+  "sort_order": "desc",
+  "page_size": 20
+}
+```
+
+Arguments beyond the shared search ones: `sort_by` (catalog label; default
+`start_timestamp`), `sort_order` (`asc` or `desc`, default `desc`) and `cursor`.
+`required_fields` picks columns; empty gives the type's defaults.
+
+| Signal | Default columns |
+|---|---|
+| `rum_session` | `start_timestamp`, `session_type`, `time_spent_ms`, `view_count`, `error_count`, `action_count`, `frustration_count`, `first_view_name`, `last_view_name` |
+| `rum_view` | `start_timestamp`, `view_name`, `frustration_count`, `loading_type`, `loading_time_ms`, `view_time_spent_ms`, `country`, `browser_name` |
+| `rum_action` | `start_timestamp`, `action_type`, `action_name`, `frustration_type`, `view_name` |
+| `rum_error` | `start_timestamp`, `view_name`, `error_source`, `error_message` |
+| `rum_resource` | `start_timestamp`, `view_name`, `resource_url`, `duration_ms`, `response_size`, `status_code`, `resource_type` |
+| `rum_long_task` | `start_timestamp`, `duration_ms`, `view_name` |
+
+The defaults use the `_ms` twins. A raw duration you request by name (`duration`) comes
+back in nanoseconds; ask for `duration_ms` or `duration_s` instead.
+
+**Output** is TSV. The first line is
+`# total_count=unknown returned_rows=<N> truncated=<bool> next_cursor=<c> window_clamped=<bool> ...`,
+followed by `# notice=<n>` lines when something needs saying, a header, and one line per
+row. Every row also carries `application_id`, `session_id`, `row_id` (the event's own id),
+`timestamp`, `has_replay` (set when the session has a stored replay) and `severity` (errors: `error` or `crash`).
+Whatever `required_fields` you ask for, every row also carries the columns that identify it, always present: sessions `application_id`, `session_id`, `session_start`, `session_has_replay`; views add `view_id`, `view_start`; actions `action_id`, `action_start`; errors `error_id`, `error_start`, `is_crash`; resources `resource_id`, `resource_start`; long tasks `task_id`, `task_start` (each with `view_id` except sessions).
+
+**Paging.** There is no total (`total_count=unknown`). While `next_cursor` is non-empty,
+call again with the same `from_time`, `to_time`, `where`, `sort_by`, `sort_order`,
+`page_size` and `required_fields`, and `cursor=<next_cursor>`. The cursor is a page token
+bound to the query, so a cursor replayed under a different query is refused.
+
+- Paging is page-based with no depth limit, for every `sort_by`. There is no keyset.
+- `page_size` defaults to 10 and is clamped to 200. The Data Explorer List panel loads 50
+  rows per page.
+
+**What a row is**
+
+- Rows match the RUM page tables. Sessions and views are deduplicated. Live (still open)
+  views are listed.
+- Actions, errors, resources and long tasks are grouped by id: one row per id, start is the
+  first occurrence, resource durations are medians and long-task durations are averages.
+- `rum_error` lists only errors (`type = 3`).
+- Blob fields cannot be listed or sorted by: `error_stack`, `handling_stack`, `threads`,
+  `graphql`, `display`, `tags`.
+- Array fields (`service`, `state`, `city`, `network_connectivity`, `ip`, `action_id`) cannot be
+  sorted by.
+- Each cell in the TSV output is cut at 2048 bytes. The list API itself does not cut strings.
+
+**Window.** The window is clamped and snapped by the RUM data window. A `from_time` older
+than raw retention (30 days for sessions and views, 7 days for the rest) is moved up to the
+retention edge, and the window widens to the bucket boundaries of the RUM data. The header
+says `window_clamped=true` when the window changed. A window entirely older than retention
+is left as asked.
+
+**No read-budget errors.** The list reads have no read-budget limit. A slow read can still
+time out; shorten the window or filter on `application_id`, `env` or `session_id`.
 
 ## WHERE Syntax
 
@@ -222,10 +306,11 @@ with `analyze-telemetry` first, then translate it.
 
 - **Retention.** Raw RUM rows are kept 7 days for `rum_action`, `rum_error`,
   `rum_resource` and `rum_long_task`, and 30 days for `rum_session` and `rum_view`, by
-  default. A longer window returns only what is still stored; deployments can change the
-  retention.
-- **No row search.** There is no tool that lists individual sessions, errors or
-  resources. Answer with aggregates, and group by the narrowest low-cardinality field.
+  default. A longer window returns only what is still stored (`search-rum` reports it as
+  `window_clamped=true`); deployments can change the retention.
+- **Row reads are bounded per call.** `search-rum` returns at most 200 rows a call and has
+  no total. Paging has no depth limit. For questions that are a number,
+  aggregate instead.
 - **No alerts, SQL or SPL.** RUM is not a datasource for alert rules, `execute-sql` or
   `execute-spl`. Say so rather than approximating with logs.
 - **No attribute-key discovery.** See Discover First.

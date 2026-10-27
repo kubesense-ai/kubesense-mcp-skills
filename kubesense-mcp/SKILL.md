@@ -67,8 +67,8 @@ the global log level.
 | `get-metric-labels` | Label names on one metric |
 
 RUM data (browser and mobile sessions, views, actions, errors, resources, long tasks) is
-queried only through `analyze-telemetry`; there is no `analyze-rum` or `search-rum`. See
-[kubesense-rum](../kubesense-rum/SKILL.md).
+aggregated through `analyze-telemetry` and read as raw rows through `search-rum`; there is
+no `analyze-rum`. See [kubesense-rum](../kubesense-rum/SKILL.md).
 
 `get-trace-or-log-fields` is a deprecated alias of `get-fields` with the same arguments and
 output. Use `get-fields`.
@@ -79,6 +79,7 @@ output. Use `get-fields`.
 |---|---|
 | `search-logs` | Raw log rows (default 10) |
 | `search-traces` | Raw span rows (default 10) |
+| `search-rum` | Raw RUM rows for one `rum_<type>` signal (default 10, max 200), paged with `next_cursor` |
 | `analyze-logs` | Aggregated log series |
 | `analyze-traces` | Aggregated span series |
 | `analyze-metrics` | PromQL result |
@@ -193,7 +194,7 @@ refuses with the same findings, so validating first turns a refusal into a fix.
 
 ```
 logs / traces:  get-fields (signal)       →  search-* / analyze-*
-rum:            get-fields (rum_<type>)   →  analyze-telemetry
+rum:            get-fields (rum_<type>)   →  analyze-telemetry / search-rum
 metrics:        get-available-metrics     →  get-metric-labels  →  analyze-metrics
 clusters:       list-clusters             →  anything with a "clusters" filter
 ```
@@ -303,6 +304,7 @@ See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 | Question | Tool |
 |---|---|
 | "show me recent errors" | `search-logs` |
+| "list the crashes / slowest sessions / failed requests" | `search-rum` |
 | "how many errors in the last hour" | `analyze-logs`, `row_count` |
 | "p99 latency for checkout" | `analyze-traces`, `p99` over `duration` |
 | "why did this request fail" | `get-distributed-trace` |
@@ -346,7 +348,7 @@ Queries are keyed by single-letter labels. Formula entries use
 
 Three shapes, all designed to save tokens:
 
-**TSV** (`search-*`, all inventory and alert list tools) — a `# key=value` metadata line,
+**TSV** (`search-*` including `search-rum`, all inventory and alert list tools) — a `# key=value` metadata line,
 then a header row, then one row per record. Empty cell = field absent. A `## name` line
 starts a labelled sub-table (e.g. `## services`, `## silences`).
 
@@ -375,6 +377,9 @@ Timestamps are always RFC3339 UTC at millisecond precision — exactly the forma
 
 Take the **minimum** timestamp from the page (`timestamp` for logs, `start_timestamp` for
 traces) and pass it verbatim as the next `to_time`. Copy the millisecond precision exactly.
+
+`search-rum` is the exception: it returns a `next_cursor`, a page token bound to the query, that you pass back with the same query arguments. See
+[kubesense-rum](../kubesense-rum/SKILL.md#search-rum).
 
 Inventory and alert tools *do* paginate conventionally, with `page`/`page_size` (default
 50) or `limit`/`offset`.
