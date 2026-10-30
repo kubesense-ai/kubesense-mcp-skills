@@ -341,11 +341,9 @@ Caveats. A `workloads` or `namespaces` include keeps an edge when either end mat
 `workloads=["checkout"]` returns checkout plus its direct neighbours, not the whole graph.
 Combine it with a `workload` focus only when that is intended: the focus is searched inside the
 filtered graph and is "not found" if the filter removed it. `exclude_namespaces` and
-`exclude_workloads` drop an edge only when both ends match (as on the page today), so they do
-not remove edges to one excluded workload; `exclude_protocols`, `exclude_sources` and
-`connection_status` are exact. The Data Streams layer reads only namespace and workload
-includes and ignores the other filters; the two workload and namespace excludes are rejected
-with `layers=apm,dsm`. For span fields or attributes use `analyze-traces`.
+`exclude_workloads` drop an edge when either end matches, so an excluded workload loses all its
+edges. The Data Streams layer reads only the namespace and workload filters, includes and
+excludes alike, and ignores the other filters. For span fields or attributes use `analyze-traces`.
 
 **Aggregate with `analyze-*`, don't paginate `search-*`.** Reading raw rows to compute a
 count is slower, costs far more tokens, and — because paged scans are ordered
