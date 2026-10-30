@@ -56,7 +56,7 @@ module. `analyze-telemetry` resolves every module its sub-queries touch.
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
 
-## Tools (41)
+## Tools (42)
 
 **Discovery — call before querying**
 
@@ -85,6 +85,7 @@ output. Use `get-fields`.
 | `analyze-metrics` | PromQL result |
 | `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics, events or RUM (`selectedMode: rum_<type>`) |
 | `get-distributed-trace` | Full span tree for one `trace_id` |
+| `get-service-map` | Service-to-service dependency graph (callers, callees, blast radius), as a `## call tree` plus nodes and edges TSV; optionally with Kafka producer/consumer topology |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |
 | `validate-spl` | Dry-run verdict for an SPL query, plus the SQL it compiles to |
@@ -106,7 +107,7 @@ query is broken before it is run. See [kubesense-spl](../kubesense-spl/SKILL.md)
 
 `list-clusters` · `list-nodes` · `get-node-detail` · `list-pods` · `get-pod-detail` ·
 `list-workloads` · `get-workload-detail` · `list-issues` · `get-infra-issues` ·
-`get-recent-changes`
+`get-recent-changes` · `get-service-map` (dependency graph; see [Choosing a Tool](#choosing-a-tool))
 
 **Cloud inventory** — see [kubesense-metrics](../kubesense-metrics/SKILL.md)
 
@@ -308,9 +309,60 @@ See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 | "how many errors in the last hour" | `analyze-logs`, `row_count` |
 | "p99 latency for checkout" | `analyze-traces`, `p99` over `duration` |
 | "why did this request fail" | `get-distributed-trace` |
+| "what calls X / what does X depend on / blast radius / dependency chain" | `get-service-map` |
 | "CPU usage" | `get-available-metrics` → `analyze-metrics` |
 | "error rate as a percentage" | `analyze-telemetry` with a formula |
 | "what's running / what's broken / what changed" | inventory tools — one call for what would otherwise be several queries |
+
+**Dependencies go to `get-service-map`, not `analyze-traces`.** Grouping spans by caller and
+callee only approximates the network-view edges, stops at a 100-group cap, and cannot produce
+the logical view or the Kafka (DSM) layer. Pass a `workload` + `namespace` focus with a
+`direction` (`downstream`, `upstream` or `both`) and a `depth` (1-5). `view=network` shows every
+observed TCP hop, load balancers and proxies included; `view=logical` shows service-to-service
+calls via propagated trace context, so uninstrumented hops vanish. `layers` defaults to `apm` on both
+views; `layers=apm,dsm` opts in to Kafka produce/consume topology (logical only); `limit` applies
+to each layer separately, so Kafka edges never push APM edges out. Always scope the call: with no
+`workload` focus and no `namespaces`/`workloads` filter the map is just the first `limit` edges
+ordered by issues then name (the tool prints a `# note:` when it cuts one off), so pass
+`workload` + `namespace` or `namespaces`. A p95 near a round timeout (600000 ms, 120000 ms) with
+~0 rps on gRPC/HTTP2 usually marks a streaming or long-poll call (e.g. flagd `EventStream`, which ends at a
+~10-minute client deadline with gRPC status 4, DEADLINE_EXCEEDED), not an outage; confirm with `analyze-traces` before reporting
+it as a failure. Needs the Service Map scope (traces module, service-map sub-scope).
+
+A service is a unique (cluster, namespace, workload). `checkout` in Testing and `checkout` in
+us-2 are two services: never merged in the tree or tables, never a cycle with each other, never
+sharing a RED sample. If the focus name exists in several clusters the call fails and lists them;
+pass `cluster` to pick one. Externals, databases and Kafka topics have no such triple: they are
+identified by the node the map builds (external by address, database by instance, topic by
+cluster + system + topic name).
+
+A focused call reads hop by hop, not the whole estate: hop 1 only the focus's edges, hop N only
+the edges of the services the tree expanded at depth N-1, so the focus is found and its tree
+complete however big the estate. With a focus, `limit` is per frontier node in each hop (default
+200). `truncated=true` then means some hop hit its row limit, and `cut_hops=2,3` names the hops:
+the nodes expanded there may be missing callees or callers, so raise `limit` or narrow with
+filters.
+
+Basic filters mirror the Service Map page sidebar and narrow the whole graph before the tree
+is built (ANDed with `clusters` and your access scope):
+
+| Include (IN) | Exclude (NOT IN) | Matches |
+| --- | --- | --- |
+| `namespaces` | `exclude_namespaces` | exact namespace names |
+| `workloads` | `exclude_workloads` | exact workload names |
+| `protocols` | `exclude_protocols` | exact case as the map shows it: `HTTP`, `gRPC`, `PostgreSQL`, `Kafka` |
+| `sources` | `exclude_sources` | exact values of the page's Source filter |
+
+`connection_status` is `ok` or `error` (`error` keeps edges with issues). A value in both an
+include and its exclude list is an error. Pass exact values only; there are no wildcards.
+
+Caveats. A `workloads` or `namespaces` include keeps an edge when either end matches, so
+`workloads=["checkout"]` returns checkout plus its direct neighbours, not the whole graph.
+Combine it with a `workload` focus only when that is intended: the focus is searched inside the
+filtered graph and is "not found" if the filter removed it. `exclude_namespaces` and
+`exclude_workloads` drop an edge when either end matches, so an excluded workload loses all its
+edges. The Data Streams layer reads only the namespace and workload filters, includes and
+excludes alike, and ignores the other filters. For span fields or attributes use `analyze-traces`.
 
 **Aggregate with `analyze-*`, don't paginate `search-*`.** Reading raw rows to compute a
 count is slower, costs far more tokens, and — because paged scans are ordered
@@ -351,6 +403,20 @@ Three shapes, all designed to save tokens:
 **TSV** (`search-*` including `search-rum`, all inventory and alert list tools) — a `# key=value` metadata line,
 then a header row, then one row per record. Empty cell = field absent. A `## name` line
 starts a labelled sub-table (e.g. `## services`, `## silences`).
+
+**Service map** (`get-service-map`) — a header line
+`# view=… layers=… window=… limit=… truncated=… [hops=N map_calls=M cut_hops=…] red_nodes=x/y filters=…` (hops, map_calls and cut_hops only with a focus, cut_hops only when a hop was cut; filters only when active), then with a focus a
+`## call tree`, then `## nodes` (workload, namespace, cluster, kind, external, database,
+issue_count, layers) and `## edges` (caller, callee, protocol, layer, kind, is_error, calls,
+span_rate, rps, error_pct, p95_ms) TSV. With a focus, nodes and edges cover only the tree's
+subgraph. Tree markers: `↺ cycle` (back-edge to an ancestor), `↑ see above` (that node's
+expansion was printed earlier), `↓ expanded below` (it is printed further down), `… N more … not shown` (15 per node), `… more callees may be cut (hop H read limit=L rows)` (this node's edges came from a hop that hit its row limit, so callees may be missing; callers for upstream: raise `limit` or filter), `… not expanded (frontier cap, hop H)` (the hop's frontier was capped at 50 services and this one was never queried), `… +N deeper` (depth limit). RED (`rps`,
+`err`, `p95`) is fetched for at most 10 nodes; later lines have none, and external, database
+and topic nodes never do.
+
+**In your answer, paste the `## call tree` section verbatim inside a fenced code block** — that
+is how the human sees the nesting. Do not rebuild a tree from the edges table. In the KubeSense
+chat UI the call also renders the real map inline.
 
 **Columnar JSON** (all `analyze-*`) — `results` keyed by query label:
 

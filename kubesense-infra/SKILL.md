@@ -27,6 +27,7 @@ for connection and auth.
 | "what changed / did someone deploy / why did it break at 14:00" | `get-recent-changes` | anything else — **check this first**, it is the cheapest root cause |
 | "what's broken across the estate" | `list-issues` (platform's own detection) | re-deriving issues from raw traces |
 | "node pressure / eviction / scheduling failures" | `list-nodes`, then `get-node-detail` | `analyze-metrics` (use it to confirm, not to discover) |
+| "what calls X / what does X depend on / blast radius" | `get-service-map` | `analyze-traces` (approximates edges, 100-group cap) or `list-issues` (only edges that already failed) |
 | "service health: RPS, p95, error rate per app" | `list-workloads` | `analyze-traces` (right answer for arbitrary slicing, overkill for a health sweep) |
 | "container exit code / last state / restart reason" | `get-pod-detail` | `list-pods` |
 | "show me a host map / a heat map of my hosts and pods" (something to keep, not an answer now) | a `hostMap` dashboard panel, see **kubesense-dashboards** `references/host-map.md` | a table of `list-nodes` output |
@@ -128,7 +129,8 @@ Output: `issue_id`, `kind`, `cluster`, `primary_workload`, `primary_namespace`,
 `max_last_seen`.
 
 `associate_workload` is the *other* side of a connectivity issue — the dependency that
-`primary_workload` failed to reach.
+`primary_workload` failed to reach. For the full caller/callee graph around a workload, use
+`get-service-map`; paste its `## call tree` verbatim in a fenced code block.
 
 ## get-infra-issues
 
