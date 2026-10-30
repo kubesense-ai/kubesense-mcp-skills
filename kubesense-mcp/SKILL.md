@@ -410,7 +410,7 @@ starts a labelled sub-table (e.g. `## services`, `## silences`).
 issue_count, layers) and `## edges` (caller, callee, protocol, layer, kind, is_error, calls,
 span_rate, rps, error_pct, p95_ms) TSV. With a focus, nodes and edges cover only the tree's
 subgraph. Tree markers: `↺ cycle` (back-edge to an ancestor), `↑ see above` (that node's
-expansion was printed earlier), `↓ expanded below` (it is printed further down), `… N more … not shown` (15 per node), `… +N deeper` (depth limit). RED (`rps`,
+expansion was printed earlier), `↓ expanded below` (it is printed further down), `… N more … not shown` (15 per node), `… more callees may be cut (hop H read limit=L rows)` (this node's edges came from a hop that hit its row limit, so callees may be missing; callers for upstream: raise `limit` or filter), `… not expanded (frontier cap, hop H)` (the hop's frontier was capped at 50 services and this one was never queried), `… +N deeper` (depth limit). RED (`rps`,
 `err`, `p95`) is fetched for at most 10 nodes; later lines have none, and external, database
 and topic nodes never do.
 
