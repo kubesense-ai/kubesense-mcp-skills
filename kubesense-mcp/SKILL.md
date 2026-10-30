@@ -325,8 +325,8 @@ to each layer separately, so Kafka edges never push APM edges out. Always scope 
 `workload` focus and no `namespaces`/`workloads` filter the map is just the first `limit` edges
 ordered by issues then name (the tool prints a `# note:` when it cuts one off), so pass
 `workload` + `namespace` or `namespaces`. A p95 near a round timeout (600000 ms, 120000 ms) with
-~0 rps on gRPC/HTTP2 usually marks a streaming or long-poll call (e.g. a flag-sync watch the
-client cancels after ~10 minutes), not an outage; confirm with `analyze-traces` before reporting
+~0 rps on gRPC/HTTP2 usually marks a streaming or long-poll call (e.g. flagd `EventStream`, which ends at a
+~10-minute client deadline with gRPC status 4, DEADLINE_EXCEEDED), not an outage; confirm with `analyze-traces` before reporting
 it as a failure. Needs the Service Map scope (traces module, service-map sub-scope).
 
 Basic filters mirror the Service Map page sidebar and narrow the whole graph before the tree
