@@ -56,7 +56,7 @@ module. `analyze-telemetry` resolves every module its sub-queries touch.
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
 
-## Tools (41)
+## Tools (42)
 
 **Discovery — call before querying**
 
@@ -85,6 +85,7 @@ output. Use `get-fields`.
 | `analyze-metrics` | PromQL result |
 | `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics, events or RUM (`selectedMode: rum_<type>`) |
 | `get-distributed-trace` | Full span tree for one `trace_id` |
+| `get-service-map` | Service-to-service dependency graph (callers, callees, blast radius), as a `## call tree` plus nodes and edges TSV; optionally with Kafka producer/consumer topology |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |
 | `validate-spl` | Dry-run verdict for an SPL query, plus the SQL it compiles to |
@@ -106,7 +107,7 @@ query is broken before it is run. See [kubesense-spl](../kubesense-spl/SKILL.md)
 
 `list-clusters` · `list-nodes` · `get-node-detail` · `list-pods` · `get-pod-detail` ·
 `list-workloads` · `get-workload-detail` · `list-issues` · `get-infra-issues` ·
-`get-recent-changes`
+`get-recent-changes` · `get-service-map` (dependency graph; see [Choosing a Tool](#choosing-a-tool))
 
 **Cloud inventory** — see [kubesense-metrics](../kubesense-metrics/SKILL.md)
 
@@ -308,9 +309,31 @@ See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 | "how many errors in the last hour" | `analyze-logs`, `row_count` |
 | "p99 latency for checkout" | `analyze-traces`, `p99` over `duration` |
 | "why did this request fail" | `get-distributed-trace` |
+| "what calls X / what does X depend on / blast radius / dependency chain" | `get-service-map` |
 | "CPU usage" | `get-available-metrics` → `analyze-metrics` |
 | "error rate as a percentage" | `analyze-telemetry` with a formula |
 | "what's running / what's broken / what changed" | inventory tools — one call for what would otherwise be several queries |
+
+**Dependencies go to `get-service-map`, not `analyze-traces`.** Grouping spans by caller and
+callee only approximates the network-view edges, stops at a 100-group cap, and cannot produce
+the logical view or the Kafka (DSM) layer. Pass a `workload` + `namespace` focus with a
+`direction` (`downstream`, `upstream` or `both`) and a `depth` (1-5). `view=network` shows every
+observed TCP hop, load balancers and proxies included; `view=logical` shows service-to-service
+calls via propagated trace context, so uninstrumented hops vanish. `layers` defaults to `apm` on both
+views; `layers=apm,dsm` opts in to Kafka produce/consume topology (logical only). With DSM on,
+the `limit` can fill with Kafka edges and crowd out APM edges, so leave it off unless Kafka is
+the question. Needs the Service Map scope (traces module, service-map sub-scope).
+
+`where` filters the graph itself (ANDed with `clusters` and your access scope), in the same
+Logs/Traces advanced syntax as the other tools (`key OP value` with `=`, `!=`, `IN`, `LIKE`,
+`ILIKE`, combined by `AND`, `OR`, `NOT` and parentheses). Fields: `workload`, `namespace`,
+`cluster` (these match either end of a call; `!=` and `NOT IN` mean neither end),
+`client_workload`, `server_workload`, `client_namespace`, `server_namespace` (one end),
+`protocol` (exact case as the map shows it: `HTTP`, `gRPC`, `PostgreSQL`, `Kafka`), `source`, `connection_status` (`ok` or `error`).
+Negate a list as `NOT field IN (a, b)`; the infix `field NOT IN (...)` is not supported.
+Example: `namespace = shop AND NOT server_workload IN (redis, postgres)`. Span fields and span
+attributes are rejected, because the map reads aggregated interactions, not spans; use
+`analyze-traces` for those.
 
 **Aggregate with `analyze-*`, don't paginate `search-*`.** Reading raw rows to compute a
 count is slower, costs far more tokens, and — because paged scans are ordered
@@ -351,6 +374,20 @@ Three shapes, all designed to save tokens:
 **TSV** (`search-*` including `search-rum`, all inventory and alert list tools) — a `# key=value` metadata line,
 then a header row, then one row per record. Empty cell = field absent. A `## name` line
 starts a labelled sub-table (e.g. `## services`, `## silences`).
+
+**Service map** (`get-service-map`) — a header line
+`# view=… layers=… window=… limit=… truncated=… red_nodes=x/y`, then with a focus a
+`## call tree`, then `## nodes` (workload, namespace, cluster, kind, external, database,
+issue_count, layers) and `## edges` (caller, callee, protocol, layer, kind, is_error, calls,
+span_rate, rps, error_pct, p95_ms) TSV. With a focus, nodes and edges cover only the tree's
+subgraph. Tree markers: `↺ cycle` (back-edge to an ancestor), `↑ see above` (that node's
+expansion was printed earlier), `↓ expanded below` (it is printed further down), `… N more … not shown` (15 per node), `… +N deeper` (depth limit). RED (`rps`,
+`err`, `p95`) is fetched for at most 10 nodes; later lines have none, and external, database
+and topic nodes never do.
+
+**In your answer, paste the `## call tree` section verbatim inside a fenced code block** — that
+is how the human sees the nesting. Do not rebuild a tree from the edges table. In the KubeSense
+chat UI the call also renders the real map inline.
 
 **Columnar JSON** (all `analyze-*`) — `results` keyed by query label:
 
