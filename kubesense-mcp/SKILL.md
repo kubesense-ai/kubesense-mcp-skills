@@ -324,16 +324,28 @@ views; `layers=apm,dsm` opts in to Kafka produce/consume topology (logical only)
 the `limit` can fill with Kafka edges and crowd out APM edges, so leave it off unless Kafka is
 the question. Needs the Service Map scope (traces module, service-map sub-scope).
 
-`where` filters the graph itself (ANDed with `clusters` and your access scope), in the same
-Logs/Traces advanced syntax as the other tools (`key OP value` with `=`, `!=`, `IN`, `LIKE`,
-`ILIKE`, combined by `AND`, `OR`, `NOT` and parentheses). Fields: `workload`, `namespace`,
-`cluster` (these match either end of a call; `!=` and `NOT IN` mean neither end),
-`client_workload`, `server_workload`, `client_namespace`, `server_namespace` (one end),
-`protocol` (exact case as the map shows it: `HTTP`, `gRPC`, `PostgreSQL`, `Kafka`), `source`, `connection_status` (`ok` or `error`).
-Negate a list as `NOT field IN (a, b)`; the infix `field NOT IN (...)` is not supported.
-Example: `namespace = shop AND NOT server_workload IN (redis, postgres)`. Span fields and span
-attributes are rejected, because the map reads aggregated interactions, not spans; use
-`analyze-traces` for those.
+Basic filters mirror the Service Map page sidebar and narrow the whole graph before the tree
+is built (ANDed with `clusters` and your access scope):
+
+| Include (IN) | Exclude (NOT IN) | Matches |
+| --- | --- | --- |
+| `namespaces` | `exclude_namespaces` | exact namespace names |
+| `workloads` | `exclude_workloads` | exact workload names |
+| `protocols` | `exclude_protocols` | exact case as the map shows it: `HTTP`, `gRPC`, `PostgreSQL`, `Kafka` |
+| `sources` | `exclude_sources` | exact values of the page's Source filter |
+
+`connection_status` is `ok` or `error` (`error` keeps edges with issues). A value in both an
+include and its exclude list is an error. Pass exact values only; there are no wildcards.
+
+Caveats. A `workloads` or `namespaces` include keeps an edge when either end matches, so
+`workloads=["checkout"]` returns checkout plus its direct neighbours, not the whole graph.
+Combine it with a `workload` focus only when that is intended: the focus is searched inside the
+filtered graph and is "not found" if the filter removed it. `exclude_namespaces` and
+`exclude_workloads` drop an edge only when both ends match (as on the page today), so they do
+not remove edges to one excluded workload; `exclude_protocols`, `exclude_sources` and
+`connection_status` are exact. The Data Streams layer reads only namespace and workload
+includes and ignores the other filters; the two workload and namespace excludes are rejected
+with `layers=apm,dsm`. For span fields or attributes use `analyze-traces`.
 
 **Aggregate with `analyze-*`, don't paginate `search-*`.** Reading raw rows to compute a
 count is slower, costs far more tokens, and — because paged scans are ordered
@@ -376,7 +388,7 @@ then a header row, then one row per record. Empty cell = field absent. A `## nam
 starts a labelled sub-table (e.g. `## services`, `## silences`).
 
 **Service map** (`get-service-map`) — a header line
-`# view=… layers=… window=… limit=… truncated=… red_nodes=x/y`, then with a focus a
+`# view=… layers=… window=… limit=… truncated=… red_nodes=x/y filters=…` (the last only when filters are active), then with a focus a
 `## call tree`, then `## nodes` (workload, namespace, cluster, kind, external, database,
 issue_count, layers) and `## edges` (caller, callee, protocol, layer, kind, is_error, calls,
 span_rate, rps, error_pct, p95_ms) TSV. With a focus, nodes and edges cover only the tree's
