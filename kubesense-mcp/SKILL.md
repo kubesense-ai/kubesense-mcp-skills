@@ -329,6 +329,20 @@ ordered by issues then name (the tool prints a `# note:` when it cuts one off), 
 ~10-minute client deadline with gRPC status 4, DEADLINE_EXCEEDED), not an outage; confirm with `analyze-traces` before reporting
 it as a failure. Needs the Service Map scope (traces module, service-map sub-scope).
 
+A service is a unique (cluster, namespace, workload). `checkout` in Testing and `checkout` in
+us-2 are two services: never merged in the tree or tables, never a cycle with each other, never
+sharing a RED sample. If the focus name exists in several clusters the call fails and lists them;
+pass `cluster` to pick one. Externals, databases and Kafka topics have no such triple: they are
+identified by the node the map builds (external by address, database by instance, topic by
+cluster + system + topic name).
+
+A focused call reads hop by hop, not the whole estate: hop 1 only the focus's edges, hop N only
+the edges of the services the tree expanded at depth N-1, so the focus is found and its tree
+complete however big the estate. With a focus, `limit` is per frontier node in each hop (default
+200). `truncated=true` then means some hop hit its row limit, and `cut_hops=2,3` names the hops:
+the nodes expanded there may be missing callees or callers, so raise `limit` or narrow with
+filters.
+
 Basic filters mirror the Service Map page sidebar and narrow the whole graph before the tree
 is built (ANDed with `clusters` and your access scope):
 
@@ -391,7 +405,7 @@ then a header row, then one row per record. Empty cell = field absent. A `## nam
 starts a labelled sub-table (e.g. `## services`, `## silences`).
 
 **Service map** (`get-service-map`) — a header line
-`# view=… layers=… window=… limit=… truncated=… red_nodes=x/y filters=…` (the last only when filters are active), then with a focus a
+`# view=… layers=… window=… limit=… truncated=… [hops=N map_calls=M cut_hops=…] red_nodes=x/y filters=…` (hops, map_calls and cut_hops only with a focus, cut_hops only when a hop was cut; filters only when active), then with a focus a
 `## call tree`, then `## nodes` (workload, namespace, cluster, kind, external, database,
 issue_count, layers) and `## edges` (caller, callee, protocol, layer, kind, is_error, calls,
 span_rate, rps, error_pct, p95_ms) TSV. With a focus, nodes and edges cover only the tree's
