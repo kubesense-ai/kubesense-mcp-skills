@@ -320,9 +320,14 @@ the logical view or the Kafka (DSM) layer. Pass a `workload` + `namespace` focus
 `direction` (`downstream`, `upstream` or `both`) and a `depth` (1-5). `view=network` shows every
 observed TCP hop, load balancers and proxies included; `view=logical` shows service-to-service
 calls via propagated trace context, so uninstrumented hops vanish. `layers` defaults to `apm` on both
-views; `layers=apm,dsm` opts in to Kafka produce/consume topology (logical only). With DSM on,
-the `limit` can fill with Kafka edges and crowd out APM edges, so leave it off unless Kafka is
-the question. Needs the Service Map scope (traces module, service-map sub-scope).
+views; `layers=apm,dsm` opts in to Kafka produce/consume topology (logical only); `limit` applies
+to each layer separately, so Kafka edges never push APM edges out. Always scope the call: with no
+`workload` focus and no `namespaces`/`workloads` filter the map is just the first `limit` edges
+ordered by issues then name (the tool prints a `# note:` when it cuts one off), so pass
+`workload` + `namespace` or `namespaces`. A p95 near a round timeout (600000 ms, 120000 ms) with
+~0 rps on gRPC/HTTP2 usually marks a streaming or long-poll call (e.g. a flag-sync watch the
+client cancels after ~10 minutes), not an outage; confirm with `analyze-traces` before reporting
+it as a failure. Needs the Service Map scope (traces module, service-map sub-scope).
 
 Basic filters mirror the Service Map page sidebar and narrow the whole graph before the tree
 is built (ANDed with `clusters` and your access scope):
