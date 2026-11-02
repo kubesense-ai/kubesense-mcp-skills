@@ -2,10 +2,10 @@
 name: kubesense-mcp
 description: The KubeSense MCP tool layer — connection and auth, the full tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces/RUM query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
 metadata:
-  version: "2.5.0"
+  version: "2.6.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth
+  tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth,log-pipelines
 ---
 
 # KubeSense MCP
@@ -24,6 +24,7 @@ each have to redefine it.
 | what's running, pod restarts, what changed | [kubesense-infra](../kubesense-infra/SKILL.md) |
 | alerts — list, investigate, create | [kubesense-alerts](../kubesense-alerts/SKILL.md) |
 | dashboards — read, create, edit | [kubesense-dashboards](../kubesense-dashboards/SKILL.md) |
+| log pipelines — list, read, create, edit (parse, mask, drop logs at ingestion) | [kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md) |
 | real user monitoring — sessions, page views, web vitals, frontend errors, slow requests | [kubesense-rum](../kubesense-rum/SKILL.md) |
 
 ## Connection
@@ -50,13 +51,13 @@ Liveness: `GET /mcp_health`. To confirm *who* you are authenticated as, call
 `get-current-user` — no arguments, cheap, resolved from the request credentials.
 
 **RBAC** is resolved per tool call against the modules `logs`, `traces`,
-`infrastructure` (metrics + nodes/pods), `alerts`, and `rum`. A permission error names the
+`infrastructure` (metrics + nodes/pods), `alerts`, `rum`, and `log_rule_group` (log pipelines). A permission error names the
 module. `analyze-telemetry` resolves every module its sub-queries touch.
 
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
 
-## Tools (41)
+## Tools (45)
 
 **Discovery — call before querying**
 
@@ -162,6 +163,16 @@ the query by hand, resolve them against the variables table and use `analyze-met
 A `$$name` elsewhere in a query (a filter key, an advanced query, a code-mode selector) is a
 field reference: `<that variable's field> = $name`, dropped when nothing is selected.
 
+**Log pipelines** — see [kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md)
+
+`list-log-pipelines` (chain order; `id`, `enabled`, `source`, `inputs`, `updated_at`,
+`can_edit`) · `get-log-pipeline` (one pipeline with its rules, and the `updated_at` that
+`update-log-pipeline` needs)
+
+Log pipelines transform logs as they are ingested, so a write changes every matching log
+that arrives afterwards and cannot be undone for those logs. There is no delete tool, and no
+write tool can delete a pipeline or a rule.
+
 **Identity**
 
 `get-current-user` — returns `username`, `name`, `email`, `role`, `auth_type`. Note
@@ -179,7 +190,7 @@ hand through the matching one before creating it or handing it over.
 
 **Write — mutates state**
 
-`create-alert` · `create-dashboard` · `update-dashboard`
+`create-alert` · `create-dashboard` · `update-dashboard` · `create-log-pipeline` · `update-log-pipeline`
 
 All carry write annotations and expect user approval. State exactly what you are about
 to create or change before calling. `update-dashboard` edits a dashboard by id: read it
@@ -187,6 +198,11 @@ with `get-dashboard-details` first, and prefer `panel_operations` over a whole `
 On a tabbed dashboard each panel operation needs `tab_id`, and a whole `preset` must keep
 its `tabs` key. Each validates against the same schema as the tool above and
 refuses with the same findings, so validating first turns a refusal into a fix.
+
+`create-log-pipeline` and `update-log-pipeline` have no validate tool and no preview: read
+[kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md) and show the user the exact
+pipeline before calling either. `update-log-pipeline` needs the `updated_at` from
+`get-log-pipeline`.
 
 ## Discovery-First Rule
 
@@ -311,6 +327,7 @@ See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 | "CPU usage" | `get-available-metrics` → `analyze-metrics` |
 | "error rate as a percentage" | `analyze-telemetry` with a formula |
 | "what's running / what's broken / what changed" | inventory tools — one call for what would otherwise be several queries |
+| "mask / drop / parse / enrich logs at ingestion", "what log pipelines exist" | `list-log-pipelines`, `get-log-pipeline`; writes via [kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md) |
 
 **Aggregate with `analyze-*`, don't paginate `search-*`.** Reading raw rows to compute a
 count is slower, costs far more tokens, and — because paged scans are ordered
@@ -405,3 +422,7 @@ unreliable — and prefer aggregation whenever the answer is a number.
     value.
 11. `create-alert` mutates state: say what you're creating, and call
     `list-notification-channels` first or it will notify nobody.
+12. `create-log-pipeline` and `update-log-pipeline` change every matching log from the next one
+    onward and cannot be undone: confirm the exact pipeline with the user first, and read
+    [kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md). Nothing in the MCP layer
+    deletes a log pipeline.
