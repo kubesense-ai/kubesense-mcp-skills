@@ -21,13 +21,14 @@ skill for the tool layer they share.
 | **kubesense-alerts** | List/investigate/create alerts, generate import JSON, migrate Datadog monitors |
 | **kubesense-dashboards** | Create or edit dashboards, or generate preset JSON to import |
 | **kubesense-slo** | SLOs: error budgets, burn-rate alerting, Datadog SLO migration |
+| **kubesense-log-pipelines** | List/read/create/edit log pipelines — ingestion-time parse, mask, drop, enrich |
 
 ## Install
 
 > [!IMPORTANT]
 > **Always pass `--full-depth`.** This repo has a root `SKILL.md` (the umbrella index), and
 > the installer stops there unless told to search deeper — so without the flag it finds
-> **1** skill instead of **12**, and does so *silently*. Every command below includes it.
+> **1** skill instead of **13**, and does so *silently*. Every command below includes it.
 >
 > `references/` directories are **not** the reason for the flag. They are copied
 > automatically as part of a skill, nested subdirectories included.
@@ -57,6 +58,7 @@ npx skills add kubesense-ai/kubesense-mcp-skills \
   --skill kubesense-alerts \
   --skill kubesense-dashboards \
   --skill kubesense-slo \
+  --skill kubesense-log-pipelines \
   --full-depth
 ```
 
@@ -72,7 +74,7 @@ npx skills add kubesense-ai/kubesense-mcp-skills --skill kubesense-dashboards --
 npx skills add kubesense-ai/kubesense-mcp-skills --list --full-depth
 ```
 
-Should report **12 skills**. If it says 1, the `--full-depth` flag is missing.
+Should report **13 skills**. If it says 1, the `--full-depth` flag is missing.
 
 ### Unattended installs
 
@@ -118,8 +120,8 @@ claude mcp add --scope user --transport http kubesense \
 Verify with `GET /mcp_health`, then ask your agent to call `get-current-user` — it
 returns the identity the session resolved to and needs no arguments.
 
-Access is scoped by the same RBAC as the UI: `logs`, `traces`, `infrastructure`, `rum`, and
-`alerts` modules are resolved per tool call. A permission error names the module.
+Access is scoped by the same RBAC as the UI: `logs`, `traces`, `infrastructure`, `rum`,
+`alerts` and log pipelines (`log_rule_group`) modules are resolved per tool call. A permission error names the module.
 
 ## Which Skill Do I Want?
 
@@ -133,6 +135,7 @@ Access is scoped by the same RBAC as the UI: `logs`, `traces`, `infrastructure`,
 | "alert me when 5xx > 1%", "what's firing", "port this Datadog monitor" | kubesense-alerts |
 | "build a dashboard for the payments service" | kubesense-dashboards |
 | "are we meeting 99.9%", "error budget", "port our Datadog SLOs" | kubesense-slo |
+| "mask card numbers in logs", "drop health-check logs", "parse nginx lines at ingestion", "edit the checkout log pipeline" | kubesense-log-pipelines |
 | "this alert fired, what's wrong?" | kubesense-alerts, then kubesense-infra |
 
 ## Field Names: The One Thing To Know
@@ -181,6 +184,8 @@ kubesense-dashboards/SKILL.md
 kubesense-slo/SKILL.md
   references/api-payloads.md
   references/datadog-migration.md
+kubesense-log-pipelines/SKILL.md
+  references/processors.md
 drafts/                           not installable — see drafts/README.md
 ```
 
