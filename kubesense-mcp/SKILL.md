@@ -193,8 +193,9 @@ hand through the matching one before creating it or handing it over.
 
 `create-alert` · `create-dashboard` · `update-dashboard` · `create-log-pipeline` · `update-log-pipeline`
 
-All carry write annotations and expect user approval. State exactly what you are about
-to create or change before calling. `update-dashboard` edits a dashboard by id: read it
+All are annotated `readOnlyHint: false` and `destructiveHint: true`, so Codex and VS Code
+ask the user before each call, and carry `_meta["anthropic/requiresUserInteraction"]`, so
+Claude Code asks too, even in auto mode (it denies them in `dontAsk` mode). State exactly what you are about to create or change before calling. `update-dashboard` edits a dashboard by id: read it
 with `get-dashboard-details` first, and prefer `panel_operations` over a whole `preset`.
 On a tabbed dashboard each panel operation needs `tab_id`, and a whole `preset` must keep
 its `tabs` key. Each validates against the same schema as the tool above and
