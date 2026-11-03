@@ -2,7 +2,7 @@
 name: kubesense-logs
 description: Search and aggregate Kubernetes logs via KubeSense MCP — the exact log field catalog (type, instance, container, node — not level/pod_name/host), WHERE syntax, body text search, counts and percentiles, and window-based pagination.
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,logs,search,clickhouse,observability,errors,log-analysis
@@ -13,6 +13,12 @@ metadata:
 Requires the KubeSense MCP server; see **[kubesense-mcp](../kubesense-mcp/SKILL.md)** for
 connection, auth, and the shared WHERE-clause reference. Tools here resolve RBAC against
 the **`logs`** module.
+
+> [!NOTE]
+> This skill **reads** logs. To change how logs are parsed, masked, dropped or enriched as
+> they are ingested, use **[kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md)**
+> — and sample real lines here first: confirm the attribute names and the exact pattern a
+> processor will act on before writing it.
 
 ## Tools
 
