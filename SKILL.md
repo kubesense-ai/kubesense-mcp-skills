@@ -1,6 +1,6 @@
 ---
 name: kubesense-skills
-description: Use when the user asks about their KubeSense-monitored Kubernetes clusters or the apps on them and you need to pick which KubeSense skill applies — routes logs, traces, metrics, RUM, SQL, SPL, infra, alerts, dashboards, SLO and log-pipeline questions to the right skill.
+description: Use when the user asks about their KubeSense-monitored Kubernetes clusters or the apps on them and you need to pick which KubeSense skill applies — routes logs, traces, metrics, RUM, SQL, SPL, infra, alerts, dashboards, SLO, log-pipeline and service-map questions to the right skill.
 metadata:
   version: "2.1.0"
   author: kubesense
@@ -35,6 +35,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 |---|---|
 | "show me errors / grep the logs" | kubesense-logs |
 | "p99 latency / slow requests / which service is failing" | kubesense-traces |
+| "what does X depend on / what calls X / blast radius / service map" | kubesense-mcp (`get-service-map`) |
 | "CPU, memory, disk, saturation, capacity" | kubesense-metrics |
 | "page load time / LCP / frontend errors / crashes / user sessions / slow requests in the browser or app" | kubesense-rum |
 | "how is my RDS / EC2 / Azure VM / Atlas cluster doing" | kubesense-metrics |

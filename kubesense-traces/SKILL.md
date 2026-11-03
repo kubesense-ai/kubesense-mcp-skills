@@ -11,7 +11,7 @@ metadata:
 # KubeSense Traces (APM)
 
 Use for anything about **requests**: latency, p99/p95, error rate, HTTP method, status
-code, endpoint, service-to-service calls, downstream dependencies. (Log lines and panics
+code, endpoint, service-to-service calls, downstream dependencies (graph questions → `get-service-map`). (Log lines and panics
 → [kubesense-logs](../kubesense-logs/SKILL.md).)
 
 Requires the KubeSense MCP server; see **[kubesense-mcp](../kubesense-mcp/SKILL.md)**.
@@ -25,6 +25,12 @@ Tools resolve RBAC against the **`traces`** module.
 | `analyze-traces` | Latency percentiles, error rates, counts, trends |
 | `search-traces` | Read individual spans |
 | `get-distributed-trace` | You have a `trace_id` and need the full call chain |
+| `get-service-map` | "What calls X", "what does X depend on", blast radius, dependency chain across services |
+
+**For dependencies use `get-service-map`, not `analyze-traces`.** Grouping spans by caller and
+callee only approximates the network edges (100-group cap) and cannot give the logical view or
+the Kafka layer (opt in with `layers=apm,dsm`; the default is `apm`). Paste its `## call tree` verbatim in a fenced code block; do not rebuild it
+from the edges table. See [kubesense-mcp](../kubesense-mcp/SKILL.md#choosing-a-tool).
 
 **`get-distributed-trace` is the highest-leverage tool here.** A single span tells you
 something failed; the trace tells you *which hop* failed and *where the time went*.
