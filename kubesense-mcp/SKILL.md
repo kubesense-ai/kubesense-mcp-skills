@@ -1,6 +1,6 @@
 ---
 name: kubesense-mcp
-description: The KubeSense MCP tool layer — connection and auth, the full tool inventory, tool selection, the discovery-first rule, the catalog-label field contract shared by every logs/traces/RUM query, WHERE syntax, multi-datasource formula queries, and how to read the TSV/columnar output formats. Read this when a tool returns a field-name or WHERE error.
+description: Use before the first KubeSense MCP tool call, when connecting or authenticating the KubeSense MCP server, when choosing which KubeSense tool answers a question, when one query must combine datasources with a formula, or when a KubeSense tool returns a field-name or WHERE error, an unexpectedly empty result, or TSV/columnar output to decode.
 metadata:
   version: "2.6.0"
   author: kubesense

@@ -1,6 +1,6 @@
 ---
 name: kubesense-traces
-description: Query spans and distributed traces via KubeSense MCP — latency percentiles, error rates, the exact trace field catalog (service, role, method, status_code, resource — not app_service/kind/subtype/return_code), duration units, and the distributed-trace waterfall for root-causing which hop broke or burned the time.
+description: Use when the user asks KubeSense about request latency (p50/p95/p99), error rates, slow or failing endpoints, which service or downstream hop is failing or burning time, or wants one distributed trace's waterfall — any span query through analyze-traces, search-traces or get-distributed-trace.
 metadata:
   version: "2.0.0"
   author: kubesense

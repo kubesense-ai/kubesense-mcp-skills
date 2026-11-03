@@ -1,6 +1,6 @@
 ---
 name: kubesense-infra
-description: Inventory and topology of the monitored Kubernetes estate via KubeSense MCP — clusters, nodes, pods, workloads, detected issues, infra failures (OOM/CrashLoop/probe/scheduling), and recent deploys/scaling changes. Use for "what is running", "what is broken at the k8s layer", and "what changed".
+description: Use when the user asks what is running in their KubeSense-monitored clusters (clusters, nodes, pods, workloads), why a pod is restarting, OOMKilled, CrashLooping, failing probes or stuck Pending, what is broken at the Kubernetes layer, or what changed recently (deploys, scaling) — including right after an alert fires.
 metadata:
   version: "2.1.0"
   author: kubesense
