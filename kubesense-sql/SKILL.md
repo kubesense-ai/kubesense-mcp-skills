@@ -1,6 +1,6 @@
 ---
 name: kubesense-sql
-description: Run raw ClickHouse SQL against KubeSense logs and traces via execute-sql / validate-sql — the queryable column set, the $__timeFilter/$__clusters macros, @attr access, and the joins, CTEs and window functions the analyze-* tools cannot express.
+description: Use when a KubeSense logs or traces question needs raw ClickHouse SQL — a join, CTE, subquery or window function the analyze-* tools cannot express — or when writing, validating or fixing an execute-sql / validate-sql query.
 metadata:
   version: "2.0.0"
   author: kubesense

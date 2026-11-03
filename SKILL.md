@@ -1,6 +1,6 @@
 ---
 name: kubesense-skills
-description: KubeSense observability skills for AI agents — query logs, traces, metrics and real user monitoring (RUM) data from Kubernetes clusters and the apps on them, inspect cluster inventory, manage service level objectives, edit log pipelines, and generate alert and dashboard configuration.
+description: Use when the user asks about their KubeSense-monitored Kubernetes clusters or the apps on them and you need to pick which KubeSense skill applies — routes logs, traces, metrics, RUM, SQL, SPL, infra, alerts, dashboards, SLO and log-pipeline questions to the right skill.
 metadata:
   version: "2.1.0"
   author: kubesense

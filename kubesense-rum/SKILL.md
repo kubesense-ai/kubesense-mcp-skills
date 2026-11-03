@@ -1,6 +1,6 @@
 ---
 name: kubesense-rum
-description: Aggregate and read real user monitoring (RUM) data via KubeSense MCP — sessions, views, actions, errors, resources and long tasks from browser and mobile apps. Covers the rum_<type> signals, the per-event-type field catalog, which fields accept LIKE or group-by, nanosecond durations and their _ms/_s twins, feature flags and attributes, and the dashboard panel shape. Counts, rates and percentiles with analyze-telemetry, raw rows with search-rum. There is no alerting, SQL or SPL for RUM.
+description: Use when the user asks KubeSense about real user monitoring (RUM) — page load time, web vitals (LCP, INP, CLS), frontend or mobile errors and crashes, user sessions, views, clicks and actions, slow resource requests or long tasks in a browser or mobile app.
 metadata:
   version: "1.0.0"
   author: kubesense

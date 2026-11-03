@@ -1,6 +1,6 @@
 ---
 name: kubesense-metrics
-description: Query Kubernetes, infrastructure and cloud-provider metrics from KubeSense with PromQL/MetricsQL — metric discovery, label inspection, the metric families KubeSense actually collects (kube-state-metrics, cAdvisor, node-exporter, OTel hostmetrics, DCGM GPU, JVM, and AWS/GCP/Azure/MongoDB Atlas/Confluent/Kong cloud resources), and the label conventions (clusterId, kubesense_cloud_resource_metric) needed to write a query that returns data, plus a reference for every MetricsQL function.
+description: Use when the user asks KubeSense about CPU, memory, disk, network, GPU, JVM, saturation or capacity of pods, nodes or cloud resources (AWS, GCP, Azure, MongoDB Atlas, Confluent, Kong), writes or debugs a PromQL/MetricsQL query, gets an empty metrics result, or asks which cloud accounts are connected.
 metadata:
   version: "2.2.0"
   author: kubesense

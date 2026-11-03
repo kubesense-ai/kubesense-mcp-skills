@@ -1,6 +1,6 @@
 ---
 name: kubesense-log-pipelines
-description: List, read, create and edit KubeSense log pipelines through the list-log-pipelines, get-log-pipeline, create-log-pipeline and update-log-pipeline MCP tools — ordered processors (parse, extract, block, remove-fields, replace, protect, lookup and more) that transform logs as they are ingested. Covers the discover, sample, draft, confirm, write workflow, the inputs matcher tree, the optimistic-lock updated_at, and the Dangers that make a pipeline change permanent for every new log. Read it before any write to a log pipeline.
+description: Use before any write to a KubeSense log pipeline, and when the user wants logs parsed, fields extracted, values masked or redacted, logs dropped, fields removed or renamed, or logs enriched at ingestion — or wants their log pipelines listed, read, created or edited.
 metadata:
   version: "1.0.0"
   author: kubesense

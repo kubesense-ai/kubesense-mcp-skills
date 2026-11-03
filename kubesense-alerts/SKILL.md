@@ -1,6 +1,6 @@
 ---
 name: kubesense-alerts
-description: Work with KubeSense alerts — survey what is firing, inspect a rule's breaching condition and history, and create rules either via the create-alert MCP tool or as import JSON over metrics, logs, and traces. Includes validate-alert-json for checking hand-built rule JSON, the alert engine's own field allow-lists, which differ from the query engine's, and translating Datadog monitors. Also covers multi-query formula rules, composite AND/OR conditions (bands, cross-query joins with join_by), two-level warning/critical thresholds, the Alert. placeholder namespace, manual resolve, and maintenance windows.
+description: Use when the user asks which KubeSense alerts are firing, why an alert fired or paged nobody, wants an alert rule created, edited or resolved ("alert me when…"), needs alert import JSON built or validated, wants a Datadog monitor converted, or is setting up a maintenance window.
 metadata:
   version: "2.4.1"
   author: kubesense

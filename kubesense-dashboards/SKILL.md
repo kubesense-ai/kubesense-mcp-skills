@@ -1,6 +1,6 @@
 ---
 name: kubesense-dashboards
-description: Create and edit KubeSense dashboards over metrics, logs, traces, real user monitoring (RUM) and infrastructure host maps — directly with the create-dashboard and update-dashboard MCP tools, or as preset JSON the user imports — with the exact schema, the fields that hard-fail import, and the fields that silently discard your data instead of erroring. Includes validate-dashboard-json for checking a preset before you commit to it.
+description: Use when the user wants a KubeSense dashboard built, edited or extended (panels over metrics, logs, traces, RUM or host maps), asks for dashboard preset JSON to import, asks what a panel on an existing dashboard shows, or has dashboard JSON that fails import or renders empty panels.
 metadata:
   version: "2.8.0"
   author: kubesense
