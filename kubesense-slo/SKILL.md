@@ -1,6 +1,6 @@
 ---
 name: kubesense-slo
-description: Create, read and manage KubeSense service level objectives (SLOs) over the REST API — by_count, time_slice and alert-uptime SLIs, error budgets, burn-rate alerting and grouping — and translate Datadog SLOs into equivalent KubeSense ones. Covers the exact POST /api/slo payload, the good/total query config shape it shares with alert rules, and the traps that make an SLO store cleanly and then evaluate nothing.
+description: Use when the user wants a KubeSense service level objective (SLO) created, read, changed or deleted, asks about an error budget or burn-rate alerting, wants a Datadog SLO ported, or has an SLO that saved fine but reports no data.
 metadata:
   version: "1.0.0"
   author: kubesense

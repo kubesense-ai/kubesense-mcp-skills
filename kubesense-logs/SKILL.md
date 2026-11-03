@@ -1,6 +1,6 @@
 ---
 name: kubesense-logs
-description: Search and aggregate Kubernetes logs via KubeSense MCP — the exact log field catalog (type, instance, container, node — not level/pod_name/host), WHERE syntax, body text search, counts and percentiles, and window-based pagination.
+description: Use when the user wants KubeSense logs searched, grepped, counted or aggregated — errors or a message from a pod, container, node or namespace, log volume over time, percentiles of a log field, or paging through search-logs / analyze-logs results. Joins and window functions go to kubesense-sql, piped SPL to kubesense-spl, ingestion-time changes to kubesense-log-pipelines.
 metadata:
   version: "2.1.0"
   author: kubesense

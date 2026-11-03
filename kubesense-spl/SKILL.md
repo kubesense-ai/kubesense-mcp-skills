@@ -1,6 +1,6 @@
 ---
 name: kubesense-spl
-description: Write, validate and run KubeSense SPL — the piped log query language — via validate-spl and execute-spl. Covers the storage-name field contract that inverts every other KubeSense surface, log_processed attributes, the command and aggregation vocabulary, and why an SPL query can compile and still fail.
+description: Use when the user writes, pastes or asks for an SPL query (the piped, Splunk-style log language), mentions the SPL tab, or needs one validated, run or fixed with validate-spl / execute-spl in KubeSense.
 metadata:
   version: "2.0.0"
   author: kubesense
