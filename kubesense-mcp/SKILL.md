@@ -1,11 +1,11 @@
 ---
 name: kubesense-mcp
-description: Use before the first KubeSense MCP tool call, when connecting or authenticating the KubeSense MCP server, when choosing which KubeSense tool answers a question, when one query must combine datasources with a formula, or when a KubeSense tool returns a field-name or WHERE error, an unexpectedly empty result, or TSV/columnar output to decode.
+description: Use before the first KubeSense MCP tool call, when connecting or authenticating the KubeSense MCP server, when choosing which KubeSense tool answers a question, when the user asks what a service calls or depends on, what calls it, its blast radius, or for its service map or dependency graph, when one query must combine datasources with a formula, or when a KubeSense tool returns a field-name or WHERE error, an unexpectedly empty result, or TSV/columnar output to decode.
 metadata:
   version: "2.6.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth,log-pipelines
+  tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth,log-pipelines,service-map,dependencies
 ---
 
 # KubeSense MCP
