@@ -205,6 +205,8 @@ refuses with the same findings, so validating first turns a refusal into a fix.
 pipeline before calling either. `update-log-pipeline` needs the `updated_at` from
 `get-log-pipeline`.
 
+Say "domain" to users for what the API calls a `cluster`; tool names, field names and `type` values stay as they are.
+
 ## Discovery-First Rule
 
 **Never guess a name.** Not a field, metric, cluster, or label.
