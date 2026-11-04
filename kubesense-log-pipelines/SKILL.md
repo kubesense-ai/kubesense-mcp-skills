@@ -19,7 +19,7 @@ RBAC resolves against the log pipelines module (`log_rule_group`); a permission 
 |---|---|
 | `list-log-pipelines` | Pipelines in chain order: `id`, `name`, `enabled`, `source`, `index`, `inputs`, `updated_at`, `can_edit`. Filters `source`, `name`. |
 | `get-log-pipeline` | One pipeline with its `rules`, each `{id, name, type, config}`, in run order. Returns the `updated_at` that `update-log-pipeline` needs. |
-| `create-log-pipeline` | New pipeline: `name`, `source`, `inputs` (at least one), `rules` (at least one). Added **enabled**, at the **end** of the chain. |
+| `create-log-pipeline` | New pipeline: `name`, `source`, `inputs` (at least one domain), `rules` (at least one). Added **enabled**, at the **end** of the chain. |
 | `update-log-pipeline` | Rename, replace `inputs`, replace the rule list, or switch the pipeline on or off. |
 
 What these tools cannot do: delete a pipeline or a rule, reorder pipelines, change
@@ -105,13 +105,14 @@ active 32-byte key configured, the rule saves and **does not mask anything**. `m
 is 1 to 64 visible characters; `0` or omitted gives the default of 3, not 0.
 *Guard:* keep every `protect` rule last, including when inserting a new rule into an existing list; after the save, read new logs with `search-logs` and confirm the value is masked; to show fewer than 3 characters use `mask_prefix: 1`, and tell the user a fully hidden value is not available.
 
-**9. Broad inputs touch every cluster.**
-`{"name":"*","type":"cluster"}` applies the pipeline to every cluster's logs. A cluster
-node with no `childs` (or `has_all_childs: true`) covers every namespace and workload in
-it. `*` means "all" only as a cluster name; as a namespace or workload name it matches
-nothing. `update-log-pipeline` replaces the whole `inputs` list, so widening or narrowing
+**9. Broad inputs touch every domain.**
+`{"name":"*","type":"cluster"}` applies the pipeline to every domain's logs (a domain is
+what the API calls a `cluster`). A domain node with no `childs` (or `has_all_childs: true`)
+covers every namespace and workload in it. `*` means "all" only as a domain name; a
+namespace or workload named `*` matches no log, and the server refuses one you send.
+`update-log-pipeline` replaces the whole `inputs` list, so widening or narrowing
 is a full rewrite of it.
-*Guard:* default to the narrowest matcher that covers the request (cluster, namespace and workload); use `*` only when the user said every cluster.
+*Guard:* default to the narrowest matcher that covers the request (domain, namespace and workload); use `*` only when the user said every domain.
 
 **10. A new pipeline goes live immediately, at the end of the chain.**
 `create-log-pipeline` saves it enabled and appends it after every existing pipeline, so
@@ -169,28 +170,42 @@ Each step ends when its condition is true.
 ### Inputs: the matcher tree
 
 `inputs` is a list of matchers; a log matches the pipeline if it matches **any** top-level
-matcher. A node is `{"name","type"}` with `type` `cluster`, `namespace` or `workload`. Nest
-namespaces under a cluster and workloads under a namespace with `childs`. The server
-validates the nesting: top level is clusters only, then cluster, namespace, workload. A node with no
-`childs`, or with `has_all_childs: true`, matches everything below it. Names are exact and
-case-sensitive; take them from `list-clusters` / `list-workloads`.
+matcher. A node is `{"name","type"}` with `type` `cluster`, `namespace` or `workload`. A
+`cluster` node is a **domain**: say "domain" to the user, and send `cluster` as the type.
+
+- Nest a namespace under a domain and a workload under a namespace, with `childs`.
+- A workload whose logs have no namespace (legacy, non-Kubernetes services) goes directly
+  under its domain. Never invent a namespace for it.
+- A workload directly under a domain matches that workload name in every namespace of the domain.
+- A node with no `childs`, or with `has_all_childs: true`, matches everything below it.
+  `get-log-pipeline` returns `has_all_childs` on every node; copy it back as it is.
+- `*` means all only as a domain name. A namespace or workload named `*` matches no log and is refused.
+- There is no service node: use the workload name the logs carry.
+- Names are exact and case-sensitive. Take them from `list-clusters` / `list-workloads`, or,
+  for domains with no Kubernetes inventory, from the `cluster`, `namespace` and `workload`
+  values on logs from `search-logs`.
 
 ```json
 [
   { "name": "prod-us", "type": "cluster", "childs": [
       { "name": "payments", "type": "namespace", "childs": [
           { "name": "checkout", "type": "workload" } ] } ] },
+  { "name": "legacy-dc", "type": "cluster", "childs": [
+      { "name": "billing-batch", "type": "workload" } ] },
   { "name": "prod-eu", "type": "cluster" }
 ]
 ```
 
-This matches `checkout` in `payments` on `prod-us`, plus everything on `prod-eu`.
+This matches `checkout` in `payments` on `prod-us`, `billing-batch` in any namespace (or none)
+on `legacy-dc`, plus everything on `prod-eu`.
 
 Refusals, each prefixed `invalid pipeline: ` and followed by a path such as `inputs[0]` or
 `inputs[0].childs[1]`:
-- `a top-level input must be a cluster, not a namespace. Nest namespaces under a cluster and workloads under a namespace`
-- `a cluster can only hold namespace nodes, not workload. Inputs nest cluster, then namespace, then workload` (likewise `a namespace can only hold workload nodes, not ...`)
+- `a top-level input must be a domain (type "cluster"), not a namespace. Nest a namespace or workload under a domain, and a workload under a namespace` (likewise `not a workload`)
+- `a domain (type "cluster") can only hold namespace or workload nodes, not cluster`
+- `a namespace can only hold workload nodes, not namespace` (likewise `not cluster`)
 - `a workload cannot have childs`
+- `a namespace named "*" matches no log. "*" means all only on a domain. To match one workload that has no namespace, put the workload directly under its domain` (likewise `a workload named "*"`). Only inputs you send are checked, so a saved pipeline that already has one can still be renamed or have its rules edited.
 - `type "<x>" is not one of cluster, namespace, workload`
 - `name is required`
 
@@ -271,7 +286,7 @@ rules with `field` and `pattern` only.
 
 ## Rules
 
-1. Survey, template, sample before drafting; never invent a field, cluster, workload or reference table id.
+1. Survey, template, sample before drafting; never invent a field, domain, workload or reference table id.
 2. Confirm the exact pipeline with the user before `create-log-pipeline` or `update-log-pipeline`.
 3. Always `get-log-pipeline` immediately before `update-log-pipeline`, and pass `updated_at` unchanged.
 4. `rules` in an update is the full ordered list with every existing id.
