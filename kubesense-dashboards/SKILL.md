@@ -30,8 +30,9 @@ Both go through the same server-side schema check, so a preset that passes
 - "Give me the dashboard JSON for…" → preset JSON
 - "Generate a dashboard preset" → preset JSON
 - "What does the X panel show" / "show me the X panel on the Y dashboard" →
-  `list-dashboards` for the id, then `run-dashboard-panel` with the panel's name. It runs
-  the saved queries with the dashboard's variables and the panel's time frame applied.
+  `list-dashboards` for the id, then `get-dashboard-details` for the panel's `panel_id`,
+  then `run-dashboard-panel` with that `panel_id`. A panel name still works. It runs the
+  saved queries with the dashboard's variables and the panel's time frame applied.
 - "Change / fix / add a panel to the X dashboard" → `get-dashboard-details`, then
   `update-dashboard` — see [Editing an existing dashboard](#editing-an-existing-dashboard)
 
@@ -676,12 +677,23 @@ document in place and keeps everything you never saw.
 
 `get-dashboard-details` gives what the operations need:
 
-- `position` — the panel's index within its section, from 0. Panels have no id.
+- `panel_id` — the panel's stable id. Address a panel by it when you can; it does not
+  change when other panels move or are removed. The first read of a dashboard assigns
+  ids to its panels. If a row shows no `panel_id` (the server could not read the panel
+  rows), use the address below.
+- `panel_version` — the panel's version. Send it back as `panel_version` to refuse the
+  edit if someone changed that panel since you read it.
+- `variables_used` — the dashboard variables (`$name`, without the `$`) that the panel's
+  queries and title mention. Use it to pick which `variables` to override in
+  `run-dashboard-panel`.
+- `position` — the panel's index within its section, from 0. It is an address, not an
+  id, and it shifts when a panel before it is removed.
 - `sub_grid_id` — the row (sub-grid) the panel is in; empty for a top-level panel.
 - `tab_id` and `tab_title` — the tab the panel is on; empty on an untabbed dashboard. The
   response also lists the dashboard's tabs.
 - `preset_version` — pass it back unchanged as `preset_version`. **Required** with
-  `panel_operations`.
+  `panel_operations` that address panels by position, and optional when every operation
+  uses `panel_id`.
 - `rendered_promql` — on a builder-mode metrics query, the PromQL the panel runs (the
   stored `promql` is empty in builder mode), with `$$name` filters expanded to
   `<field>="$name"`. Read-only: it is not part of the stored query,
@@ -694,6 +706,26 @@ Each operation is one of:
 {"op": "add_panel", "panel": { /* the whole new panel */ }, "grid_layout": {"w": 6, "h": 4}}
 {"op": "remove_panel", "position": 0}
 ```
+
+**Address by `panel_id` when you have one.** `update_panel` and `remove_panel` accept
+`panel_id` in place of `tab_id`, `sub_grid_id` and `position`:
+
+```json
+{"op": "update_panel", "panel_id": "<id>", "panel_version": 3, "panel": {"name": "p99 latency"}}
+{"op": "remove_panel", "panel_id": "<id>"}
+```
+
+- No `preset_version` is needed. `panel_version` is optional. With it, the edit is refused
+  if that panel changed since you read it. Without it, the edit applies to the panel as it
+  is now.
+- All operations in one call use `panel_id`, or none does. A call that mixes them is
+  refused. `panel_version` without `panel_id` is also refused, as is an operation that
+  gives `panel_id` together with an address.
+- `add_panel` always uses the tab address, because the new panel has no id yet.
+- A call with `panel_id` operations cannot also set `name`, `description` or `preset`. Send
+  those in a separate call.
+
+Name-and-position addressing and `preset_version` still work and behave as before.
 
 A panel's address is `tab_id`, `sub_grid_id` and `position`. Add `"sub_grid_id": "<id>"`
 to act inside a row; omit it for the page's top-level panels. On a tabbed dashboard every
@@ -712,12 +744,12 @@ refuses the call, and the error lists the valid tab ids. On an untabbed dashboar
 - `add_panel` appends a whole panel, which must pass the same checks as
   `create-dashboard`. It takes no `position`. Without `grid_layout` it goes in a new row
   below everything else, sized like the section's first cell.
-- `remove_panel` takes only `position` (and `tab_id`, `sub_grid_id`); it removes the panel
-  and its layout cell.
+- `remove_panel` takes only `position` (and `tab_id`, `sub_grid_id`), or only `panel_id`;
+  it removes the panel and its layout cell.
 
 **Positions refer to the dashboard as you read it**, even after an earlier operation in
-the same call removed a panel — do not re-count. Target each position at most once per
-call; combine two edits to one panel into one `update_panel`. All operations are applied
+the same call removed a panel — do not re-count. A `panel_id` does not move at all. Target
+each panel at most once per call; combine two edits to one panel into one `update_panel`. All operations are applied
 in one write, and one bad operation refuses the whole call, naming
 `panel_operations[i]`.
 
@@ -726,6 +758,8 @@ in one write, and one bad operation refuses the whole call, naming
 | Message says | Do |
 |---|---|
 | `the dashboard changed since it was read` / `was saved by someone else` | Call `get-dashboard-details` again and rebuild the edit from the new positions and `preset_version`. Never reuse the old ones. |
+| `panel <id> changed since it was read` | Someone edited that panel after your `panel_version`. Read it again with `get-dashboard-details` and rebuild the edit from the new `panel_version`. |
+| `every operation uses panel_id when one does` / `give panel_id or tab_id, sub_grid_id and position, not both` | Use `panel_id` on every operation of the call, or on none. |
 | `position N does not exist` | Re-read; the position is out of range for that section. |
 | `sub-grids share id` / `panel(s) but … gridLayout entr(ies)` | That section cannot be edited by position — fall back to a whole `preset`. |
 | `preset and panel_operations cannot be combined` | Send one or the other. |
@@ -748,6 +782,34 @@ the server refuses it with 409. Moving a panel to another tab is also a rewrite:
 out of one tab's `panels` and `gridLayout` and append it to the other's.
 
 A `name`- or `description`-only update needs neither.
+
+### Running a panel
+
+`run-dashboard-panel` runs one saved panel and returns the data it shows. Prefer `panel_id`:
+
+```json
+{"panel_id": "<id>", "variables": [{"name": "cluster", "values": ["prod"]}], "from_time": "2026-11-05T08:00:00Z", "to_time": "2026-11-05T09:00:00Z"}
+```
+
+- `panel_id` replaces `panel` and the address. `dashboard_id` is optional with it. If you
+  give both, the panel must belong to that dashboard.
+- `variables` overrides dashboard variables for this run. Each entry is `{"name", "values"}`,
+  with the name written without the `$`. A variable you do not list keeps its saved value,
+  and an empty `values` list means All. A name the dashboard does not define is an error that
+  lists the valid ones. `variables_used` on the panel row shows which variables matter.
+- `from_time` and `to_time` are RFC3339. They apply only when the panel has no `time_frame`
+  of its own. The default is the last hour.
+
+Without a `panel_id`, give `dashboard_id` plus the panel's name (`panel`) or its `tab_id`,
+`sub_grid_id` and `position`, not both. Those inputs still work.
+
+### Preset JSON has no panel ids
+
+A panel id exists only on a dashboard that is stored on the server. Preset JSON that you
+hand over to import, or pass to `create-dashboard`, describes panels without ids. The
+server assigns the ids, and the first `get-dashboard-details` read of a dashboard guarantees them. **Never add a `panel_id` or any
+other id to import JSON.** Import, export and Terraform work with the preset exactly as
+documented here. After import, call `get-dashboard-details` to read the ids.
 
 ### Handing over JSON to import
 
