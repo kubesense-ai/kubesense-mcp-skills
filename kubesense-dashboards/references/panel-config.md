@@ -332,7 +332,8 @@ Do not set it on `hostMap` or `slo` panels, or on an `alert` panel whose widget 
 `graph`: the webapp ignores it there and the panel follows the dashboard's time.
 `validate-dashboard-json` refuses an unknown key: `last_90d`, `today` and `yesterday` do not
 exist. `get-dashboard-details` reports the window as the panel's `time_frame`.
-`run-dashboard-panel` always runs that panel over it. When you re-run its queries by hand,
+`run-dashboard-panel` always runs that panel over it, whether you name the panel by
+`panel_id`, by name, or by address. When you re-run its queries by hand,
 use that window, not the dashboard's range.
 
 ## `yAxisLabelFormatter` — all 199 values

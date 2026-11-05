@@ -128,14 +128,16 @@ report it. Call it before any cloud metric query: it gives the real `provider`,
 **Dashboards** — see [kubesense-dashboards](../kubesense-dashboards/SKILL.md)
 
 `list-dashboards` (id, name, description, `type` and `integration_id`; optional
-`type: "system" | "user"` filter) · `get-dashboard-details` (each panel's queries, plus the
-`tab_id`, `sub_grid_id`, `position` and `preset_version` that `update-dashboard` needs, and
+`type: "system" | "user"` filter) · `get-dashboard-details` (each panel's queries, plus its
+`panel_id`, `panel_version` and `variables_used`, the `tab_id`, `sub_grid_id` and `position`
+address, and the `preset_version` that `update-dashboard` needs, and
 `tab_title` and the tab list on a tabbed dashboard; `raw=true` adds the whole stored preset)
 · `run-dashboard-panel` (runs one saved panel and returns its data)
 
-To show what a panel says, call `run-dashboard-panel` with the `dashboard_id` and the
-panel's name (`panel`, case-insensitive, exact match first and then substring) or its
-`tab_id` / `sub_grid_id` / `position`. It runs the panel's saved queries the way the
+To show what a panel says, call `run-dashboard-panel` with the panel's `panel_id` from
+`get-dashboard-details`. `dashboard_id` is optional with it. Without a `panel_id`, give the
+`dashboard_id` and the panel's name (`panel`, case-insensitive, exact match first and then
+substring) or its `tab_id` / `sub_grid_id` / `position`. It runs the panel's saved queries the way the
 dashboard draws them. It resolves dashboard variables from their saved values, takes
 optional `variables` overrides as `[{"name": "cluster", "values": ["prod"]}]` (an empty
 `values` means All), uses the panel's own `time_frame` over `from_time` / `to_time` (default
@@ -197,8 +199,10 @@ All are annotated `readOnlyHint: false` and `destructiveHint: true`, so Codex an
 ask the user before each call, and carry `_meta["anthropic/requiresUserInteraction"]`, so
 Claude Code asks too, even in auto mode (it denies them in `dontAsk` mode). State exactly what you are about to create or change before calling. `update-dashboard` edits a dashboard by id: read it
 with `get-dashboard-details` first, and prefer `panel_operations` over a whole `preset`.
-On a tabbed dashboard each panel operation needs `tab_id`, and a whole `preset` must keep
-its `tabs` key. Each validates against the same schema as the tool above and
+Address a panel by its `panel_id` (with an optional `panel_version`) when you have one. Then
+no `preset_version` is needed. Otherwise each panel operation uses the address and, on a
+tabbed dashboard, needs `tab_id`. A whole `preset` must keep its `tabs` key, and preset JSON
+never carries panel ids. Each validates against the same schema as the tool above and
 refuses with the same findings, so validating first turns a refusal into a fix.
 
 `create-log-pipeline` and `update-log-pipeline` have no validate tool and no preview: read

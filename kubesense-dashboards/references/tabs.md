@@ -127,9 +127,12 @@ envelope's `preset`. Replace the metric names with ones `get-available-metrics` 
 ## Editing a tabbed dashboard
 
 `get-dashboard-details` returns `tab_id` and `tab_title` on each panel row, and the list of
-tabs. With `panel_operations`, every operation needs `tab_id`, beside `sub_grid_id` and
-`position`. A missing or unknown `tab_id` refuses the call, and the error lists the valid
-ids.
+tabs. It also returns each panel's `panel_id`, `panel_version` and `variables_used`. A
+`panel_id` names a panel on any tab, so `update_panel` and `remove_panel` with `panel_id`
+need no `tab_id`. When you address a panel by position instead, every operation needs
+`tab_id`, beside `sub_grid_id` and `position`. A missing or unknown `tab_id` refuses the
+call, and the error lists the valid ids. `add_panel` always needs `tab_id` on a tabbed
+dashboard. Preset JSON for import carries no panel ids.
 
 Adding, removing, renaming and reordering tabs, and moving a panel between tabs, are
 whole-preset rewrites: read with `get-dashboard-details raw=true`, edit the `tabs` array,
