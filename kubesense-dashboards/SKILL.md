@@ -678,9 +678,10 @@ document in place and keeps everything you never saw.
 `get-dashboard-details` gives what the operations need:
 
 - `panel_id` — the panel's stable id. Address a panel by it when you can; it does not
-  change when other panels move or are removed. The first read of a dashboard assigns
-  ids to its panels. If a row shows no `panel_id` (the server could not read the panel
-  rows), use the address below.
+  change when other panels move or are removed. The server assigns ids when a dashboard
+  is saved; a dashboard last saved before panel ids existed gets them on its next read.
+  If a row shows no `panel_id` (the server could not read the panel rows), use the
+  address below.
 - `panel_version` — the panel's version. Send it back as `panel_version` to refuse the
   edit if someone changed that panel since you read it.
 - `variables_used` — the dashboard variables (`$name`, without the `$`) that the panel's
@@ -721,7 +722,7 @@ Each operation is one of:
 - All operations in one call use `panel_id`, or none does. A call that mixes them is
   refused. `panel_version` without `panel_id` is also refused, as is an operation that
   gives `panel_id` together with an address.
-- `add_panel` always uses the tab address, because the new panel has no id yet.
+- `add_panel` always uses the tab address: the server assigns the panel's id when it adds the panel.
 - A call with `panel_id` operations cannot also set `name`, `description` or `preset`. Send
   those in a separate call.
 
@@ -807,7 +808,7 @@ Without a `panel_id`, give `dashboard_id` plus the panel's name (`panel`) or its
 
 A panel id exists only on a dashboard that is stored on the server. Preset JSON that you
 hand over to import, or pass to `create-dashboard`, describes panels without ids. The
-server assigns the ids, and the first `get-dashboard-details` read of a dashboard guarantees them. **Never add a `panel_id` or any
+server assigns the ids when it stores the dashboard, and `get-dashboard-details` always returns them. **Never add a `panel_id` or any
 other id to import JSON.** Import, export and Terraform work with the preset exactly as
 documented here. After import, call `get-dashboard-details` to read the ids.
 
