@@ -314,3 +314,6 @@ the top-N cap.
     Treat multi-cluster paged scans as samples unless you pin one cluster.
 11. For "top / most common errors" group by `pattern` with a `where` filter, never by `body`
     (every raw body is unique). `pattern` is group-by only.
+12. Hand the user the result's `ui_url` verbatim so they can open the same query; never build
+    a KubeSense URL, and pass `clusters` to pin the domain. See
+    [Linking to the UI](../kubesense-mcp/SKILL.md#linking-to-the-ui).

@@ -516,6 +516,24 @@ Inventory and alert tools *do* paginate conventionally, with `page`/`page_size` 
 See the per-signal skills for the ordering caveats that make exhaustive raw scans
 unreliable — and prefer aggregation whenever the answer is a number.
 
+## Linking to the UI
+
+Results from `search-logs`, `search-traces`, `analyze-logs`, `analyze-traces`,
+`get-distributed-trace`, `list-dashboards`, `get-dashboard-details`, `list-active-alerts`,
+`list-alert-rules` and `get-alert-details` carry a `ui_url`: a link to the same data in the
+KubeSense UI, in the header or on each row. It lets the user check your answer.
+
+- **Give `ui_url` to the user verbatim.** Never build or edit a KubeSense URL yourself, and do
+  not write one for a result that has none.
+- **`ui_base=unset`** (header token, or a `ui_base` key in JSON results) means the server
+  does not know the UI address, so links are root-relative paths such as `/logs?...`. Say so
+  and prefix the user's own KubeSense address; do not guess one.
+- **Read the `ui_note` / header notes.** A link may omit a long `where` filter (the page then
+  shows more rows than your query), or be absent for a trace whose root span has no id or
+  whose cluster is ambiguous.
+- **Pass `clusters` to pin the domain.** Without it the link follows the viewer's current
+  cluster selection, which may not be the one you queried.
+
 ## Rules
 
 1. Discover before querying — fields, metrics, clusters. Never guess.

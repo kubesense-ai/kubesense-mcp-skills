@@ -33,6 +33,8 @@ Both go through the same server-side schema check, so a preset that passes
   `list-dashboards` for the id, then `get-dashboard-details` for the panel's `panel_id`,
   then `run-dashboard-panel` with that `panel_id`. A panel name still works. It runs the
   saved queries with the dashboard's variables and the panel's time frame applied.
+  `list-dashboards` and `get-dashboard-details` return a `ui_url`; hand it to the user
+  verbatim rather than building one ([Linking to the UI](../kubesense-mcp/SKILL.md#linking-to-the-ui)).
 - "Change / fix / add a panel to the X dashboard" → `get-dashboard-details`, then
   `update-dashboard` — see [Editing an existing dashboard](#editing-an-existing-dashboard)
 
