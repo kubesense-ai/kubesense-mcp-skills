@@ -109,7 +109,7 @@ output. Use `get-fields`.
 
 | Tool | Returns |
 |---|---|
-| `search-logs` | Raw log rows (default 10) |
+| `search-logs` | Raw log rows (default 10), each with `timestamp`, `body`, `type`, `service`, `namespace`, `domain`, `instance`, `container` unless `required_fields` says otherwise |
 | `search-traces` | Raw span rows (default 10) |
 | `search-rum` | Raw RUM rows for one `rum_<type>` signal (default 10, max 200), paged with `next_cursor` |
 | `analyze-logs` | Aggregated log series |
@@ -274,7 +274,7 @@ accept **catalog labels only**. Storage column names are rejected:
 field "pod_name" is a storage column; use the catalog label "instance" instead
   (call get-fields with signal=logs to see all labels)
 
-unknown field "service" for signal=logs; call get-fields with signal=logs to
+unknown field "svc" for signal=logs; call get-fields with signal=logs to
   discover valid fields (attributes carry an @ prefix)
 ```
 
@@ -284,7 +284,7 @@ unknown field "service" for signal=logs; call get-fields with signal=logs to
 | pod | `instance` | `instance` |
 | container | `container` | `container` |
 | **node** | **`node`** | **`node_name`** |
-| **service identity** | **not available** — use `workload` | **`service`** |
+| **service identity** | `service` | `service` |
 | workload | `workload` | `workload` |
 | HTTP method | — | `method` |
 | HTTP status | — | `status_code` |
@@ -300,9 +300,8 @@ six RUM event types have their own field sets, listed in
 [kubesense-rum/references/field-catalog.md](../kubesense-rum/references/field-catalog.md).
 
 > [!WARNING]
-> The two signals disagree on `node`/`node_name` and on severity name *and* casing, and
-> `service` exists only on traces. Carrying a field name from one signal to the other is
-> the most common failure.
+> The two signals disagree on `node`/`node_name` and on severity name *and* casing.
+> Carrying a field name from one signal to the other is the most common failure.
 
 Read enum casing from the **`enum_values`** column of discovery output, never the
 `example` column — the example generator silently returns blanks for several enum fields
@@ -500,6 +499,11 @@ Timestamps are always RFC3339 UTC at millisecond precision — exactly the forma
 Take the **minimum** timestamp from the page (`timestamp` for logs, `start_timestamp` for
 traces) and pass it verbatim as the next `to_time`. Copy the millisecond precision exactly.
 
+`search-logs` counts can time out (about 15 s each). The rows still come back, and the header
+reads `total_count=unknown … counts_timed_out=true`. With no total, a full page proves nothing:
+keep paging until a page returns fewer rows than `page_size`, and tell the user the totals
+are unknown.
+
 `search-rum` is the exception: it returns a `next_cursor`, a page token bound to the query, that you pass back with the same query arguments. See
 [kubesense-rum](../kubesense-rum/SKILL.md#search-rum).
 
@@ -515,8 +519,7 @@ unreliable — and prefer aggregation whenever the answer is a number.
 2. Pass the same signal and window to `get-fields` that you'll query.
 3. Catalog labels only. On a field error, read the suggested label; don't retry the same
    name.
-4. Never carry a field name across signals (`node` vs `node_name`; `type` vs `status`;
-   `service` is traces-only).
+4. Never carry a field name across signals (`node` vs `node_name`; `type` vs `status`).
 5. Enum casing from `enum_values`, not `example`.
 6. WHERE operators: `= != < > <= >= LIKE ILIKE SUBSTR_ILIKE IN` only. Quote values with
    `/`, `:`, `%`, or spaces. `NOT (x IN (...))`, never `x NOT IN (...)`.
