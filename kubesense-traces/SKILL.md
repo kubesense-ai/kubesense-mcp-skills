@@ -52,7 +52,7 @@ Storage column names are **rejected** at every input slot.
 | span role | **`role`** | `kind` |
 | protocol | **`protocol`** | `protocol_type` |
 | span outcome | `status` | — |
-| latency | `duration` | — |
+| latency | **`duration_ms`** (milliseconds) | — |
 | external call? | `request_type` | `is_external` |
 | issue reason | `reason` | `issue_reason` |
 | customer / tenant | `domain` | `customer_identifier` |
@@ -60,7 +60,7 @@ Storage column names are **rejected** at every input slot.
 | issue id | `issue_id` | — |
 | namespace, cluster, region, app_version, env_type, source, server, client, server_namespace, client_namespace, operation_name, partner_cluster | same | — |
 
-Also parse but hidden from discovery: `timestamp` (→ `start_timestamp`), `duration`,
+Also parse but hidden from discovery: `timestamp` (→ `start_timestamp`),
 `primary_workload`/`primary_namespace` (→ `perspective_*`),
 `associate_workload`/`associate_namespace` (→ `partner_*`).
 
@@ -103,38 +103,34 @@ comparisons therefore do not work — enumerate the codes, or use
 Read casing from the `enum_values` column, not `example` — the example generator returns
 a blank cell for `method`, `protocol`, and `status_code`.
 
-## Duration: ms in, ns out
+## Duration: always `duration_ms`
 
 > [!IMPORTANT]
-> **Filtering `duration` takes MILLISECONDS. Aggregating `duration` returns NANOSECONDS.**
-> These are different units in the same field, and getting it wrong is silent.
+> **In the query tools use `duration_ms` everywhere: WHERE, `fields` operands, and the cells
+> in `search-traces` rows. It is always milliseconds.** `get-fields` lists it. Never convert
+> units yourself. **Alerts are the exception:** `create-alert` rejects `duration_ms` as an
+> operand or group-by and thresholds `duration` in nanoseconds (500 ms = `500000000`); see
+> [kubesense-alerts](../kubesense-alerts/SKILL.md#trace-latency-thresholds-are-in-nanoseconds).
 
 ```
-where: "duration > 500"        →  spans slower than 500 milliseconds
+where: "duration_ms > 500"     →  spans slower than 500 milliseconds
 ```
-
-The parser multiplies your value by 1e6 to reach the nanosecond storage column. So:
 
 | You want | Write |
 |---|---|
-| slower than 250ms | `duration > 250` |
-| slower than 1s | `duration > 1000` |
-| slower than 1.5s | `duration > 1.5e3` or `duration > 1500` |
+| slower than 250ms | `duration_ms > 250` |
+| slower than 1s | `duration_ms > 1000` |
+| slower than 1.5s | `duration_ms > 1.5e3` or `duration_ms > 1500` |
 
-> [!WARNING]
-> The `search-traces` tool description shows `"duration > 250000"` as an example. That is
-> **wrong** — it means 250,000 ms = 250 seconds and will match nothing. Ignore it.
+Write the number bare or quoted; both are read as milliseconds.
 
-Aggregation is the other direction — `p95`/`avg`/`max` over
-`fields: [{"field": "duration"}]` come back in **nanoseconds**:
+Aggregates over `fields: [{"field": "duration_ms"}]` (`p95`, `avg`, `max`, ...) come back in
+milliseconds, and the query's result carries `"unit":"ms"`. A formula in `analyze-telemetry`
+reads each `duration_ms` query it names in milliseconds, so `(A-B)` of two p95 queries is in
+ms, and a formula result carries no unit of its own.
 
-| Result | Means |
-|---|---|
-| `250000000` | 250 ms |
-| `1000000000` | 1 s |
-
-Divide by 1e6 to report milliseconds. There is no `duration_ms` field at the MCP layer —
-it is rejected as an unknown field.
+The bare field `duration` is the legacy nanosecond field. Do not use it in new queries, and
+if an old query or a row cell shows `duration`, 250000000 is 250 ms.
 
 ## Trace attributes: group-by only
 
@@ -165,7 +161,7 @@ top-level column.
   "to_time": "2026-07-30T11:00:00Z",
   "query_type": "range",
   "group_by_fields": [ { "field": "service", "is_attribute": false } ],
-  "fields": [ { "field": "duration", "is_attribute": false } ],
+  "fields": [ { "field": "duration_ms", "is_attribute": false } ],
   "value_operation": "p95"
 }
 ```
@@ -176,10 +172,10 @@ summary line suggests.
 
 | Question | Shape |
 |---|---|
-| p95 latency by service, over time | `range`, group `service`, `fields: [duration]`, `p95` |
+| p95 latency by service, over time | `range`, group `service`, `fields: [duration_ms]`, `p95` |
 | top 5 services by errors, now | `instant`, `where: "status = error"`, group `service`, `row_count`, `sort_direction: DESC`, `limit: 5` |
 | errors by status code | `instant`, `where: "status = error"`, group `status_code`, `row_count` |
-| slowest endpoints | `instant`, group `resource`, `fields: [duration]`, `p99`, `sort_direction: DESC` |
+| slowest endpoints | `instant`, group `resource`, `fields: [duration_ms]`, `p99`, `sort_direction: DESC` |
 | server-side only | add `where: "role = server"` — otherwise client spans double-count |
 
 **Error rate as a percentage** needs two queries plus a formula → `analyze-telemetry`.
@@ -211,7 +207,7 @@ key). The window is half-open, so the cursor row is not repeated.
 > Practical consequences: keep the window short enough that `total_count` fits in one
 > page, or use `analyze-traces`. Treat any paged trace scan as a sample.
 
-Touching `duration`, `trace_id`, `span_id`, or any attribute sets `is_free_search` and
+Touching `duration_ms`, `trace_id`, `span_id`, or any attribute sets `is_free_search` and
 routes to the raw table — slower, no rollups.
 
 ## get-distributed-trace
@@ -244,21 +240,22 @@ children), with a `tree` column drawing the call chain. Key columns:
 |---|---|
 | `tree` | who called whom |
 | `status` / `return_code` | which span failed |
-| `duration_us` | total span time in **microseconds**, including everything it called |
-| `self_time_us` | time in **this** service, excluding children — the bottleneck ranking |
+| `duration_ms` | total span time in **milliseconds**, including everything it called |
+| `self_time_ms` | time in **this** service, excluding children — the bottleneck ranking |
 | `start_time` / `end_time` | RFC3339 ms — paste straight into `search-logs` |
 | `workload` / `namespace` / `cluster` | scope for follow-up log/metric queries |
 | `resource_name` / `protocol_type` / `subtype` | what was called |
 
 **Block 2** — `## services`, one row per (cluster, workload), **ordered worst-first** by
 errors then self time. Read this *before* the span rows to pick your suspect. It always
-covers every span, even when block 1 was truncated.
+covers every span, even when block 1 was truncated. Its time columns are `self_time_ms` and
+`max_duration_ms`; the `_us` twins of every `_ms` column are legacy microseconds.
 
 ### Two diagnostic rules
 
 - **A trace with no error may still be the problem.** The top row of `## services` is the
   hop that burned the time.
-- **Large `duration_us` + small `self_time_us` = the service was waiting, not working.**
+- **Large `duration_ms` + small `self_time_ms` = the service was waiting, not working.**
   Investigate what it called (its children), not the service itself. Conversely, if a span
   errored but every child succeeded, the fault is *in* that service.
 
@@ -290,8 +287,8 @@ Steps 4–5 use [kubesense-infra](../kubesense-infra/SKILL.md) and
 3. `node_name` on traces, `node` on logs. Never carry a field across signals.
 4. Prefer `service` over `workload` for app identity — but the *alert engine* prefers
    `workload`.
-5. **`duration` in WHERE is milliseconds; aggregated `duration` is nanoseconds.** Divide
-   results by 1e6 to report ms. `duration_ms` does not exist here.
+5. **Use `duration_ms` (milliseconds) in WHERE, operands and when reading rows.** Bare
+   `duration` is the legacy nanosecond field.
 6. `@attr` filters do **not** work on traces. Use `is_attribute: true` in
    `group_by_fields`/`fields` instead.
 7. Enum values are lowercase (`status = error`, `role = server`); `status_code` is a

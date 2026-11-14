@@ -166,7 +166,9 @@ The good filter is the total filter **plus** the goodness condition. Keep the tw
 `groupBy` lists identical.
 
 A latency SLO is the same shape with a duration filter on the good side — trace
-`duration` is in **nanoseconds** here, as it is for alerts:
+`duration` is in **nanoseconds** here, as it is for alerts (the query tools use `duration_ms`
+in milliseconds, so convert a threshold you read from one; `create-alert` rejects
+`duration_ms` as an operand or group-by):
 
 ```json
 {"field": "duration", "operation": "LTE", "values": [500000000]}

@@ -557,9 +557,14 @@ condition's own `unit` (`"ms"`) only changes how the editor *displays* the store
 nanoseconds — it never converts.
 
 > [!NOTE]
-> This differs from the **query** tools, where a `duration` WHERE filter is expressed in
-> **milliseconds**. Alerts: nanoseconds. Queries: milliseconds. See
+> This differs from the **query** tools, where trace latency is `duration_ms`, in
+> **milliseconds**. Alert and import JSON still name the stored field `duration`, in
+> nanoseconds. Alerts: nanoseconds. Queries: milliseconds. See
 > [kubesense-traces](../kubesense-traces/SKILL.md).
+>
+> **`create-alert` rejects `duration_ms` as an operand or a group-by field.** Use `duration`
+> there, with `threshold_value` in nanoseconds (500 ms = `500000000`). `duration_ms` is fine
+> inside an alert's `where`, where it is read in milliseconds (`duration_ms > 500`).
 >
 > The product's own `type-tracing` starter template uses `threshold: 500` with a description
 > saying "ms" — that is 500 *nanoseconds*. Don't copy it.
