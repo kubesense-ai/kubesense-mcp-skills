@@ -59,7 +59,8 @@ field "pod_name" is a storage column; use the catalog label "instance" instead
 | environment | `env_type` | — |
 
 Those are the fields `get-fields` advertises for logs; `get-fields` is the authority.
-Three more parse but are hidden from discovery: `timestamp`, `pattern_id`, `body_length`.
+Three more parse but are hidden from discovery: `timestamp`, `pattern` (group-by only, see
+[Top errors](#top--most-common-errors-group-by-pattern)), `body_length`.
 
 > [!WARNING]
 > **`service` and `workload` are different fields.** `service` is the application name and
@@ -228,8 +229,45 @@ filters stay on the fast rollup path.
 > `value_operation: "count"` is **not valid** — the correct name is `row_count`. The tool
 > schema's own summary line says "Common: count, avg, …", which is wrong.
 
-`body` cannot be used in `group_by_fields` (it doesn't exist on the rollup tables). It is
-a filter-only field. Group by `pattern_id` if you want to cluster similar messages.
+### Top / most common errors: group by `pattern`
+
+Grouping by `body` is the wrong tool for "what is the top error". Bodies embed timestamps,
+UUIDs, IPs and counters, so every occurrence is its own group of 1 and the real top error
+ranks below noise. Group by **`pattern`** instead: the body with timestamps, UUIDs, IPs, hex
+runs and numbers masked (`<ts>`, `<uuid>`, `<ip>`, `<hex>`, `#`), so every occurrence of one
+message counts together.
+
+```json
+{
+  "from_time": "2026-07-30T10:00:00Z",
+  "to_time": "2026-07-30T11:00:00Z",
+  "query_type": "instant",
+  "where": "type = ERROR AND workload = cds-app",
+  "group_by_fields": [ { "field": "pattern", "is_attribute": false } ],
+  "value_operation": "row_count",
+  "sort_direction": "DESC",
+  "limit": 10
+}
+```
+
+Rules for `pattern`:
+
+- **Group-by only.** It is not listed by `get-fields`. It is rejected in a `where` (in
+  `search-logs`, the analyze tools and `create-alert`) and in `search-logs` `required_fields`
+  (it cannot be a result column); filter on `body` (for example `body ILIKE "%timeout%"`),
+  then group by `pattern` in `analyze-logs`, `analyze-telemetry` or `execute-sql`. To see
+  the raw lines, project `body`.
+- **A `where` is required.** It runs a regex over every matching raw row, so narrow by
+  `type`, `workload`, `namespace` first. An empty `where` is rejected.
+- Works in `analyze-logs`, `analyze-telemetry` (a logs query) and `execute-sql`, where it is
+  a column: see [kubesense-sql](../kubesense-sql/SKILL.md#top-errors-by-message-pattern).
+
+> [!WARNING]
+> **Unparsed severity.** Plain-text logs may not have their level parsed: a line containing
+> `| ERROR |` was stored as `type = UNKNOWN`. When `type = ERROR` returns little but
+> `UNKNOWN` dominates, also search `body` for tokens such as `ERROR` or `Exception`
+> (`type = UNKNOWN AND body ILIKE "%error%"`) and tell the user the level was not parsed, so
+> the count is by message text, not by severity.
 
 ### Output shape
 
@@ -274,4 +312,5 @@ the top-N cap.
    paginate to compute an aggregate.
 10. Page by narrowing `to_time` to the **minimum** timestamp returned; there is no offset.
     Treat multi-cluster paged scans as samples unless you pin one cluster.
-11. `body` is filter-only — it cannot be a group-by.
+11. For "top / most common errors" group by `pattern` with a `where` filter, never by `body`
+    (every raw body is unique). `pattern` is group-by only.

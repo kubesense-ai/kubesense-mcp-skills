@@ -28,21 +28,21 @@ Input slots this applies to: `where`, `required_fields`, `group_by_fields`, `fie
 | `service` | `service` | string | | application name; same label as on traces |
 | `namespace` | `namespace` | string | | |
 | `domain` | `cluster` | string | | say "domain" to users |
-| `body` | `body` | string | | message text — **cannot be a group-by** |
+| `body` | `body` | string | | message text; group by `pattern`, not `body`, for "top errors" |
 | `format` | `format` | string | `json` `klog` `nginx` | lowercase |
 | `source` | `source` | string | | |
 | `region` | `region` | string | | |
 | `app_version` | `app_version` | string | | |
 | `env_type` | `env_type` | string | | |
 | `timestamp` | `timestamp` | string | | hidden from discovery, still accepted |
-| `pattern_id` | `pattern_id` | string | | hidden; group by this to cluster similar messages |
+| `pattern` | derived from `body` | string | | hidden, **group-by only**: the body with timestamps, IDs and numbers masked. Needs a `where`. Rejected in any `where` (search-logs, analyze, create-alert) and in `search-logs` `required_fields`; allowed only in `group_by_fields` of analyze-logs / analyze-telemetry, or as an `execute-sql` column |
 | `body_length` | `body_length` | **float** | | hidden; the only numeric log field |
 
 **14 advertised by discovery** (sorted): `app_version`, `body`, `container`, `domain`,
 `env_type`, `format`, `instance`, `namespace`, `node`, `region`, `service`, `source`,
 `type`, `workload`.
 
-**Hidden but accepted**: `timestamp`, `pattern_id`, `body_length`. Discovery filters them
+**Hidden but accepted**: `timestamp`, `pattern` (group-by only), `body_length`. Discovery filters them
 out, validation does not — a documented asymmetry you can rely on.
 
 **The four renames**: `type`→`level`, `instance`→`pod_name`, `container`→`container_name`,
