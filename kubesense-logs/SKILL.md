@@ -48,8 +48,9 @@ field "pod_name" is a storage column; use the catalog label "instance" instead
 | container | **`container`** | `container_name` |
 | node / host | **`node`** | `host` |
 | workload | `workload` | — |
+| service | `service` | — |
 | namespace | `namespace` | — |
-| cluster | `cluster` | — |
+| cluster (say "domain") | **`domain`** | `cluster` |
 | log message | `body` | — |
 | log format | `format` | — |
 | source | `source` | — |
@@ -57,13 +58,12 @@ field "pod_name" is a storage column; use the catalog label "instance" instead
 | app version | `app_version` | — |
 | environment | `env_type` | — |
 
-That is the complete set of 13 fields `get-fields` advertises for logs.
+Those are the fields `get-fields` advertises for logs; `get-fields` is the authority.
 Three more parse but are hidden from discovery: `timestamp`, `pattern_id`, `body_length`.
 
 > [!WARNING]
-> **There is no `service` field on logs.** `service` exists only on traces
-> (→ `app_service`). `service = checkout` against logs returns
-> `unknown field "service" for signal=logs`. Use `workload` for the application name.
+> **`service` and `workload` are different fields.** `service` is the application name and
+> `workload` is the Kubernetes workload; check `get-fields` before filtering on either.
 >
 > **`node` on logs, `node_name` on traces.** The two signals disagree — logs use `node`
 > (→ `host`), traces use `node_name`. Carrying a field name across signals is a
@@ -155,6 +155,19 @@ Output is TSV: a `# total_count=<N> error_count=<N> is_free_search=<bool>` line,
 row, then one row per log. `total_count` is for the **whole window**, ignoring
 `page_size` — compare it to the rows you received to know whether more exist.
 
+**Default columns.** With no `required_fields` each row carries `timestamp`, `body`, `type`,
+`service`, `namespace`, `domain`, `instance` and `container`, plus `uid` (the row id). The
+message column is named **`body`** in the output, as in `where` and `required_fields`; the
+old UI list called it `line`. Name `required_fields` for other columns or fewer, which also
+saves tokens.
+
+**Counts can time out.** Each count gets about 15 s, and the rows are fetched alongside
+them, so a wide unscoped body search still returns rows. A count that did not finish reads
+`unknown`: `# total_count=unknown error_count=unknown counts_timed_out=true is_free_search=…`.
+Say the totals are unknown rather than quoting a number, and narrow `where` or the window if
+the user needs one. With `total_count=unknown`, a full page does not mean the window is
+exhausted: keep paging until a page comes back with fewer rows than `page_size`.
+
 ### Pagination is window-based
 
 There is **no `page` or `offset` parameter.** The window is half-open
@@ -165,7 +178,8 @@ There is **no `page` or `offset` parameter.** The window is half-open
    is the oldest.
 3. Call again with the same `from_time` and `where`, and `to_time` = that minimum,
    copied verbatim.
-4. Stop when a call returns fewer rows than `page_size`, or the answer is settled.
+4. Stop when a call returns fewer rows than `page_size`, or the answer is settled. When
+   `total_count=unknown` this short page is the only end signal.
 
 Timestamps are RFC3339 UTC with **millisecond** precision. Copy the cell exactly —
 truncating to whole seconds re-reads or skips rows within that second.
@@ -248,7 +262,7 @@ the top-N cap.
    you will query — attribute keys are window-scoped.
 2. Use catalog labels: `type`, `instance`, `container`, `node`. Never `level`, `pod_name`,
    `container_name`, `host`.
-3. There is no `service` field on logs — use `workload`.
+3. `service` is the application name, `workload` the Kubernetes workload; they can differ.
 4. `type` values are UPPERCASE (`ERROR`, not `error`). Read casing from `enum_values`,
    never from `example`.
 5. Quote any value containing `/`, `:`, `%`, or a space.
