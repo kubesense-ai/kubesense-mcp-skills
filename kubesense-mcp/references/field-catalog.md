@@ -69,7 +69,7 @@ out, validation does not — a documented asymmetry you can rely on.
 | `protocol` | `protocol_type` | string | `HTTP` `gRPC` `TCP` `MongoDB` `Redis` `MySQL` `PostgreSQL` | |
 | `source` | `source` | string | `eBPF` `OTel` | |
 | `request_type` | `is_external` | **bool** | | no grouping |
-| `duration` | `duration` | **float** | | hidden from discovery, accepted. **ms in, ns out** |
+| `duration_ms` | `duration` | **float** | | **milliseconds** in WHERE, operands, results and rows. Bare `duration` is the legacy nanosecond field. Not for alerts: `create-alert` rejects it as an operand or group-by (use `duration`, nanoseconds); only an alert's `where` takes it |
 | `trace_id` | `trace_id` | string | | no grouping; sets free-search |
 | `span_id` | `span_id` | string | | no grouping; sets free-search |
 | `issue_id` | `issue_id` | string | | no grouping; join key to `trace_issues` |
@@ -96,7 +96,7 @@ out, validation does not — a documented asymmetry you can rely on.
 `region`, `request_type`, `resource`, `role`, `server`, `server_namespace`, `service`,
 `source`, `span_id`, `status`, `status_code`, `trace_id`, `workload`.
 
-**Hidden but accepted**: `timestamp`, `duration`, `primary_*`, `associate_*`.
+**Hidden but accepted**: `timestamp`, `primary_*`, `associate_*`.
 
 **The renames**: `service`→`app_service`, `instance`→`pod_name`,
 `container`→`container_name`, `method`→`subtype`, `status_code`→`return_code`,
@@ -116,7 +116,7 @@ The traps, side by side:
 | node | `node` (→ `host`) | `node_name` | **No — label and column** |
 | service identity | `service` | `service` | Yes |
 | message text | `body` | *does not exist* | **Logs only** |
-| latency | *does not exist* | `duration` | **Traces only** |
+| latency | *does not exist* | `duration_ms` | **Traces only** |
 | pod | `instance` | `instance` | Yes |
 | container | `container` | `container` | Yes |
 | namespace / workload / cluster | same | same | Yes |
@@ -131,7 +131,6 @@ cluster = prod       on logs    → "cluster" is a storage column; use the catal
 node = node-1        on traces  → unknown field "node" for signal=traces
 pod = my-pod         on either  → unknown field "pod"      (it is "instance")
 observation_point = x on traces → unknown field "observation_point"
-duration_ms > 500    on traces  → unknown field "duration_ms"
 ```
 
 `observation_point` is worth calling out: the `search-traces` tool description suggests
@@ -197,10 +196,10 @@ Touching any of these fields routes the query to the **raw table** instead of th
 pre-aggregated rollups — slower, but the only way to see message text or per-span detail:
 
 - logs: `body`, `trace_id`, `span_id`, any attribute
-- traces: `duration`, `trace_id`, `span_id`, `reason`, any attribute
+- traces: `duration_ms`, `trace_id`, `span_id`, `reason`, any attribute
 
 It is computed automatically and reported as `is_free_search` in the output header.
-Column-only filters stay on the fast rollup path. This is also why `duration` filters make
+Column-only filters stay on the fast rollup path. This is also why `duration_ms` filters make
 a trace query noticeably slower.
 
 ---
@@ -224,5 +223,5 @@ Other parser constraints:
   **double-quoted**: `resource = "/api/v1"`, `timestamp > "2026-07-30T10:00:00Z"`.
 - `NOT IN` is not a leaf operator — write `NOT (field IN (...))`.
 - Trace `IN` values stay strings: `status_code IN (500, 502)` → `"500"`, `"502"`.
-- `duration` is the only trace field whose value is coerced to a number (and scaled ×1e6
-  from ms to ns). Every other trace value stays a string.
+- `duration_ms` is the only trace field whose value is coerced to a number (bare or quoted;
+  it is stored as nanoseconds and scaled for you). Every other trace value stays a string.
