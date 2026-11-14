@@ -363,6 +363,7 @@ See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 | "show me recent errors" | `search-logs` |
 | "list the crashes / slowest sessions / failed requests" | `search-rum` |
 | "how many errors in the last hour" | `analyze-logs`, `row_count` |
+| "top / most common errors" | `analyze-logs`, `row_count` grouped by `pattern` with a `where` ([kubesense-logs](../kubesense-logs/SKILL.md#top--most-common-errors-group-by-pattern)) |
 | "p99 latency for checkout" | `analyze-traces`, `p99` over `duration_ms` |
 | "why did this request fail" | `get-distributed-trace` |
 | "what calls X / what does X depend on / blast radius / dependency chain" | `get-service-map` |
