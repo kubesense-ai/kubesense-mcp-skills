@@ -250,6 +250,19 @@ message counts together.
 }
 ```
 
+On an `instant` or `range` query each `pattern` series carries a **`sample`**, one real body line from that group, truncated to
+300 characters, so you can read an actual message without a second `search-logs` call:
+
+```json
+{ "A": { "series": [
+  { "labels": { "pattern": "db timeout after #ms for <uuid>" },
+    "sample": "db timeout after 5012ms for 3f2a9c1e-7b1d-4c55-9a0e-1d2f3a4b5c6d",
+    "value": 42 } ] } }
+```
+
+`sample` is one line from the group, not the group's worst or latest. Formula results do not
+carry it.
+
 Rules for `pattern`:
 
 - **Group-by only.** It is not listed by `get-fields`. It is rejected in a `where` (in
@@ -267,7 +280,8 @@ Rules for `pattern`:
 > `| ERROR |` was stored as `type = UNKNOWN`. When `type = ERROR` returns little but
 > `UNKNOWN` dominates, also search `body` for tokens such as `ERROR` or `Exception`
 > (`type = UNKNOWN AND body ILIKE "%error%"`) and tell the user the level was not parsed, so
-> the count is by message text, not by severity.
+> the count is by message text, not by severity. `search-logs` reports the size of this gap as
+> `unknown_level_count` in its header.
 
 ### Output shape
 
