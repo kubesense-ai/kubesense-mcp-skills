@@ -40,7 +40,7 @@ Two distinct jobs, don't confuse them:
 
 | Tool | Scope |
 |---|---|
-| `list-active-alerts` | Currently-firing series from the **native** store, joined with rule metadata. Filters: `from_time`/`to_time`, `fingerprint`, `acknowledged`, `assignee`, `include_resolved`. |
+| `list-active-alerts` | Currently-firing series from the **native** store, joined with rule metadata. Filters: `from_time`/`to_time`, `fingerprint`, `acknowledged`, `assignee`, `include_resolved`. Each row has `rule_name` (the raw rule template, so it can still show `{{label}}`) and `summary` (the name rendered for that series): quote `summary` to the user. |
 | `list-alerts` | The **external Alertmanager** — label-only, no rule config. Different source; use `list-active-alerts` unless you specifically want Alertmanager state or silences. |
 | `list-alert-rules` | Rule *definitions*, including disabled and non-firing ones. Newest first. Filters: `enabled`, `state`, `severity`, `query_type`, `search`, `created_by`. |
 | `get-alert-details` | One rule's full config (`query_config`, condition, threshold) **plus** its firing instances. Start here when investigating. |
@@ -668,10 +668,12 @@ disambiguated carry their suffix into the placeholder too — `{{status:float}}`
 **Placeholders that cannot resolve are caught at authoring time.** `create-alert` refuses a
 name or description with a `{{placeholder}}` the rule does not group by, label or define, and
 `validate-alert-json` warns about it. Rules with a metrics (PromQL) query pass unchecked, as
-their labels are only known at fire time. In `list-alerts` and `get-alert-history`, a `# note: ...`
+their labels are only known at fire time. In `list-alerts`, `list-active-alerts` and `get-alert-history`, a `# note: ...`
 line right after the `# total_count=<N>` header, saying summaries contain unrendered
 `{{...}}`, means the rule referenced a label it does not group by: the text shown is what was
 sent, not a data bug. The note is its own line, not a `note=` token in the header.
+`list-active-alerts` checks the `summary` column only: `rule_name` is the raw template and
+always carries `{{...}}`, so it never triggers the note.
 
 ## Maintenance Windows
 

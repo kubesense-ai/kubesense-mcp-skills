@@ -105,7 +105,7 @@ output. Use `get-fields`.
 
 | Tool | Returns |
 |---|---|
-| `search-logs` | Raw log rows (default 10), each with `timestamp`, `body`, `type`, `service`, `namespace`, `domain`, `instance`, `container` unless `required_fields` says otherwise |
+| `search-logs` | Raw log rows (default 10), each with `timestamp`, `body`, `type`, `service`, `namespace`, `domain`, `instance`, `container` unless `required_fields` says otherwise (`uid` only when listed) |
 | `search-traces` | Raw span rows (default 10) |
 | `search-rum` | Raw RUM rows for one `rum_<type>` signal (default 10, max 200), paged with `next_cursor` |
 | `analyze-logs` | Aggregated log series |
@@ -499,7 +499,9 @@ Take the **minimum** timestamp from the page (`timestamp` for logs, `start_times
 traces) and pass it verbatim as the next `to_time`. Copy the millisecond precision exactly.
 
 `search-logs` counts can time out (about 15 s each). The rows still come back, and the header
-reads `total_count=unknown … counts_timed_out=true`. With no total, a full page proves nothing:
+reads `total_count=unknown … counts_timed_out=true`. The header also has
+`unknown_level_count`, the rows whose level could not be parsed: when it is large,
+`error_count` understates errors, so check body tokens. With no total, a full page proves nothing:
 keep paging until a page returns fewer rows than `page_size`, and tell the user the totals
 are unknown.
 
@@ -527,8 +529,14 @@ KubeSense UI, in the header or on each row. It lets the user check your answer.
 - **Read the `ui_note` / header notes.** A link may omit a long `where` filter (the page then
   shows more rows than your query), or be absent for a trace whose root span has no id or
   whose cluster is ambiguous.
-- **Pass `clusters` to pin the domain.** Without it the link follows the viewer's current
-  cluster selection, which may not be the one you queried.
+- **Links pin the clusters the result came from.** An explorer link pins the clusters of the
+  rows (or, for an analysis, the series grouped by domain) it returned, so the page opens on
+  the data you saw. Pass `clusters` only to narrow the query, not to make the link correct.
+- **Long links become short links.** A URL over about 500 characters is replaced by a
+  `/sl/<code>` short link that expires after 30 days. Give it as returned, and for a link the
+  user must keep longer, say it expires.
+- **`search-logs` rows carry no per-row link.** Its `ui_url` is in the header and opens the
+  query, not one line.
 
 ## Rules
 
