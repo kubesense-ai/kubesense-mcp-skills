@@ -109,7 +109,7 @@ output. Use `get-fields`.
 
 | Tool | Returns |
 |---|---|
-| `search-logs` | Raw log rows (default 10), each with `timestamp`, `body`, `type`, `service`, `namespace`, `domain`, `instance`, `container` unless `required_fields` says otherwise |
+| `search-logs` | Raw log rows (default 10), each with `timestamp`, `body`, `type`, `service`, `namespace`, `domain`, `instance`, `container` unless `required_fields` says otherwise (`uid` only when listed) |
 | `search-traces` | Raw span rows (default 10) |
 | `search-rum` | Raw RUM rows for one `rum_<type>` signal (default 10, max 200), paged with `next_cursor` |
 | `analyze-logs` | Aggregated log series |
@@ -503,7 +503,9 @@ Take the **minimum** timestamp from the page (`timestamp` for logs, `start_times
 traces) and pass it verbatim as the next `to_time`. Copy the millisecond precision exactly.
 
 `search-logs` counts can time out (about 15 s each). The rows still come back, and the header
-reads `total_count=unknown … counts_timed_out=true`. With no total, a full page proves nothing:
+reads `total_count=unknown … counts_timed_out=true`. The header also has
+`unknown_level_count`, the rows whose level could not be parsed: when it is large,
+`error_count` understates errors, so check body tokens. With no total, a full page proves nothing:
 keep paging until a page returns fewer rows than `page_size`, and tell the user the totals
 are unknown.
 

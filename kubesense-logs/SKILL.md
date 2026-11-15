@@ -152,19 +152,25 @@ the flag instead:
 }
 ```
 
-Output is TSV: a `# total_count=<N> error_count=<N> is_free_search=<bool>` line, a header
+Output is TSV: a `# total_count=<N> error_count=<N> unknown_level_count=<N> is_free_search=<bool>` line, a header
 row, then one row per log. `total_count` is for the **whole window**, ignoring
 `page_size` — compare it to the rows you received to know whether more exist.
 
 **Default columns.** With no `required_fields` each row carries `timestamp`, `body`, `type`,
-`service`, `namespace`, `domain`, `instance` and `container`, plus `uid` (the row id). The
+`service`, `namespace`, `domain`, `instance` and `container`. The `uid` (row id) column is left out unless
+you list it in `required_fields`. The
 message column is named **`body`** in the output, as in `where` and `required_fields`; the
 old UI list called it `line`. Name `required_fields` for other columns or fewer, which also
 saves tokens.
 
+**`unknown_level_count`** is how many matching rows, over the whole window, have a level the
+server could not parse. Plain-text logs often carry no parsed level, so when it is large,
+`error_count` understates the errors. Search `body` for tokens before you call the window
+healthy (`body ILIKE "%error%"`), and say the level was not parsed.
+
 **Counts can time out.** Each count gets about 15 s, and the rows are fetched alongside
 them, so a wide unscoped body search still returns rows. A count that did not finish reads
-`unknown`: `# total_count=unknown error_count=unknown counts_timed_out=true is_free_search=…`.
+`unknown`: `# total_count=unknown error_count=unknown unknown_level_count=unknown counts_timed_out=true is_free_search=…`.
 Say the totals are unknown rather than quoting a number, and narrow `where` or the window if
 the user needs one. With `total_count=unknown`, a full page does not mean the window is
 exhausted: keep paging until a page comes back with fewer rows than `page_size`.
