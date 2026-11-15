@@ -531,8 +531,14 @@ KubeSense UI, in the header or on each row. It lets the user check your answer.
 - **Read the `ui_note` / header notes.** A link may omit a long `where` filter (the page then
   shows more rows than your query), or be absent for a trace whose root span has no id or
   whose cluster is ambiguous.
-- **Pass `clusters` to pin the domain.** Without it the link follows the viewer's current
-  cluster selection, which may not be the one you queried.
+- **Links pin the clusters the result came from.** An explorer link pins the clusters of the
+  rows (or, for an analysis, the series grouped by domain) it returned, so the page opens on
+  the data you saw. Pass `clusters` only to narrow the query, not to make the link correct.
+- **Long links become short links.** A URL over about 500 characters is replaced by a
+  `/sl/<code>` short link that expires after 30 days. Give it as returned, and for a link the
+  user must keep longer, say it expires.
+- **`search-logs` rows carry no per-row link.** Its `ui_url` is in the header and opens the
+  query, not one line.
 
 ## Rules
 
