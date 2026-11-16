@@ -402,8 +402,8 @@ predates that fix — group by `workload` instead.
 > `hasAnyTokens` "false positives" are inherent to the index, not a defect — expect them,
 > and do not report them as alerting bugs.
 >
-> `pattern_id` is **not** accepted: it exists only on the rollups, so a rule using it would
-> freeze the moment the query fell back to the raw table.
+> The query tools' `pattern` group-by is not on these lists either. A rule cannot group by
+> message pattern, and `pattern` is rejected in a rule's `where` too. Filter on `body`.
 
 ### Traces — group-by and value fields (40, exact)
 

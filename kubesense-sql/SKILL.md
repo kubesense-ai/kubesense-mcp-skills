@@ -204,6 +204,21 @@ window and the cluster filter first.
 
 ## Worked Examples
 
+### Top errors by message pattern
+
+`pattern` is a derived logs column: `body` with timestamps, UUIDs, IPs, hex ids and numbers
+masked. Group by it for "most common error", never by `body`, whose every line is unique.
+It is for `GROUP BY` and the select list only; filter on `body`, not `pattern`.
+`SELECT *` does not include it, and it runs a regex over every row read, so keep the `WHERE`
+selective.
+
+```sql
+SELECT pattern, count() AS n
+FROM logs
+WHERE $__timeFilter(timestamp) AND $__clusters AND type = 'ERROR' AND workload = 'cds-app'
+GROUP BY pattern ORDER BY n DESC LIMIT 10
+```
+
 **Compare this hour against the same hour yesterday, in one result**
 
 ```sql
