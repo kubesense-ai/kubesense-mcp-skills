@@ -16,7 +16,7 @@ Input slots this applies to: `where`, `required_fields`, `group_by_fields`, `fie
 
 ---
 
-## Logs — 16 fields
+## Logs — 17 fields
 
 | Label (type this) | Storage column | Type | Enum values | Notes |
 |---|---|---|---|---|
@@ -24,9 +24,10 @@ Input slots this applies to: `where`, `required_fields`, `group_by_fields`, `fie
 | `instance` | `pod_name` | string | | pod |
 | `container` | `container_name` | string | | |
 | `node` | `host` | string | | **not `node_name`** |
-| `workload` | `workload` | string | | app name — logs have no `service` |
+| `workload` | `workload` | string | | Kubernetes workload |
+| `service` | `service` | string | | application name; same label as on traces |
 | `namespace` | `namespace` | string | | |
-| `cluster` | `cluster` | string | | |
+| `domain` | `cluster` | string | | say "domain" to users |
 | `body` | `body` | string | | message text — **cannot be a group-by** |
 | `format` | `format` | string | `json` `klog` `nginx` | lowercase |
 | `source` | `source` | string | | |
@@ -37,9 +38,9 @@ Input slots this applies to: `where`, `required_fields`, `group_by_fields`, `fie
 | `pattern_id` | `pattern_id` | string | | hidden; group by this to cluster similar messages |
 | `body_length` | `body_length` | **float** | | hidden; the only numeric log field |
 
-**13 advertised by discovery** (sorted): `app_version`, `body`, `cluster`, `container`,
-`env_type`, `format`, `instance`, `namespace`, `node`, `region`, `source`, `type`,
-`workload`.
+**14 advertised by discovery** (sorted): `app_version`, `body`, `container`, `domain`,
+`env_type`, `format`, `instance`, `namespace`, `node`, `region`, `service`, `source`,
+`type`, `workload`.
 
 **Hidden but accepted**: `timestamp`, `pattern_id`, `body_length`. Discovery filters them
 out, validation does not — a documented asymmetry you can rely on.
@@ -113,7 +114,7 @@ The traps, side by side:
 |---|---|---|---|
 | severity / outcome | `type` = `ERROR` | `status` = `error` | **No — name and casing** |
 | node | `node` (→ `host`) | `node_name` | **No — label and column** |
-| service identity | *does not exist* | `service` | **Traces only** |
+| service identity | `service` | `service` | Yes |
 | message text | `body` | *does not exist* | **Logs only** |
 | latency | *does not exist* | `duration` | **Traces only** |
 | pod | `instance` | `instance` | Yes |
@@ -126,7 +127,7 @@ The traps, side by side:
 Confirmed failures from carrying names across signals:
 
 ```
-service = checkout   on logs    → unknown field "service" for signal=logs
+cluster = prod       on logs    → "cluster" is a storage column; use the catalog label "domain"
 node = node-1        on traces  → unknown field "node" for signal=traces
 pod = my-pod         on either  → unknown field "pod"      (it is "instance")
 observation_point = x on traces → unknown field "observation_point"
@@ -152,7 +153,7 @@ Act on the suggestion — do not retry the same name.
 **Unknown field:**
 
 ```
-unknown field "service" for signal=logs; call get-fields with signal=logs to
+unknown field "svc" for signal=logs; call get-fields with signal=logs to
   discover valid fields (attributes carry an @ prefix)
 ```
 
