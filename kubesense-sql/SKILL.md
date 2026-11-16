@@ -88,7 +88,7 @@ Do not conclude a name is invalid because discovery omitted it:
 | Field | Signal | Note |
 |---|---|---|
 | `timestamp` | both | **Not listed by discovery**, yet every query needs it for `$__timeFilter(timestamp)` |
-| `duration_ms` | traces | Milliseconds. Discovery would show `duration` (nanoseconds) — SQL **rejects** that name |
+| `duration_ms` | traces | Milliseconds, the same field `analyze-traces` takes. SQL **rejects** the legacy nanosecond `duration` |
 | `primary_namespace`, `primary_workload` | traces | The perspective columns |
 | `body_length` | logs | Computed as `length(body)` |
 
@@ -97,9 +97,9 @@ Also queryable but not catalog fields: `cluster` (same column as `domain`, and w
 `float_attributes` on logs, `attribute_names` / `attribute_values` on traces.
 
 > [!WARNING]
-> **`duration` vs `duration_ms` is the trap that bites hardest.** `analyze-traces` takes
-> `duration` in nanoseconds. SQL takes `duration_ms` in **milliseconds** and rejects
-> `duration` entirely. A threshold carried across from an analyze call is off by 10⁶.
+> **Use `duration_ms` (milliseconds) here and in `analyze-traces` alike.** SQL rejects the
+> legacy nanosecond `duration` entirely, and a threshold copied from an old query that used
+> it is off by 10⁶.
 
 ## Macros
 
@@ -253,7 +253,7 @@ More patterns: [references/recipes.md](references/recipes.md).
 5. Catalog labels, never storage columns: `type` not `level`, `instance` not `pod_name`,
    `service` not `app_service`, `domain` not `customer_identifier`.
 6. `duration_ms` (milliseconds) on traces. `duration` is rejected — do not carry a
-   nanosecond threshold over from `analyze-traces`.
+   nanosecond threshold over from an old query.
 7. `timestamp` is valid on both signals even though discovery does not list it.
 8. Single quotes for string values — SQL, not the `where` mini-language.
 9. Attribute keys are never validated. All-empty column = wrong key, not missing data.

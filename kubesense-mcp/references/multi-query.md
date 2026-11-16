@@ -213,7 +213,7 @@ Formulas are optional; use `analyze-telemetry` purely to save round-trips:
     "A": {
       "selectedMode": "traces",
       "group_by_fields": [ { "field": "service", "is_attribute": false } ],
-      "fields": [ { "field": "duration", "is_attribute": false } ],
+      "fields": [ { "field": "duration_ms", "is_attribute": false } ],
       "value_operation": "p95"
     },
     "B": {
@@ -225,7 +225,7 @@ Formulas are optional; use `analyze-telemetry` purely to save round-trips:
 }
 ```
 
-`A`'s values are in **nanoseconds** (aggregated trace `duration`).
+`A`'s values are in **milliseconds** (aggregated trace `duration_ms`; its result carries `"unit":"ms"`).
 
 ## Output
 

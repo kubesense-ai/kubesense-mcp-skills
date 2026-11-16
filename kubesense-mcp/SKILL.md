@@ -292,7 +292,7 @@ unknown field "svc" for signal=logs; call get-fields with signal=logs to
 | span role | — | `role` |
 | protocol | — | `protocol` |
 | message text | `body` | not available |
-| latency | — | `duration` |
+| latency | — | `duration_ms` |
 
 The full per-signal tables, including hidden-but-accepted fields and every storage
 mapping, are in **[references/field-catalog.md](./references/field-catalog.md)**. The
@@ -315,7 +315,7 @@ status = error AND role = server
 namespace IN (production, staging)
 NOT (env_type = dev)
 body ILIKE "%timeout%"
-duration > 500
+duration_ms > 500
 @user.id = abc-123
 ```
 
@@ -346,8 +346,10 @@ Trace attributes still work in `group_by_fields` / `fields` / `required_fields` 
 `sort_by` via `{"field": "db.system", "is_attribute": true}` — no `@` there, for either
 signal.
 
-**`duration` is millisecond-in, nanosecond-out** — see
-[kubesense-traces](../kubesense-traces/SKILL.md).
+**Trace latency is `duration_ms`**, milliseconds in WHERE, operands, results and rows of the
+query tools. Bare `duration` is the legacy nanosecond field. **Alerts are the exception:**
+`create-alert` rejects `duration_ms` as an operand or group-by, thresholds on `duration` are
+nanoseconds (500 ms = `500000000`), and only an alert's `where` takes `duration_ms`. See [kubesense-traces](../kubesense-traces/SKILL.md).
 
 **RUM** takes the same operators but differs on three points: `LIKE`
 and `ILIKE` work only on low-cardinality fields (the catalog's `LIKE` column), `@attr`
@@ -361,7 +363,7 @@ See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 | "show me recent errors" | `search-logs` |
 | "list the crashes / slowest sessions / failed requests" | `search-rum` |
 | "how many errors in the last hour" | `analyze-logs`, `row_count` |
-| "p99 latency for checkout" | `analyze-traces`, `p99` over `duration` |
+| "p99 latency for checkout" | `analyze-traces`, `p99` over `duration_ms` |
 | "why did this request fail" | `get-distributed-trace` |
 | "what calls X / what does X depend on / blast radius / dependency chain" | `get-service-map` |
 | "CPU usage" | `get-available-metrics` → `analyze-metrics` |
