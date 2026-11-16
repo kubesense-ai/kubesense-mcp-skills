@@ -299,3 +299,6 @@ Steps 4–5 use [kubesense-infra](../kubesense-infra/SKILL.md) and
     nothing is found.
 11. Don't try to page traces exhaustively — `observation_point` can't be pinned. Shorten
     the window or aggregate.
+12. Hand the user the `ui_url` that `search-traces`, `analyze-traces` and
+    `get-distributed-trace` return, verbatim, and pass `clusters` to pin the domain; never
+    build a KubeSense URL. See [Linking to the UI](../kubesense-mcp/SKILL.md#linking-to-the-ui).

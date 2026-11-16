@@ -48,6 +48,9 @@ Two distinct jobs, don't confuse them:
 | `find-investigation-for-alert` | The most recent *concluded* AI investigation and its root cause. `found=false` is normal, not an error. |
 | `list-notification-channels` | Enabled channels only: `id`, `name`, `type`. |
 
+`list-active-alerts`, `list-alert-rules` and `get-alert-details` return a `ui_url` for each alert
+or rule. Give it to the user verbatim, never build one. See [Linking to the UI](../kubesense-mcp/SKILL.md#linking-to-the-ui).
+
 ## Checking Hand-Built Rule JSON
 
 Whenever you assemble a rule document yourself — import JSON, a ported Datadog monitor, an
