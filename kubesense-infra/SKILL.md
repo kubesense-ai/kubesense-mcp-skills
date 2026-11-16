@@ -126,7 +126,9 @@ workloads. Prefer it over re-deriving problems from raw telemetry.
 
 Output: `issue_id`, `kind`, `cluster`, `primary_workload`, `primary_namespace`,
 `associate_workload`, `issue_reason`, `return_code`, `subtype`, `sum_issue_count`,
-`max_last_seen`.
+`max_last_seen`. The header is `returned=<N> truncated=<bool>`; `truncated=true` means
+another page exists, so pass `page` + 1 before calling the list complete. Pages are
+contiguous: `page` + 1 starts at the row after the last one shown, so no rows are skipped.
 
 `associate_workload` is the *other* side of a connectivity issue — the dependency that
 `primary_workload` failed to reach. For the full caller/callee graph around a workload, use
@@ -146,7 +148,9 @@ Known `reason` values: `OOMKilling`, `BackOff`, `Unhealthy`, `FailedScheduling`,
 modes** — narrow only once you know which one you're chasing.
 
 Output: `reason`, `type`, `workload`, `object`, `namespace`, `exit_code` (crashes only),
-`message`, `count`, `last_seen`. Defaults to limit 50, max 200.
+`message`, `count`, `last_seen`. Defaults to limit 50, max 200. The header is
+`returned=<N> truncated=<bool>`: when `truncated=true`, more failures exist than the limit
+returned, so raise `limit` or narrow `namespace` / `workload` before saying "that is all".
 
 **Layer routing:** infra failures → this tool. Application errors and latency →
 `analyze-traces` / `search-traces`. What changed → `get-recent-changes`.
@@ -164,7 +168,8 @@ cheapest hypothesis you will test.
 `kind` is `image_update` or `scaling`; omit for both. Output: `kind`, `workload`,
 `namespace`, `object`, `detail`, `when` — where `detail` reads like
 `kubesense: dev-v1.2.1279 -> dev-v1.2.1280` or `replicas 1 -> 0`. Defaults to limit 50,
-max 200.
+max 200. The header is `returned=<N> truncated=<bool>`; `truncated=true` means older
+changes were cut off, so raise `limit` or narrow the window.
 
 Scope with `namespace` + `workload`. Both are optional but strongly recommended — an
 unscoped call across a busy cluster returns mostly noise.

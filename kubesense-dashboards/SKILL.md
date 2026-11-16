@@ -662,6 +662,9 @@ list-dashboards  →  get-dashboard-details  →  update-dashboard (panel_operat
 you are about to change, and call it only when the user asked for the change. It needs
 edit access on the dashboard.
 
+`list-dashboards` caps rows at `limit`, but its header `total_count` is the real number of
+matching dashboards; if `truncated=true`, say how many exist and page or narrow by `type`.
+
 **System dashboards are read-only.** `list-dashboards` reports `type`: `system` for a
 dashboard KubeSense ships (one per integration service, such as "AWS RDS Overview" or
 "Kubernetes Pods Overview"), `user` for one a person made. `update-dashboard` refuses a

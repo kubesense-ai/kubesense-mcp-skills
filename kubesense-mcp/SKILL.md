@@ -50,9 +50,40 @@ read as a JWT and refused with 401.
 Liveness: `GET /mcp_health`. To confirm *who* you are authenticated as, call
 `get-current-user` — no arguments, cheap, resolved from the request credentials.
 
-**RBAC** is resolved per tool call against the modules `logs`, `traces`,
-`infrastructure` (metrics + nodes/pods), `alerts`, `rum`, and `log_rule_group` (log pipelines). A permission error names the
-module. `analyze-telemetry` resolves every module its sub-queries touch.
+**RBAC** is resolved per tool call against one module per tool family:
+
+| Module | Tools |
+|---|---|
+| `logs` | `search-logs`, `analyze-logs`, `execute-spl`, `validate-spl`, logs in `execute-sql` |
+| `traces` | `search-traces`, `analyze-traces`, `get-distributed-trace`, `get-service-map`, `list-issues`, traces in `execute-sql` |
+| `rum` | `search-rum`, `analyze-*` and `execute-sql` over `rum_*` signals |
+| `infrastructure` | `list-clusters`, `list-nodes`, `get-node-detail`, `list-pods`, `get-pod-detail`, `get-infra-issues`, `get-recent-changes`, `list-cloud-integrations`, `get-available-metrics`, `get-metric-labels`, `analyze-metrics`, `events` queries |
+| `workloads` | `list-workloads`, `get-workload-detail` |
+| `alerts` | `list-alerts`, `list-active-alerts`, `list-alert-rules`, `get-alert-details`, `get-alert-history`, `list-notification-channels`, `create-alert` (write) |
+| `dashboard` | `list-dashboards`, `get-dashboard-details`, `create-dashboard` and `update-dashboard` (write); `run-dashboard-panel` checks the modules of the panel's own signal |
+| `synthetics` | the `synthetics-*` tools; `run-monitor` and `run-suite` need write |
+| `ai_chat` | `synthetics-explain-failure`, on top of `synthetics` |
+| `ai_investigations` | `find-investigation-for-alert` |
+| `log_rule_group` | the log-pipeline tools; `create-log-pipeline` and `update-log-pipeline` need write |
+
+`analyze-telemetry` resolves every module its sub-queries touch.
+
+A denial names the module, the access level (read or write) and where to fix it, for example
+`role "viewer" has no read grant on the "workloads" module. An admin can grant it under
+Settings → Role Access`. For an API key it says the key does not have access to the module
+and that an admin can change its scopes under Settings → API Keys (Service Accounts for a
+service account); `get-current-user` with `include_permissions=true` lists the key's current
+scopes. Relay that text to the user: which tool failed, the module and level it needs, and who
+can grant it. Do not retry or route around it with another tool.
+
+The webapp's API-key scope picker cannot currently grant `workloads`. If a key is denied
+`workloads`, say a role-based key or an admin is needed; do not promise a UI fix.
+
+When a tool returns a header like `total_count=<real> returned=<n> truncated=<bool>`, report
+`total_count` as the size of the set and `returned` as what you actually saw. `truncated=true`
+means more exist than were returned: raise `limit` or narrow the filter before drawing a
+conclusion from the list. `get-recent-changes`, `get-infra-issues` and `list-issues` have no
+total, only `returned=<n> truncated=<bool>`.
 
 Set `MCP_LOG_LEVEL=debug` server-side to log per-call argument payloads without raising
 the global log level.
@@ -128,7 +159,8 @@ report it. Call it before any cloud metric query: it gives the real `provider`,
 **Dashboards** — see [kubesense-dashboards](../kubesense-dashboards/SKILL.md)
 
 `list-dashboards` (id, name, description, `type` and `integration_id`; optional
-`type: "system" | "user"` filter) · `get-dashboard-details` (each panel's queries, plus its
+`type: "system" | "user"` filter; the header's `total_count` is every match and `returned`
+is the rows shown, so a `limit` no longer hides the real count) · `get-dashboard-details` (each panel's queries, plus its
 `panel_id`, `panel_version` and `variables_used`, the `tab_id`, `sub_grid_id` and `position`
 address, and the `preset_version` that `update-dashboard` needs, and
 `tab_title` and the tab list on a tabbed dashboard; `raw=true` adds the whole stored preset)

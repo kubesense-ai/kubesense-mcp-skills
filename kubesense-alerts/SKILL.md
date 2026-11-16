@@ -40,7 +40,7 @@ Two distinct jobs, don't confuse them:
 
 | Tool | Scope |
 |---|---|
-| `list-active-alerts` | Currently-firing series from the **native** store, joined with rule metadata. Filters: `from_time`/`to_time`, `fingerprint`, `acknowledged`, `assignee`, `include_resolved`. |
+| `list-active-alerts` | Currently-firing series from the **native** store, joined with rule metadata. Filters: `from_time`/`to_time`, `fingerprint`, `acknowledged`, `assignee`, `include_resolved`. Each row has `rule_name` (the raw rule template, so it can still show `{{label}}`) and `summary` (the name rendered for that series): quote `summary` to the user. |
 | `list-alerts` | The **external Alertmanager** — label-only, no rule config. Different source; use `list-active-alerts` unless you specifically want Alertmanager state or silences. |
 | `list-alert-rules` | Rule *definitions*, including disabled and non-firing ones. Newest first. Filters: `enabled`, `state`, `severity`, `query_type`, `search`, `created_by`. |
 | `get-alert-details` | One rule's full config (`query_config`, condition, threshold) **plus** its firing instances. Start here when investigating. |
@@ -657,6 +657,16 @@ disambiguated carry their suffix into the placeholder too — `{{status:float}}`
 - **A missing time stays literal.** `{{Alert.endsAt}}` on a firing alert renders as itself,
   not `0001-01-01` — same for `evaluatedFrom`/`evaluatedTo` when the window is unknown.
 
+**Placeholders that cannot resolve are caught at authoring time.** `create-alert` refuses a
+name or description with a `{{placeholder}}` the rule does not group by, label or define, and
+`validate-alert-json` warns about it. Rules with a metrics (PromQL) query pass unchecked, as
+their labels are only known at fire time. In `list-alerts`, `list-active-alerts` and `get-alert-history`, a `# note: ...`
+line right after the `# total_count=<N>` header, saying summaries contain unrendered
+`{{...}}`, means the rule referenced a label it does not group by: the text shown is what was
+sent, not a data bug. The note is its own line, not a `note=` token in the header.
+`list-active-alerts` checks the `summary` column only: `rule_name` is the raw template and
+always carries `{{...}}`, so it never triggers the note.
+
 ## Maintenance Windows
 
 Scheduled downtime, Datadog-style: a window mutes alert **notifications** for a scope over
@@ -747,7 +757,10 @@ cluster-specific. Ask the user, or have them export a reference rule.
     never gets that far: the editor defaults the empty field to **5 minutes**. Send it.
 13. `{{field}}` placeholders in `name` resolve per firing series against a group-by key or
     a rule label, e.g. group by `workload` → `"High latency {{workload}}"`. One that
-    matches nothing stays **literal**, which is how you spot a typo. The alert's own facts
+    matches nothing stays **literal**, so `create-alert` now **rejects** a name or
+    description holding one, and `validate-alert-json` reports it as an
+    `unresolved_placeholder` warning (the rule is still `valid=true`). Fix it, using the
+    "did you mean" spelling when it gives one. The alert's own facts
     need the `Alert.` prefix — `{{Alert.value}}`, not `{{value}}`.
 14. Tell the user to review the condition chart before creating, and never claim a rule was
     created unless `create-alert` actually returned an id.
