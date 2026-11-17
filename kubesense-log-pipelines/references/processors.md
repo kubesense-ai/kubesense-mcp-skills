@@ -7,7 +7,7 @@ when you save. Every example below is the `config` object only.
 
 Conventions:
 
-- **`field`** is a log attribute key, written without the `@` that WHERE clauses use. Dotted keys (`http.status`) are flat keys.
+- **`field`** is a log attribute key, written without the `@` that KQL queries use. Dotted keys (`http.status`) are flat keys.
 - **Empty `field`** means the log `body`, for the types that say so.
 - **No match leaves the log as it was**, except where a type notes otherwise.
 - Destructive options (`delete_original`, `replace_original`, overwriting) are named in the Dangers section of [SKILL.md](../SKILL.md#dangers). They are flagged here as **destructive**.
@@ -195,6 +195,7 @@ Drop logs. Dropped logs are not stored.
 | `field` | Attribute to test. Empty tests the body. |
 | `pattern` | Regex. Drops logs that match. |
 | `block_unmatched` | Drops logs that do **not** match instead. |
+| `kql` | A KQL filter in place of `field` + `pattern`, e.g. `workload:payment AND type:WARN` or `body:/timeout.*gold/`. Compiled into `conditions` (`condition_version` 2). See [SKILL.md](../SKILL.md). |
 
 A block rule with no `field`, `pattern` or `conditions` would drop **every** log the
 pipeline's inputs match, so the server refuses it (also `block_unmatched` with no match, and

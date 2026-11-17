@@ -1,8 +1,11 @@
 # RUM Dashboard Recipes
 
 Panel fragments for the questions RUM dashboards usually ask. Every query is a stored
-panel query: `selectedMode: "rum"` plus `rumEventType`, the WHERE clause in
-`filters.advanced_query`, `filterMode: "ADVANCED_QUERY"`. See
+panel query: `selectedMode: "rum"` plus `rumEventType`, stored as Advanced text (a
+WHERE-style clause) in `filters.advanced_query`, `filterMode: "ADVANCED_QUERY"`. With
+`create-dashboard` and `update-dashboard`, write each filter below as KQL in the query's `kql`
+field instead (`crash_count>0`, `lcp_ms>0 lcp_ms<=2500`); the server stores the Advanced form.
+The WHERE columns below show the stored form. See
 [RUM query](../../kubesense-dashboards/SKILL.md#rum-query) for the shape and
 [field-catalog.md](./field-catalog.md) for the fields; check a field with `get-fields`
 before you use it. Test a recipe with `analyze-telemetry` (`selectedMode: "rum_view"`

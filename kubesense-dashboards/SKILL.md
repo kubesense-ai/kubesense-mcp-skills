@@ -2,7 +2,7 @@
 name: kubesense-dashboards
 description: Use when the user wants a KubeSense dashboard built, edited or extended (panels over metrics, logs, traces, RUM or host maps), asks for dashboard preset JSON to import, asks what a panel on an existing dashboard shows, or has dashboard JSON that fails import or renders empty panels.
 metadata:
-  version: "2.8.0"
+  version: "3.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization,host-map,rum
@@ -359,8 +359,8 @@ supply is overwritten. Don't bother setting it.
   `topList` the way a `stat` panel sets `table`.
 - `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` for anything
   MFD's equality-only filters can't express (e.g. a latency threshold). See **Filtering a
-  logs / traces / events / rum query** below: the WHERE clause goes in `filters.advanced_query`,
-  **never** in `query`.
+  logs / traces / events / rum query** below: write the filter as `kql`; stored, it is
+  Advanced text in `filters.advanced_query`, **never** in `query`.
 - `groupBy` entries use the same shape as `columnFields`.
 - `list` (array) and `value` (string) are the SPL/SQL column fields. There is no
   `topListLabel`/`topListValue`.
@@ -382,7 +382,34 @@ Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggreg
 
 ### Filtering a logs / traces / events / rum query
 
-A WHERE clause is stored in the **filter store**, not in `query`:
+**With `create-dashboard` and `update-dashboard`, write the filter as KQL in the query's
+`kql` field**, the same syntax as the `query` argument of `search-logs` and `analyze-logs`
+(see [kubesense-mcp](../kubesense-mcp/SKILL.md#filter-syntax-kql-query)):
+
+```json
+{
+  "selectedMode": "traces",
+  "label": "A",
+  "columnFields": [],
+  "kql": "service:checkout duration_ms>500",
+  "aggregation": { "function": "row_count" }
+}
+```
+
+The server compiles `kql` against the signal's field catalog and stores the Advanced text
+below (`filterMode: "ADVANCED_QUERY"`); `kql` itself is never stored. A rum query also needs
+`rumEventType`. A query takes `kql` or `filters`, not both. The key is `kql` here, not
+`query`, because on a dashboard query `query` already holds SPL or SQL text; search, analyze
+and `create-alert` call the same text `query`. A condition the Advanced editor cannot hold is
+refused with the condition named.
+
+`get-dashboard-details` returns, beside each stored filter, `kql` (the stored filter written
+as KQL) or `legacy` with a reason when it has none. Send a query back as read to keep it
+unchanged; to change the filter, send `kql` with no `filters`. A `kql` that differs from the
+stored `filters` in the same query is refused.
+
+**Stored form.** What the dashboard keeps, and what hand-written preset JSON must contain,
+is a WHERE-style Advanced text in the **filter store**, not in `query`:
 
 ```json
 {
@@ -397,13 +424,13 @@ A WHERE clause is stored in the **filter store**, not in `query`:
 
 - `filters.advanced_query` is an array holding **one** WHERE string. `filterMode:
   "ADVANCED_QUERY"` makes the panel open in the Advanced editor.
-- The WHERE syntax is the one the search/analyze tools accept: `=`, `!=`, `<`, `>`, `<=`,
+- This stored text is the explorer's SQL-style syntax, not KQL: `=`, `!=`, `<`, `>`, `<=`,
   `>=`, `LIKE`, `ILIKE`, `IN (...)`, combined with `AND`, `OR` and a prefix `NOT`: exclude a
   list as `NOT namespace IN (a, b)`, never `namespace NOT IN (a, b)`.
   Field names are the catalog labels from `get-fields` (same `signal`); prefix an attribute
   with `@` (`@http.route = /api/orders`).
-- **`query` is only for SPL or SQL text** (`filterMode: "SPL"` / `"SQL"`). A WHERE clause
-  put in `query` is never run: the panel silently shows **every** row.
+- **`query` is only for SPL or SQL text** (`filterMode: "SPL"` / `"SQL"`). A filter put in
+  `query` is never run: the panel silently shows **every** row.
 - `filterMode: "MFD"` panels keep plain equality filters as `filters: {"<field>": ["<value>", ...]}`.
 
 ### Events query

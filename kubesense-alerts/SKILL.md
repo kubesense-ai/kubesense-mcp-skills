@@ -2,7 +2,7 @@
 name: kubesense-alerts
 description: Use when the user asks which KubeSense alerts are firing, why an alert fired or paged nobody, wants an alert rule created, edited or resolved ("alert me when…"), needs alert import JSON built or validated, wants a Datadog monitor converted, or is setting up a maintenance window.
 metadata:
-  version: "2.4.1"
+  version: "3.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels,composite-conditions
@@ -43,7 +43,7 @@ Two distinct jobs, don't confuse them:
 | `list-active-alerts` | Currently-firing series from the **native** store, joined with rule metadata. Filters: `from_time`/`to_time`, `fingerprint`, `acknowledged`, `assignee`, `include_resolved`. Each row has `rule_name` (the raw rule template, so it can still show `{{label}}`) and `summary` (the name rendered for that series): quote `summary` to the user. |
 | `list-alerts` | The **external Alertmanager** — label-only, no rule config. Different source; use `list-active-alerts` unless you specifically want Alertmanager state or silences. |
 | `list-alert-rules` | Rule *definitions*, including disabled and non-firing ones. Newest first. Filters: `enabled`, `state`, `severity`, `query_type`, `search`, `created_by`. |
-| `get-alert-details` | One rule's full config (`query_config`, condition, threshold) **plus** its firing instances. Start here when investigating. |
+| `get-alert-details` | One rule's full config (`query_config`, condition, threshold) **plus** its firing instances. Start here when investigating. Each logs or traces query that filters carries `kql`, its stored filter written as KQL: paste it into the `query` argument of `search-logs` / `analyze-logs` to look at the same rows, and never translate the stored tree by hand. A query with `legacy` {reason, detail} has no faithful KQL form; read its `unified_filter`. |
 | `get-alert-history` | Triggered/resolved transitions, newest first — tells you chronic vs new. |
 | `find-investigation-for-alert` | The most recent *concluded* AI investigation and its root cause. `found=false` is normal, not an error. |
 | `list-notification-channels` | Enabled channels only: `id`, `name`, `type`. |
@@ -131,7 +131,7 @@ someone unacknowledges.
 | | `create-alert` MCP tool | Import JSON |
 |---|---|---|
 | Rules per call | one | one or many (bulk) |
-| Field names | `fields`/`group_by_fields` **auto-bridge** — catalog label first, then the storage name. `where` is strict: catalog labels only | you must get them exactly right, in the engine's own vocabulary |
+| Field names | `fields`/`group_by_fields` **auto-bridge** — catalog label first, then the storage name. `query` is strict: catalog labels only | you must get them exactly right, in the engine's own vocabulary |
 | Validation | up-front, with a precise error to retry against | server-side at import |
 | Applied by | the agent (write tool, needs approval) | the user, in the UI |
 | Best for | a single rule the user wants created now | reviewable output, several rules, migrations |
@@ -148,7 +148,7 @@ monitors.
   "signal": "traces",
   "name": "Checkout average latency high",
   "description": "average server latency above 500ms for 5 minutes",
-  "where": "service = checkout AND role = server",
+  "query": "service:checkout role:server",
   "value_operation": "avg",
   "fields": [ { "field": "duration" } ],
   "group_by_fields": [ { "field": "workload" } ],
@@ -162,11 +162,11 @@ monitors.
 ```
 
 - `signal`: `metrics` | `logs` | `traces`.
-- **metrics** → supply `promql`. **logs/traces** → `where` (search-logs syntax) +
+- **metrics** → supply `promql`. **logs/traces** → `query` (KQL, as in search-logs) +
   `value_operation`, plus `fields` for anything other than `row_count`.
 - `value_operation` here is narrower than the query tools: `row_count`, `unique_count`,
   `avg`, `sum`, `min`, `max` — **no percentiles**. For a p95 latency rule use import JSON.
-- `where`, `group_by_fields` and `fields` take the **query tools' catalog labels** (`service`,
+- `query`, `group_by_fields` and `fields` take the **query tools' catalog labels** (`service`,
   `type`, `status_code`). Storage names such as `return_code` or `level` are refused with a
   "use the catalog label" message — the opposite of import JSON, where `advanced_query`
   strings and `raw_filters` use storage names. The tool maps labels to the engine's names
@@ -190,9 +190,9 @@ an `expression`:
   "signal": "traces",
   "name": "Checkout 5xx rate above 5%",
   "queries": [
-    {"label": "A", "where": "status_code LIKE \"5__\"", "value_operation": "row_count",
+    {"label": "A", "query": "status_code:5??", "value_operation": "row_count",
      "group_by_fields": [{"field": "workload"}]},
-    {"label": "B", "where": "", "value_operation": "row_count",
+    {"label": "B", "query": "", "value_operation": "row_count",
      "group_by_fields": [{"field": "workload"}]},
     {"label": "C", "expression": "A / B * 100"}
   ],
@@ -202,7 +202,7 @@ an `expression`:
 }
 ```
 
-- `queries` and the flat fields (`promql`, `where`, `value_operation`, `fields`,
+- `queries` and the flat fields (`promql`, `query`, `value_operation`, `fields`,
   `group_by_fields`) are **mutually exclusive** — pass `queries` and everything goes in it.
 - `label` defaults to `A`, `B`, `C` **by position**, letters only; 26 queries maximum.
 - A formula entry carries `expression` and nothing else, and may reference only queries
@@ -221,25 +221,22 @@ an `expression`:
   quiet. That is the argument for building multi-query rules through `create-alert`.
 - The threshold applies to the formula. With several queries and **no** formula, name the
   one to threshold in `threshold_query`.
-- `"where": ""` is accepted inside `queries` — a denominator of "everything" is the point —
+- `"query": ""` is accepted inside `queries` — a denominator of "everything" is the point —
   where an unfiltered single-query rule is refused.
 
 > [!IMPORTANT]
-> **`where` takes catalog labels, and only catalog labels.** `status_code`, not
+> **`query` takes catalog labels, and only catalog labels.** `status_code`, not
 > `return_code`; `instance`, not `pod_name`. A storage column is rejected by name:
 >
 > ```
-> field "return_code" is a storage column; use the catalog label "status_code" instead
+> query: <code>: return_code is the storage name; write status_code (at 0-15)
 > ```
 >
 > This is the opposite of the vocabulary further down, which governs **stored and imported**
 > rules — there `return_code` is right and `service` is not. Same rule, two vocabularies,
 > decided by how it reaches the engine. `fields` and `group_by_fields` are the forgiving
 > ones: `create-alert` tries the catalog label and then the storage name, so either works
-> there. `where` does not bridge.
->
-> The example in the tool's own description has this bug — it writes `return_code` in a
-> `where` and is rejected by the validator behind the same tool. Do not copy it.
+> there. `query` does not bridge.
 
 Percentiles are still out of reach here: `value_operation` has no `p95`, so a p95 latency
 rule remains an import-JSON job.
@@ -406,7 +403,7 @@ predates that fix — group by `workload` instead.
 > and do not report them as alerting bugs.
 >
 > The query tools' `pattern` group-by is not on these lists either. A rule cannot group by
-> message pattern, and `pattern` is rejected in a rule's `where` too. Filter on `body`.
+> message pattern, and `pattern` is rejected in a rule's `query` too. Filter on `body`.
 
 ### Traces — group-by and value fields (40, exact)
 
@@ -567,7 +564,7 @@ nanoseconds — it never converts.
 >
 > **`create-alert` rejects `duration_ms` as an operand or a group-by field.** Use `duration`
 > there, with `threshold_value` in nanoseconds (500 ms = `500000000`). `duration_ms` is fine
-> inside an alert's `where`, where it is read in milliseconds (`duration_ms > 500`).
+> inside an alert's `query`, where it is read in milliseconds (`duration_ms>500`).
 >
 > The product's own `type-tracing` starter template uses `threshold: 500` with a description
 > saying "ms" — that is 500 *nanoseconds*. Don't copy it.

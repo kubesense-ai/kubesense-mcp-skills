@@ -2,7 +2,7 @@
 name: kubesense-traces
 description: Use when the user asks KubeSense about request latency (p50/p95/p99), error rates, slow or failing endpoints, which service or downstream hop is failing or burning time, or wants one distributed trace's waterfall — any span query through analyze-traces, search-traces or get-distributed-trace.
 metadata:
-  version: "2.0.0"
+  version: "3.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,traces,apm,spans,latency,p99,distributed-tracing,error-rate,waterfall
@@ -93,12 +93,11 @@ topology.
 | `source` | `eBPF`, `OTel` |
 | `status_code` | `200`, `400`, `401`, `403`, `404`, `500`, `502`, `503`, `504` |
 
-`status = error` — lowercase, unlike logs' UPPERCASE `type = ERROR`.
+`status:error` — lowercase, unlike logs' UPPERCASE `type:ERROR`.
 
-`status_code` is a **string** field, so its values stay quoted strings even when they look
-numeric: `status_code IN (500, 502)` yields the strings `"500"`, `"502"`. Range
-comparisons therefore do not work — enumerate the codes, or use
-`status_code LIKE "5%"` for a class.
+`status_code` is a **string** field, so a range does not work (`status_code>=500` is an
+error that says so): enumerate the codes, `status_code:(500 OR 502 OR 503)`, or write a class
+as a pattern, `status_code:5??` (or `status_code:5*`).
 
 Read casing from the `enum_values` column, not `example` — the example generator returns
 a blank cell for `method`, `protocol`, and `status_code`.
@@ -106,23 +105,25 @@ a blank cell for `method`, `protocol`, and `status_code`.
 ## Duration: always `duration_ms`
 
 > [!IMPORTANT]
-> **In the query tools use `duration_ms` everywhere: WHERE, `fields` operands, and the cells
+> **In the query tools use `duration_ms` everywhere: `query`, `fields` operands, and the cells
 > in `search-traces` rows. It is always milliseconds.** `get-fields` lists it. Never convert
 > units yourself. **Alerts are the exception:** `create-alert` rejects `duration_ms` as an
 > operand or group-by and thresholds `duration` in nanoseconds (500 ms = `500000000`); see
 > [kubesense-alerts](../kubesense-alerts/SKILL.md#trace-latency-thresholds-are-in-nanoseconds).
 
 ```
-where: "duration_ms > 500"     →  spans slower than 500 milliseconds
+query: "duration_ms>500"     →  spans slower than 500 milliseconds
 ```
 
 | You want | Write |
 |---|---|
-| slower than 250ms | `duration_ms > 250` |
-| slower than 1s | `duration_ms > 1000` |
-| slower than 1.5s | `duration_ms > 1.5e3` or `duration_ms > 1500` |
+| slower than 250ms | `duration_ms>250` |
+| slower than 1s | `duration_ms>1000` |
+| slower than 1.5s | `duration_ms>1500` |
+| between 100 ms and 1 s | `duration_ms>=100 duration_ms<1000` |
 
-Write the number bare or quoted; both are read as milliseconds.
+Write a plain number of milliseconds, decimals allowed (`duration_ms>0.5`); no unit suffix
+and no exponent.
 
 Aggregates over `fields: [{"field": "duration_ms"}]` (`p95`, `avg`, `max`, ...) come back in
 milliseconds, and the query's result carries `"unit":"ms"`. A formula in `analyze-telemetry`
@@ -132,26 +133,30 @@ ms, and a formula result carries no unit of its own.
 The bare field `duration` is the legacy nanosecond field. Do not use it in new queries, and
 if an old query or a row cell shows `duration`, 250000000 is 250 ms.
 
-## Trace attributes: group-by only
+## Trace attributes
 
-> [!WARNING]
-> **`@attr` in a traces WHERE clause does not work.** It is rejected with
-> `unknown field "<key>" for signal=traces`, because the parser clears the attribute
-> discriminator during the ARRAY_MAP remap and the field then fails column validation.
-> The tool descriptions advertise `@db.system = postgresql` as working; it does not.
+Trace attributes are filtered with an `@` prefix in `query`, like log attributes, and take
+every operator:
 
-Trace attributes **do** work everywhere the field is passed structurally — set the flag
-instead of a prefix:
+```
+@db.system:postgresql
+@http.route:/api/*
+@http.status_code:(500 OR 503)
+@retries>2
+@cache.hit:*            (the attribute is set)
+-@db.system:redis
+```
+
+Everywhere the field is passed structurally (`group_by_fields`, `fields`, `required_fields`,
+`sort_by`) set the flag instead of a prefix:
 
 ```json
 "group_by_fields": [ { "field": "db.system", "is_attribute": true } ]
 ```
 
-Valid in `group_by_fields`, `fields`, `required_fields`, and `sort_by`. To filter by an
-attribute value, group by it and read the series labels, or filter on an equivalent
-top-level column.
-
-(Log attributes are unaffected — `@user.id = abc` works fine on logs.)
+A trace attribute holds text, so `@retries>2` compares as a number where the value reads as
+one, and a value that does not read as a number matches neither the comparison nor its
+negation. An attribute filter sets `is_free_search` and reads the raw span table.
 
 ## analyze-traces
 
@@ -173,10 +178,10 @@ summary line suggests.
 | Question | Shape |
 |---|---|
 | p95 latency by service, over time | `range`, group `service`, `fields: [duration_ms]`, `p95` |
-| top 5 services by errors, now | `instant`, `where: "status = error"`, group `service`, `row_count`, `sort_direction: DESC`, `limit: 5` |
-| errors by status code | `instant`, `where: "status = error"`, group `status_code`, `row_count` |
+| top 5 services by errors, now | `instant`, `query: "status:error"`, group `service`, `row_count`, `sort_direction: DESC`, `limit: 5` |
+| errors by status code | `instant`, `query: "status:error"`, group `status_code`, `row_count` |
 | slowest endpoints | `instant`, group `resource`, `fields: [duration_ms]`, `p99`, `sort_direction: DESC` |
-| server-side only | add `where: "role = server"` — otherwise client spans double-count |
+| server-side only | add `query: "role:server"` — otherwise client spans double-count |
 
 **Error rate as a percentage** needs two queries plus a formula → `analyze-telemetry`.
 See [kubesense-mcp](../kubesense-mcp/SKILL.md).
@@ -201,8 +206,7 @@ key). The window is half-open, so the cursor row is not repeated.
 > start_timestamp DESC`. Both `observation_point` **and** `cluster` outrank the timestamp,
 > so pinning `clusters` alone is not enough — spans at other observation points in the
 > same hour get skipped. And `observation_point` **is not in the trace field catalog**, so
-> the `where` clause cannot pin it (the tool description suggests
-> `"observation_point = s-app"`; that is rejected as an unknown field).
+> the `query` cannot pin it (`observation_point:s-app` is rejected as an unknown field).
 >
 > Practical consequences: keep the window short enough that `total_count` fits in one
 > page, or use `analyze-traces`. Treat any paged trace scan as a sample.
@@ -287,14 +291,14 @@ Steps 4–5 use [kubesense-infra](../kubesense-infra/SKILL.md) and
 3. `node_name` on traces, `node` on logs. Never carry a field across signals.
 4. Prefer `service` over `workload` for app identity — but the *alert engine* prefers
    `workload`.
-5. **Use `duration_ms` (milliseconds) in WHERE, operands and when reading rows.** Bare
+5. **Use `duration_ms` (milliseconds) in `query`, operands and when reading rows.** Bare
    `duration` is the legacy nanosecond field.
-6. `@attr` filters do **not** work on traces. Use `is_attribute: true` in
-   `group_by_fields`/`fields` instead.
-7. Enum values are lowercase (`status = error`, `role = server`); `status_code` is a
-   string, so enumerate codes or use `LIKE "5%"` rather than a range.
+6. `@attr:value` filters work on traces. In `group_by_fields`/`fields` use
+   `is_attribute: true` instead of the prefix.
+7. Enum values are lowercase (`status:error`, `role:server`); `status_code` is a
+   string, so enumerate codes or use `status_code:5??` rather than a range.
 8. `value_operation` is `row_count`, not `count`.
-9. Add `role = server` when counting requests, or client spans double-count.
+9. Add `role:server` when counting requests, or client spans double-count.
 10. `get-distributed-trace` needs a window containing the trace's start; widen it first if
     nothing is found.
 11. Don't try to page traces exhaustively — `observation_point` can't be pinned. Shorten

@@ -11,7 +11,7 @@ The complete, exact field catalog the KubeSense MCP server accepts. Source of tr
 **Type the "Label" column.** The "Storage column" is what the backend uses internally; it
 is **rejected** at every input slot with a message naming the correct label.
 
-Input slots this applies to: `where`, `required_fields`, `group_by_fields`, `fields`,
+Input slots this applies to: `query` (and the deprecated `where`), `required_fields`, `group_by_fields`, `fields`,
 `sort_by`.
 
 ---
@@ -35,7 +35,7 @@ Input slots this applies to: `where`, `required_fields`, `group_by_fields`, `fie
 | `app_version` | `app_version` | string | | |
 | `env_type` | `env_type` | string | | |
 | `timestamp` | `timestamp` | string | | hidden from discovery, still accepted |
-| `pattern` | derived from `body` | string | | hidden, **group-by only**: the body with timestamps, IDs and numbers masked. Needs a `where`. Rejected in any `where` (search-logs, analyze, create-alert) and in `search-logs` `required_fields`; allowed only in `group_by_fields` of analyze-logs / analyze-telemetry, or as an `execute-sql` column |
+| `pattern` | derived from `body` | string | | hidden, **group-by only**: the body with timestamps, IDs and numbers masked. Needs a `query`. Rejected in any `query` or `where` (search-logs, analyze, create-alert) and in `search-logs` `required_fields`; allowed only in `group_by_fields` of analyze-logs / analyze-telemetry, or as an `execute-sql` column |
 | `body_length` | `body_length` | **float** | | hidden; the only numeric log field |
 
 **14 advertised by discovery** (sorted): `app_version`, `body`, `container`, `domain`,
@@ -69,7 +69,7 @@ out, validation does not — a documented asymmetry you can rely on.
 | `protocol` | `protocol_type` | string | `HTTP` `gRPC` `TCP` `MongoDB` `Redis` `MySQL` `PostgreSQL` | |
 | `source` | `source` | string | `eBPF` `OTel` | |
 | `request_type` | `is_external` | **bool** | | no grouping |
-| `duration_ms` | `duration` | **float** | | **milliseconds** in WHERE, operands, results and rows. Bare `duration` is the legacy nanosecond field. Not for alerts: `create-alert` rejects it as an operand or group-by (use `duration`, nanoseconds); only an alert's `where` takes it |
+| `duration_ms` | `duration` | **float** | | **milliseconds** in `query`, operands, results and rows. Bare `duration` is the legacy nanosecond field. Not for alerts: `create-alert` rejects it as an operand or group-by (use `duration`, nanoseconds); only an alert's `query` takes it |
 | `trace_id` | `trace_id` | string | | no grouping; sets free-search |
 | `span_id` | `span_id` | string | | no grouping; sets free-search |
 | `issue_id` | `issue_id` | string | | no grouping; join key to `trace_issues` |
@@ -156,7 +156,7 @@ unknown field "svc" for signal=logs; call get-fields with signal=logs to
   discover valid fields (attributes carry an @ prefix)
 ```
 
-Errors are prefixed by the slot that failed: `where clause: …`,
+Errors are prefixed by the slot that failed: `query: …` (a KQL error carries its code and position, `query: unknown_field: unknown field svc for logs (at 0-3)`; a deprecated `where` reads `where clause: …`),
 `required_fields[0]: …`, `group_by_fields[0]: …`, `fields[0]: …`, `sort_by: …`.
 
 ---
@@ -169,24 +169,24 @@ a single attribute entry.
 
 | Where | Syntax | Works? |
 |---|---|---|
-| `where`, logs | `@user.id = abc-123` | ✅ |
-| `where`, traces | `@db.system = postgresql` | ❌ **rejected** as unknown field |
+| `query`, logs | `@user.id:abc-123` | ✅ |
+| `query`, traces | `@db.system:postgresql` | ✅ |
 | `group_by_fields` / `fields` / `required_fields` / `sort_by`, both signals | `{"field": "db.system", "is_attribute": true}` | ✅ |
 
 Discovery reports the key **bare** in the `field` column with `is_attribute=true`; the `@`
 appears only in the `example` cell.
 
-**Log attribute operators**: `=` `!=` `IN` `<` `>` `<=` `>=` `LIKE` `ILIKE`. Unquoted
-numerics are coerced, so `@latency > 100` compares numerically.
+**Attribute forms** (both signals): `@k:value`, `@k:(a OR b)`, `@k:val*`, `@k:~val*`,
+`@k>n`, `@k>=n`, `@k<n`, `@k<=n`, `-@k:value`, `@k:*` (the attribute is set). A key that holds
+numbers, text or both takes every operator: `@latency>200` reads a number or text such as
+`"250"`, and `@latency:*20*` matches the number 20 as text. A value that is not a number
+matches neither a comparison nor its negation. On logs and events, `-@k:v` and negated
+patterns and comparisons need the key to exist.
 
-**Trace attributes** are stored as parallel `attribute_names[]`/`attribute_values[]` arrays
-and are always string-typed. The parser is supposed to remap `=`/`IN`/`LIKE` to
-`ARRAY_MAP*` operators, but it clears the attribute marker in the process, so the field
-then fails column validation — hence the WHERE rejection above. Group-by is unaffected.
+Trace attributes are stored as parallel `attribute_names[]`/`attribute_values[]` arrays and
+are string-typed; the server maps the forms above onto them. Group-by is unaffected.
 
-`exist(@field)` is broken on both signals: it emits an `EXIST` operator carrying a value,
-which the validator rejects (`operator "EXIST" takes no values (got 1)`). `NOT_EXIST` has
-no syntax at all. There is no working existence check.
+There is an existence check: `@field:*`. Its negation is `-@field:*`.
 
 ---
 
@@ -204,24 +204,21 @@ a trace query noticeably slower.
 
 ---
 
-## Operator Availability vs Advertised
+## Forms Advertised vs Accepted
 
-Discovery's `operators` column reflects an internal catalog that is **broader than the
-WHERE parser**.
+`get-fields` lists the KQL **forms** each field takes in its `forms` column (a token that
+points at a `# forms.<token>=...` legend line, with `<f>` for the field name). Those are
+the forms the compiler accepts for that field, no more and no fewer, so a form that is not
+listed is an error with the field and the position: for example a range on a text field, or
+a wildcard on a RUM field that cannot take one.
 
-**Parseable in a WHERE string:** `=` `!=` `<` `>` `<=` `>=` `LIKE` `ILIKE` `SUBSTR_ILIKE`
-`IN`
+Rules the grammar adds:
 
-**Advertised but with no WHERE syntax** — these fail to parse: `HAS_TOKEN`, `HAS_ALL`,
-`HAS_ANY`, `NOT_HAS_ANY`, `LIKE_AND`, `ILIKE_AND`, `ILIKE_LOG`, `ILIKE_LOG_AND`,
-`SUBSTR_ILIKE_AND`, `IS_IP_ADDRESS`, `NOT_IS_IP_ADDRESS`, `EXIST`, `NOT_EXIST`, and the
-whole `ARRAY_MAP*` family.
-
-Other parser constraints:
-
-- Bare values allow only `[A-Za-z0-9_.-]`. Anything with `/`, `:`, `%`, or a space must be
-  **double-quoted**: `resource = "/api/v1"`, `timestamp > "2026-07-30T10:00:00Z"`.
-- `NOT IN` is not a leaf operator — write `NOT (field IN (...))`.
-- Trace `IN` values stay strings: `status_code IN (500, 502)` → `"500"`, `"502"`.
-- `duration_ms` is the only trace field whose value is coerced to a number (bare or quoted;
-  it is stored as nanoseconds and scaled for you). Every other trace value stays a string.
+- Quote a value that has a space or a colon: `resource:"/api/v1"`, `@msg:"a b"`.
+- Negate a list with `-field:(a OR b)`; there is no `NOT IN`.
+- `duration_ms` takes numbers in milliseconds (`duration_ms>250`, decimals allowed); every
+  other trace column is text or an enum.
+- `body` on logs is a word match: `body:timeout`; `body:*timeout*` is a substring. Both
+  ignore case.
+- `AND` binds tighter than `OR`, and a space is `AND`: `type:ERROR OR namespace:a service:b`
+  reads as `type:ERROR OR (namespace:a AND service:b)`. Add parentheses when you mean otherwise.

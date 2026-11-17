@@ -2,7 +2,7 @@
 name: kubesense-log-pipelines
 description: Use before any write to a KubeSense log pipeline, and when the user wants logs parsed, fields extracted, values masked or redacted, logs dropped, fields removed or renamed, or logs enriched at ingestion — or wants their log pipelines listed, read, created or edited.
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,log-pipelines,logs,ingestion,processors,parsing,masking,block,mcp
@@ -282,7 +282,19 @@ that allow it.
 `replace` rule read back also carries `condition_version`, `conditions` and
 `raw_conditions`: send all three back unchanged when re-saving that rule (a block rule
 without them, or a replace rule that drops saved conditions, is refused), and author new
-rules with `field` and `pattern` only.
+rules with `field` and `pattern`, or with `kql`.
+
+**Matching by KQL.** A `block` or `replace` rule may take `kql` in its config instead of
+`field` and `pattern`: `{"kql": "workload:payment AND type:WARN"}`. It is the same KQL as the
+`query` of `search-logs`, plus one term that exists only here, a regular expression,
+`body:/timeout.*gold/`. The server compiles it into the rule's conditions
+(`condition_version` 2) and keeps the text; an unsupported or invalid text is refused with
+its position. `body:word` in a pipeline is a case-insensitive substring test, not the
+explorer's word match. A rule read back carries `kql` (what its stored conditions read as) or
+`legacy` {reason, detail} (they have no faithful KQL form, so leave them as they are). Send
+the rule back unchanged to keep it, or change `kql` (and drop `conditions`,
+`condition_version` and `raw_conditions`) to change what it matches. The server takes `kql`
+only where KQL is enabled, and says so when it is not.
 
 ## Rules
 

@@ -2,7 +2,7 @@
 name: kubesense-skills
 description: Use when the user asks about their KubeSense-monitored Kubernetes clusters or the apps on them and you need to pick which KubeSense skill applies — routes logs, traces, metrics, RUM, SQL, SPL, infra, alerts, dashboards, SLO, log-pipeline and service-map questions to the right skill.
 metadata:
-  version: "2.1.0"
+  version: "3.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,observability,kubernetes,logs,traces,metrics,rum,alerts,dashboards,slo,mcp,cloud,aws,gcp,azure
@@ -16,7 +16,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 
 | Skill | Description |
 |---|---|
-| **kubesense-mcp** | The tool layer — connection, auth, the full tool inventory, the WHERE/field-name contract every query skill inherits. Start here. |
+| **kubesense-mcp** | The tool layer — connection, auth, the full tool inventory, the KQL filter / field-name contract every query skill inherits. Start here. |
 | **kubesense-logs** | Search and aggregate logs |
 | **kubesense-traces** | Spans, latency percentiles, error rates, distributed-trace waterfalls |
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes, infrastructure and cloud-provider (AWS/GCP/Azure/Atlas/Confluent/Kong) metrics |
@@ -48,7 +48,7 @@ Observability skills for KubeSense, grouped by telemetry surface.
 | a query needing a join, CTE, or window function | kubesense-sql |
 | "search the logs with a pipeline" / SPL tab | kubesense-spl |
 | "this alert fired — what's wrong?" | kubesense-alerts, then kubesense-infra |
-| a tool returned a field-name or WHERE error | kubesense-mcp |
+| a tool returned a field-name or query (KQL) error | kubesense-mcp |
 
 ## Prerequisites
 
