@@ -2,7 +2,7 @@
 name: kubesense-logs
 description: Use when the user wants KubeSense logs searched, grepped, counted or aggregated — errors or a message from a pod, container, node or namespace, log volume over time, percentiles of a log field, or paging through search-logs / analyze-logs results. Joins and window functions go to kubesense-sql, piped SPL to kubesense-spl, ingestion-time changes to kubesense-log-pipelines.
 metadata:
-  version: "2.1.0"
+  version: "3.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,logs,search,clickhouse,observability,errors,log-analysis
@@ -11,7 +11,7 @@ metadata:
 # KubeSense Logs
 
 Requires the KubeSense MCP server; see **[kubesense-mcp](../kubesense-mcp/SKILL.md)** for
-connection, auth, and the shared WHERE-clause reference. Tools here resolve RBAC against
+connection, auth, and the shared KQL filter reference. Tools here resolve RBAC against
 the **`logs`** module.
 
 > [!NOTE]
@@ -34,7 +34,7 @@ window beats paginating raw rows, and is more accurate.
 
 ## Field Names — Catalog Labels Only
 
-The server **rejects storage column names** at every input slot (`where`,
+The server **rejects storage column names** at every input slot (`query`,
 `required_fields`, `group_by_fields`, `fields`, `sort_by`) with:
 
 ```
@@ -85,50 +85,52 @@ Casing is significant — `type = error` matches nothing.
 > `example` column. The example generator misses several enum fields (including `type`)
 > and returns a blank cell for them. `enum_values` is always correct.
 
-## WHERE Syntax
+## Filter Syntax (KQL `query`)
 
 ```
-type = ERROR AND namespace = production
-type IN (ERROR, FATAL) AND workload = checkout
-NOT (env_type = dev)
-body ILIKE "%timeout%"
-@user.id = abc-123
+type:ERROR namespace:production
+type:(ERROR OR FATAL) workload:checkout
+-env_type:dev
+body:timeout
+body:*timeout*
+@user.id:abc-123
 ```
 
-Operators the WHERE parser actually accepts: `=` `!=` `<` `>` `<=` `>=` `LIKE` `ILIKE`
-`SUBSTR_ILIKE` `IN`, combined with `AND` / `OR` / `NOT` and parentheses.
+`field:value` is an exact, case-sensitive match on a column; `field:(a OR b)` matches any;
+`*` and `?` are wildcards (`workload:checkout-*`); `~` ignores case (`workload:~Checkout`)
+and is not needed on `body`, which always ignores case; `-field:value` or `NOT` excludes;
+terms separated by a space (or `AND`) must all hold, `OR` gives alternatives, parentheses
+group. `AND` binds tighter than `OR`. Numeric fields take `field>n`, `>=`, `<`, `<=`.
 
-> [!WARNING]
-> The `operators` column of `get-fields` **over-advertises**. `HAS_TOKEN`,
-> `HAS_ALL`, `HAS_ANY`, `LIKE_AND`, `ILIKE_LOG`, `IS_IP_ADDRESS` appear in the legend but
-> have **no WHERE-string syntax** — `body HAS_TOKEN oom` fails to parse. Stick to the
-> list above.
+**Log text** is `body`, and there is no bare word: `body:timeout` matches the whole word
+(a token), so it finds "request timeout" but not "timeouts". `body:"node-agent"` matches
+rows that contain all of its words anywhere; `body:(timeout AND refused)` needs both words;
+`body:*timeout*` is a substring. Every body match ignores case.
 
-**Quoting.** Bare values may contain only letters, digits, `_`, `.`, `-`. Anything with a
-slash, colon, `%`, or space **must be double-quoted**:
+**Quoting.** Quote a value that has a space or a colon: `body:"connection refused"`,
+`@msg:"a b"`.
 
-```
-body ILIKE "%connection refused%"      ✓
-timestamp > "2026-07-30T10:00:00Z"     ✓
-body ILIKE %timeout%                   ✗ parse error
-```
-
-**`NOT IN` does not parse as a leaf.** Write `NOT (namespace IN (kube-system, default))`.
-
-**Attributes** carry an `@` prefix in WHERE and work correctly on logs:
+**Attributes** carry an `@` prefix in `query` and take every operator:
 
 ```
-@user.id = abc-123
-@http.status_code > 400
+@user.id:abc-123
+@http.status_code>400
+@latency>=100
+@session:*          (the attribute is set)
+-@env:dev
 ```
 
-Attribute operators: `=` `!=` `IN` `<` `>` `<=` `>=` `LIKE` `ILIKE`. Unquoted numeric
-attribute values are coerced to numbers, so `@latency > 100` compares numerically.
+`@latency>200` reads a number or text such as `"250"`. A value that is not a number matches
+neither a comparison nor its negation, and `-@k:v`, negated patterns and negated comparisons
+need the key to exist.
 
-> [!WARNING]
-> `exist(@field)` is **broken** on both signals — it emits an `EXIST` operator carrying a
-> value, which the validator rejects (`operator "EXIST" takes no values (got 1)`). There
-> is no working existence check. Filter on a concrete value instead.
+An unknown field or a bad form comes back as `query: <code>: <message> (at start-end)`. Read
+the message; `get-fields` lists the forms each field takes in its `forms` column.
+
+> [!NOTE]
+> `query` is the only filter argument. A call that sends the old `where`
+> (`type = ERROR AND namespace = production`) or any other legacy filter argument is
+> refused with a hint to send `query`.
 
 In `group_by_fields` / `fields` / `required_fields` / `sort_by` there is **no `@`** — set
 the flag instead:
@@ -143,7 +145,7 @@ the flag instead:
 {
   "from_time": "2026-07-30T10:00:00Z",
   "to_time": "2026-07-30T11:00:00Z",
-  "where": "type = ERROR AND namespace = production",
+  "query": "type:ERROR namespace:production",
   "required_fields": [
     { "field": "instance", "is_attribute": false },
     { "field": "body", "is_attribute": false }
@@ -159,19 +161,19 @@ row, then one row per log. `total_count` is for the **whole window**, ignoring
 **Default columns.** With no `required_fields` each row carries `timestamp`, `body`, `type`,
 `service`, `namespace`, `domain`, `instance` and `container`. The `uid` (row id) column is left out unless
 you list it in `required_fields`. The
-message column is named **`body`** in the output, as in `where` and `required_fields`; the
+message column is named **`body`** in the output, as in `query` and `required_fields`; the
 old UI list called it `line`. Name `required_fields` for other columns or fewer, which also
 saves tokens.
 
 **`unknown_level_count`** is how many matching rows, over the whole window, have a level the
 server could not parse. Plain-text logs often carry no parsed level, so when it is large,
 `error_count` understates the errors. Search `body` for tokens before you call the window
-healthy (`body ILIKE "%error%"`), and say the level was not parsed.
+healthy (`body:*error*`), and say the level was not parsed.
 
 **Counts can time out.** Each count gets about 15 s, and the rows are fetched alongside
 them, so a wide unscoped body search still returns rows. A count that did not finish reads
 `unknown`: `# total_count=unknown error_count=unknown unknown_level_count=unknown counts_timed_out=true is_free_search=…`.
-Say the totals are unknown rather than quoting a number, and narrow `where` or the window if
+Say the totals are unknown rather than quoting a number, and narrow `query` or the window if
 the user needs one. With `total_count=unknown`, a full page does not mean the window is
 exhausted: keep paging until a page comes back with fewer rows than `page_size`.
 
@@ -183,7 +185,7 @@ There is **no `page` or `offset` parameter.** The window is half-open
 1. Query your real window.
 2. Take the **minimum** `timestamp` among the returned rows — do not assume the last row
    is the oldest.
-3. Call again with the same `from_time` and `where`, and `to_time` = that minimum,
+3. Call again with the same `from_time` and `query`, and `to_time` = that minimum,
    copied verbatim.
 4. Stop when a call returns fewer rows than `page_size`, or the answer is settled. When
    `total_count=unknown` this short page is the only end signal.
@@ -214,7 +216,7 @@ filters stay on the fast rollup path.
   "from_time": "2026-07-30T10:00:00Z",
   "to_time": "2026-07-30T11:00:00Z",
   "query_type": "range",
-  "where": "type = ERROR",
+  "query": "type:ERROR",
   "group_by_fields": [ { "field": "workload", "is_attribute": false } ],
   "value_operation": "row_count",
   "sort_direction": "DESC",
@@ -248,7 +250,7 @@ message counts together.
   "from_time": "2026-07-30T10:00:00Z",
   "to_time": "2026-07-30T11:00:00Z",
   "query_type": "instant",
-  "where": "type = ERROR AND workload = cds-app",
+  "query": "type:ERROR workload:cds-app",
   "group_by_fields": [ { "field": "pattern", "is_attribute": false } ],
   "value_operation": "row_count",
   "sort_direction": "DESC",
@@ -271,21 +273,21 @@ carry it.
 
 Rules for `pattern`:
 
-- **Group-by only.** It is not listed by `get-fields`. It is rejected in a `where` (in
+- **Group-by only.** It is not listed by `get-fields`. It is rejected in a `query` (in
   `search-logs`, the analyze tools and `create-alert`) and in `search-logs` `required_fields`
-  (it cannot be a result column); filter on `body` (for example `body ILIKE "%timeout%"`),
+  (it cannot be a result column); filter on `body` (for example `body:*timeout*`),
   then group by `pattern` in `analyze-logs`, `analyze-telemetry` or `execute-sql`. To see
   the raw lines, project `body`.
-- **A `where` is required.** It runs a regex over every matching raw row, so narrow by
-  `type`, `workload`, `namespace` first. An empty `where` is rejected.
+- **A `query` is required.** It runs a regex over every matching raw row, so narrow by
+  `type`, `workload`, `namespace` first. An empty `query` is rejected.
 - Works in `analyze-logs`, `analyze-telemetry` (a logs query) and `execute-sql`, where it is
   a column: see [kubesense-sql](../kubesense-sql/SKILL.md#top-errors-by-message-pattern).
 
 > [!WARNING]
 > **Unparsed severity.** Plain-text logs may not have their level parsed: a line containing
-> `| ERROR |` was stored as `type = UNKNOWN`. When `type = ERROR` returns little but
+> `| ERROR |` was stored as `type:UNKNOWN`. When `type:ERROR` returns little but
 > `UNKNOWN` dominates, also search `body` for tokens such as `ERROR` or `Exception`
-> (`type = UNKNOWN AND body ILIKE "%error%"`) and tell the user the level was not parsed, so
+> (`type:UNKNOWN body:*error*`) and tell the user the level was not parsed, so
 > the count is by message text, not by severity. `search-logs` reports the size of this gap as
 > `unknown_level_count` in its header.
 
@@ -300,15 +302,15 @@ the top-N cap.
 ## Worked Examples
 
 **Error count per workload, last hour, as a trend**
-`query_type: range`, `where: "type = ERROR"`,
+`query_type: range`, `query: "type:ERROR"`,
 `group_by_fields: [{"field":"workload"}]`, `value_operation: row_count`
 
 **How many distinct pods logged a fatal error right now**
-`query_type: instant`, `where: "type = FATAL"`, `value_operation: unique_count`,
+`query_type: instant`, `query: "type:FATAL"`, `value_operation: unique_count`,
 `fields: [{"field":"instance"}]`
 
 **Read the actual timeout messages**
-`search-logs`, `where: 'body ILIKE "%timeout%" AND workload = checkout'`,
+`search-logs`, `query: "body:*timeout* workload:checkout"`,
 `required_fields: [{"field":"instance"},{"field":"body"}]`, `page_size: 50`
 
 **Error rate as a percentage** — needs two queries plus a formula, so use
@@ -323,16 +325,15 @@ the top-N cap.
 3. `service` is the application name, `workload` the Kubernetes workload; they can differ.
 4. `type` values are UPPERCASE (`ERROR`, not `error`). Read casing from `enum_values`,
    never from `example`.
-5. Quote any value containing `/`, `:`, `%`, or a space.
-6. `NOT (x IN (...))`, not `x NOT IN (...)`.
-7. Stick to `=  !=  <  >  <=  >=  LIKE  ILIKE  SUBSTR_ILIKE  IN` — the advertised
-   token/index operators have no WHERE syntax.
+5. Quote any value containing a space or a colon.
+6. Exclude with `-field:value` or `-field:(a OR b)`; there is no `NOT IN`.
+7. Use only the forms `get-fields` lists for a field, and `body:` for message text.
 8. `value_operation` is `row_count`, not `count`.
 9. `analyze-logs` for counts and trends; `search-logs` only to read messages. Never
    paginate to compute an aggregate.
 10. Page by narrowing `to_time` to the **minimum** timestamp returned; there is no offset.
     Treat multi-cluster paged scans as samples unless you pin one cluster.
-11. For "top / most common errors" group by `pattern` with a `where` filter, never by `body`
+11. For "top / most common errors" group by `pattern` with a `query` filter, never by `body`
     (every raw body is unique). `pattern` is group-by only.
 12. Hand the user the result's `ui_url` verbatim so they can open the same query; never build
     a KubeSense URL, and pass `clusters` to pin the domain. See

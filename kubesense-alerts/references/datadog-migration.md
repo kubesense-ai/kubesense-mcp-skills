@@ -41,7 +41,7 @@ avg(last_5m) : avg:system.cpu.user{env:prod} by {host} > 80
 | `avg(...)` time aggregation | the metric query's rollup (`avg_over_time`/`max_over_time`) or the logs/traces `value_operation` |
 | `avg:` / `sum:` / `min:` / `max:` space aggregation | PromQL `avg`/`sum`/`min`/`max by (...)` |
 | `system.cpu.user` | **discover** the KubeSense equivalent |
-| `{env:prod}` scope | PromQL label matcher `{env="prod"}`, or `raw_filters` for logs/traces |
+| `{env:prod}` scope | PromQL label matcher `{env="prod"}`, or the `kql` filter for logs/traces |
 | `by {host}` | PromQL `by (host)`, or `groupBy` — verify the KubeSense label (often `node` or `host`; the cluster label is `clusterId`) |
 | `> 80` | `threshold_operator: "greater_than"`, `threshold_value: 80` |
 
@@ -49,22 +49,18 @@ avg(last_5m) : avg:system.cpu.user{env:prod} by {host} > 80
 `<=` → `less_than_or_equal`, `==` → `equals`, `!=` → `not_equals`.
 
 **Status-code classes and wildcards** (`http.status_code:40*`, `http.status_class:4xx`) —
-use an `advanced_query` filter with `LIKE`, where `_` matches one character:
-
-```json
-"raw_filters": { "advanced_query": ["return_code LIKE \"4__\""] }
-```
-
-`40*` → `"40_"`, `4xx` → `"4__"`, `5xx` → `"5__"`. Do **not** hand-write a
-`unified_filter` block — it is silently discarded on import. And remember `advanced_query`
-displaces every other `raw_filters` key, so fold all conditions into the one string.
+use a KQL wildcard where the field's `forms` column from `get-fields` lists one
+(`field:40*`, `*` matches any characters, `?` one), as the `query` of `create-alert` or the
+`kql` of an import `query_config`; otherwise list the codes, `status_code:(400 OR 401 OR 404)`.
+Do **not** hand-write a `unified_filter` or `raw_filters` block — that is the legacy import
+format, which the MCP tools do not write.
 
 ## Monitor Type → `selectedMode`
 
 | Datadog `type` | KubeSense |
 |---|---|
 | `metric alert`, `query alert` | `metrics` — build PromQL |
-| `log alert` | `logs` — `value_operation: "row_count"` + `raw_filters` + `groupBy` |
+| `log alert` | `logs` — `value_operation: "row_count"` + `kql` + `groupBy` |
 | `trace-analytics alert`, `apm` | `traces` — `row_count`, or `p95`/`p99` over `duration`. See the latency note below. |
 | `anomaly`, `forecast`, `outlier` | No direct equivalent. Closest is `condition_type: "change_percent"` or a static threshold — **flag the gap to the user.** |
 | `composite` | One rule with AND/OR `conditions` — see [Composite monitors](#composite-monitors-a--b) below. |
