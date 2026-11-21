@@ -3,7 +3,7 @@
 <!-- Source of truth: kubeapi/observability/fieldcatalog/rum_catalog.go. This file is
      edited by hand to match it; change both together. -->
 
-The fields each RUM event type accepts in `where`, `group_by_fields`, `fields` and
+The fields each RUM event type accepts in `query`, `group_by_fields`, `fields` and
 `sort_by`. Type the **Field** column. Rules for reading the columns are in
 [SKILL.md](../SKILL.md#rules); the short version:
 

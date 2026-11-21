@@ -145,7 +145,8 @@ is conventional but is rewritten to `{"type": "auto"}` on save, so position is t
 durable identity.
 
 Shared keys: `variables` (`[]`), `visible` (bool), `filters` (`{}`), `raw_filters` (`{}`),
-`selectedMeasurement`, `selectedMode`, `labelOptions`.
+`selectedMeasurement`, `selectedMode`, `labelOptions`. A logs or traces query filters with
+`kql` and `kql_version` (see below); `filters` and `raw_filters` stay `{}` there.
 
 `selectedMeasurement` is `count` | `sum` | `avg` | `min` | `max` — a legacy field; set
 `count` for logs/traces/formula and `avg` for metrics.
@@ -154,11 +155,25 @@ Shared keys: `variables` (`[]`), `visible` (bool), `filters` (`{}`), `raw_filter
 formula helpers so the chart shows the evaluated line alone — the engine ignores it for
 evaluation.
 
-### `filters` vs `raw_filters`
+### Filtering a logs or traces query: `kql`
 
-Only **`raw_filters`** is read for logs/traces. For metrics it is `raw_filters ?? filters`.
-The product's own templates set both, which is harmless — do the same for safety, but know
-that `raw_filters` is the load-bearing one.
+A logs or traces query carries its filter as `kql`, the KQL text of `search-logs`'
+`query`, with `kql_version` set to `4` (a missing `kql_version` means the latest). This is
+the KQL mode `create-alert` saves. `validate-alert-json` fills in the tree the engine runs
+from the text and refuses a text that does not compile, or that sits beside a different
+tree. `field:*` means "has a value" and `-field:*` "has no value". An empty `kql` matches
+everything.
+
+> [!NOTE]
+> **Legacy import format.** Exports made before KQL carry `raw_filters` (and `filters`,
+> `unified_filter`, `advanced_query`) instead. The UI's Import JSON still reads them, and
+> `validate-alert-json` still accepts them with a `legacy_filter` warning, but the MCP
+> tools never write them. Do not author new rules in that format: write `kql`. The legacy
+> keys use the alert engine's storage names (`level`, `return_code`, `app_service`);
+> `kql` uses the query tools' catalog labels (`type`, `status_code`, `service`), as
+> `create-alert` does.
+
+For metrics, only `promql` filters; `filters` / `raw_filters` stay `{}`.
 
 ### Metrics query
 
@@ -180,9 +195,8 @@ grouping in the PromQL `by (...)`; each series is one firing instance.
 
 ```json
 {
-  "variables": [], "visible": true,
-  "filters": { "level": ["ERROR"] },
-  "raw_filters": { "level": ["ERROR"] },
+  "variables": [], "visible": true, "filters": {}, "raw_filters": {},
+  "kql": "type:ERROR", "kql_version": 4,
   "selectedMeasurement": "count", "selectedMode": "logs",
   "value_operation": "row_count",
   "groupBy": [ { "field": "workload", "type": "string", "is_attribute": false } ],
@@ -661,8 +675,8 @@ The composite and two-level examples live in their own sections above.
   "query_type": "logs",
   "query_config": [
     { "variables": [], "visible": true,
-      "filters": { "level": ["ERROR"] },
-      "raw_filters": { "level": ["ERROR"] },
+      "filters": {}, "raw_filters": {},
+      "kql": "type:ERROR", "kql_version": 4,
       "selectedMeasurement": "count", "selectedMode": "logs",
       "value_operation": "row_count",
       "groupBy": [ { "field": "workload", "type": "string", "is_attribute": false } ],
@@ -688,20 +702,12 @@ The composite and two-level examples live in their own sections above.
 }
 ```
 
-Text-search variant. For **one** body match, filter on `body` directly — it is a valid
-filter key (never a group-by), and a bare `ILIKE` on it is rewritten to token search:
+Text-search variant. `body` is a valid filter field (never a group-by); one `kql` holds a
+single phrase, an OR across phrases, or body text mixed with another field:
 
 ```json
-"filters":     { "body": ["timeout"] },
-"raw_filters": { "body": ["timeout"] }
-```
-
-For an OR across phrases, or body text mixed with another field, `advanced_query` still
-wins — remembering it **replaces** every other filter key:
-
-```json
-"filters":     { "advanced_query": ["body SUBSTR_ILIKE \"timeout\" OR body SUBSTR_ILIKE \"connection refused\""] },
-"raw_filters": { "advanced_query": ["body SUBSTR_ILIKE \"timeout\" OR body SUBSTR_ILIKE \"connection refused\""] }
+"kql": "body:timeout", "kql_version": 4
+"kql": "body:(timeout OR \"connection refused\") namespace:prod", "kql_version": 4
 ```
 
 Either way the rule reads the **raw** logs table every evaluation — no rollup carries
@@ -753,15 +759,15 @@ Either way the rule reads the **raw** logs table every evaluation — no rollup 
   "query_type": "traces",
   "query_config": [
     { "variables": [], "visible": false,
-      "filters":     { "return_code": ["500","501","502","503","504"], "protocol_type": ["HTTP"] },
-      "raw_filters": { "return_code": ["500","501","502","503","504"], "protocol_type": ["HTTP"] },
+      "filters": {}, "raw_filters": {},
+      "kql": "status_code:(500 OR 501 OR 502 OR 503 OR 504) protocol:HTTP", "kql_version": 4,
       "selectedMeasurement": "count", "selectedMode": "traces",
       "value_operation": "row_count",
       "groupBy": [ { "field": "workload", "type": "string", "is_attribute": false } ],
       "labelOptions": { "label": "A" } },
     { "variables": [], "visible": false,
-      "filters":     { "protocol_type": ["HTTP"] },
-      "raw_filters": { "protocol_type": ["HTTP"] },
+      "filters": {}, "raw_filters": {},
+      "kql": "protocol:HTTP", "kql_version": 4,
       "selectedMeasurement": "count", "selectedMode": "traces",
       "value_operation": "row_count",
       "groupBy": [ { "field": "workload", "type": "string", "is_attribute": false } ],

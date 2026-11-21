@@ -1,18 +1,15 @@
 # RUM Dashboard Recipes
 
 Panel fragments for the questions RUM dashboards usually ask. Every query is a stored
-panel query: `selectedMode: "rum"` plus `rumEventType`, stored as Advanced text (a
-WHERE-style clause) in `filters.advanced_query`, `filterMode: "ADVANCED_QUERY"`. With
-`create-dashboard` and `update-dashboard`, write each filter below as KQL in the query's `kql`
-field instead (`crash_count>0`, `lcp_ms>0 lcp_ms<=2500`); the server stores the Advanced form.
-The WHERE columns below show the stored form. See
+panel query: `selectedMode: "rum"` plus `rumEventType`, with the filter as KQL in the
+query's `kql` field (`crash_count>0`, `lcp_ms>0 lcp_ms<=2500`); `create-dashboard` and
+`update-dashboard` save it as `filterMode: "KQL"`. The KQL columns below hold each filter. See
 [RUM query](../../kubesense-dashboards/SKILL.md#rum-query) for the shape and
 [field-catalog.md](./field-catalog.md) for the fields; check a field with `get-fields`
 before you use it. Test a recipe with `analyze-telemetry` (`selectedMode: "rum_view"`
 there) before you save it.
 
-Fragments below show only the fields that matter. Add `label`, `columnFields: []` and
-`filterMode: "ADVANCED_QUERY"` to each query; a formula query is
+Fragments below show only the fields that matter. Add `label` and `columnFields: []` to each query; a formula query is
 `{"selectedMode": "formula", "label": "C", "expression": "..."}` and comes after the queries
 it uses.
 
@@ -47,7 +44,7 @@ its cap shows no value.
 ```json
 {
   "selectedMode": "rum", "rumEventType": "session",
-  "filters": { "advanced_query": ["env = production"] },
+  "kql": "env:production",
   "aggregation": { "function": "unique_count",
     "fields": [ { "field": "user_id", "type": "string", "is_attribute": false } ] }
 }
@@ -72,15 +69,15 @@ a unitless score, not a duration: p75 of `cls` needs no unit.
 
 Formula `(1 - A/B) * 100` with `calculation` unset (stat panel, unit `percentage`):
 
-| Query | Event | WHERE | Aggregation |
+| Query | Event | KQL | Aggregation |
 |---|---|---|---|
-| A | `session` | `crash_count > 0` | `unique_count` of `user_id` |
+| A | `session` | `crash_count>0` | `unique_count` of `user_id` |
 | B | `session` | none (or the same app filter as A) | `unique_count` of `user_id` |
 | C | formula | | `(1 - A/B) * 100` |
 
-Any filter on B (for example `env = production`) must also be on A. Crash-free sessions is
+Any filter on B (for example `env:production`) must also be on A. Crash-free sessions is
 the same with `row_count` on both. To count from errors instead, A is `rumEventType:
-"error"` with `severity = crash` (the label for `is_crash`) and `unique_count` of
+"error"` with `severity:crash` (the label for `is_crash`) and `unique_count` of
 `user_id`.
 
 ## Error rate and crash rate on quiet apps
@@ -95,8 +92,8 @@ query.
 { "selectedMode": "formula", "label": "C", "expression": "(B/A)*100" }
 ```
 
-with A = `session` `row_count`, B = `session` `row_count` where `error_count > 0` (error
-rate) or `crash_count > 0` (crash rate).
+with A = `session` `row_count`, B = `session` `row_count` where `error_count>0` (error
+rate) or `crash_count>0` (crash rate).
 
 ## Good / needs improvement / poor per Web Vital
 
@@ -106,13 +103,13 @@ always exclude `0` explicitly or unmeasured views count as good.
 
 % good LCP = `A/B*100`, with A and B both `rumEventType: "view"` and `row_count`:
 
-| Query | WHERE |
+| Query | KQL |
 |---|---|
-| A (good) | `lcp_ms > 0 AND lcp_ms <= 2500` |
-| B (all measured) | `lcp_ms > 0` |
+| A (good) | `lcp_ms>0 lcp_ms<=2500` |
+| B (all measured) | `lcp_ms>0` |
 | C | formula `A/B*100` |
 
-Needs improvement is A with `lcp_ms > 2500 AND lcp_ms <= 4000`; poor is `lcp_ms > 4000`.
+Needs improvement is A with `lcp_ms>2500 lcp_ms<=4000`; poor is `lcp_ms>4000`.
 Put the three shares in one panel as three formulas over the same B.
 
 Thresholds are the standard [web.dev](https://web.dev/articles/vitals) ones, measured at the
@@ -127,9 +124,9 @@ Thresholds are the standard [web.dev](https://web.dev/articles/vitals) ones, mea
 | CLS | `cls` (unitless) | `<= 0.1` | `<= 0.25` | `> 0.25` |
 
 `cls` has no `_ms` twin and a real CLS of `0` is a valid perfect score, so it cannot be told
-from unmeasured. Filter it with `cls >= 0` for the denominator and accept that views that
+from unmeasured. Filter it with `cls>=0` for the denominator and accept that views that
 did not report CLS count as good. Formula expressions take no decimal point, but the
-thresholds live in the WHERE clause, so `0.1` is fine there.
+thresholds live in the KQL filter, so `0.1` is fine there.
 
 ## Apdex
 
@@ -137,14 +134,14 @@ Apdex = (satisfied + tolerating / 2) / total, with T the satisfied threshold and
 tolerating limit. T is your choice; this uses T = 1 s on `loading_time` (a nanosecond
 view duration, so filter on `loading_time_ms`). All queries are `view` `row_count`:
 
-| Query | WHERE |
+| Query | KQL |
 |---|---|
-| A (satisfied) | `loading_time_ms > 0 AND loading_time_ms <= 1000` |
-| B (tolerating) | `loading_time_ms > 1000 AND loading_time_ms <= 4000` |
-| C (total) | `loading_time_ms > 0` |
+| A (satisfied) | `loading_time_ms>0 loading_time_ms<=1000` |
+| B (tolerating) | `loading_time_ms>1000 loading_time_ms<=4000` |
+| C (total) | `loading_time_ms>0` |
 | D | formula `(A+B/2)/C` |
 
-State T in the panel title or description (`Apdex (T = 1 s)`). Add `AND view_name = "..."`
+State T in the panel title or description (`Apdex (T = 1 s)`). Add `view_name:"..."`
 or group by `view_name` for per-page scores.
 
 ## Top error messages, issues and URLs
@@ -163,7 +160,7 @@ Group a `row_count` panel (`table` or `topList`) by one of these `rum_error` fie
 ```json
 {
   "selectedMode": "rum", "rumEventType": "error",
-  "filters": { "advanced_query": ["severity = crash"] },
+  "kql": "severity:crash",
   "aggregation": { "function": "row_count" },
   "groupBy": [ { "field": "error_message", "type": "string", "is_attribute": false } ],
   "limit": 10
@@ -172,7 +169,7 @@ Group a `row_count` panel (`table` or `topList`) by one of these `rum_error` fie
 
 Grouping returns the top N groups by the measure, N being the page size (`pagination.page_size`
 on a panel query, `limit` in `analyze-telemetry`). These fields are still not LIKE-able.
-Because the URL label is a path, filtering on it with `view_url = "/cart"` matches only
+Because the URL label is a path, filtering on it with `view_url:"/cart"` matches only
 URLs that have no query string; a drill-down from a group needs the path to match the
 full stored URL, so prefer filtering on `view_name` or `issue_id` for drill-downs. A message
 longer than 200 characters is grouped by its first 200; filters still read the full text.
@@ -184,9 +181,9 @@ longer than 200 characters is grouped by its first 200; filters still read the f
 field catalog lists no enum values, so confirm with a group-by on `error_category` first.
 `rum_session` has no `error_category` field.
 
-| Query | Event | WHERE | Aggregation |
+| Query | Event | KQL | Aggregation |
 |---|---|---|---|
-| A | `error` | `error_category = ANR` | `unique_count` of `session_id` |
+| A | `error` | `error_category:ANR` | `unique_count` of `session_id` |
 | B | `session` | none | `row_count` |
 | C | formula | | `(A/B)*100` |
 

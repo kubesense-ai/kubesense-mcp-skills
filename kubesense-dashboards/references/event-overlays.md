@@ -21,8 +21,7 @@ One overlay:
 {
   "name": "Deployments",
   "color": "purple",
-  "filters": { "type": ["deployment"] },
-  "filterMode": "MFD"
+  "kql": "type:deployment"
 }
 ```
 
@@ -30,8 +29,7 @@ One overlay:
 |---|---|---|---|
 | `name` | string | `"Events"` in the legend | label on the legend and the hover card |
 | `color` | `red` \| `purple` \| `orange` \| `gray` \| `green` \| `blue` | `red` | a palette name, never a hex value |
-| `filters` | `Record<string, string[]>` | `{}` | which events to mark, the same shape as an events query's `filters` |
-| `filterMode` | `MFD` \| `ADVANCED_QUERY` | `MFD` | `ADVANCED_QUERY` reads the WHERE text from `filters.advanced_query` |
+| `kql` | string | `""` | which events to mark, KQL over the events catalog, as in an events query's `kql`. The server saves it as `filterMode: "KQL"`, `filters.kql` and `kqlVersion`. Basic chips and Advanced text are refused. |
 
 `eventOverlays` is an array of these. A panel's choice:
 
@@ -51,20 +49,18 @@ overlays inside `overlays`.
 
 ### Filters
 
-Overlay filters are an events query's filters, so everything in the SKILL.md sections
-**Filtering a logs / traces / events query** and **Events query** applies:
+An overlay's `kql` is an events query's `kql`, so everything in the SKILL.md sections
+**Filtering a logs / traces / events / rum query** and **Events query** applies:
 
-- `MFD` takes equality lists: `{"source": ["github"], "type": ["deployment"]}`. Values in
-  one list are OR'd, keys are AND'd, a `-` prefix excludes, and `$name` reads a dashboard
+- `"kql": "source:github type:deployment"` ANDs the terms; `type:(deployment OR rollback)`
+  matches either value; `-environment:staging` excludes; `$$name` reads a dashboard
   variable.
-- `ADVANCED_QUERY` takes one WHERE string:
-  `{"advanced_query": ["type = deployment AND environment = production"]}`.
 - Field names are the events catalog: `type`, `category`, `source`, `repository`,
   `environment`, `status`, `actor`, `severity`, `service`, `namespace`, `cluster`, and the
   rest that `get-fields` returns with `signal: "events"`. Discover values with it before
   writing a filter.
 
-`filters: {}` marks **every** event in the time range. Always filter.
+An empty `kql` marks **every** event in the time range. Always filter.
 
 ## What hard-fails validation
 
@@ -72,10 +68,10 @@ Overlay filters are an events query's filters, so everything in the SKILL.md sec
 
 1. A panel `eventOverlay.mode` other than `inherit`, `custom` or `off` (e.g. `merge`), or an
    `eventOverlay` with no `mode`.
-2. An overlay `filterMode` other than `MFD` or `ADVANCED_QUERY`. Events have no `SPL` or
-   `SQL`.
+2. An overlay that carries `filters` or `filterMode` (Basic chips, Advanced text). Send
+   `kql`.
 3. An overlay `color` outside the six palette names. Hex (`#F54E42`) is refused.
-4. `filters` values that are not string arrays, or `eventOverlays` that is not an array.
+4. `eventOverlays` that is not an array.
 
 A bad panel `eventOverlay` reports two findings: the real one under
 `/panels/N/config/eventOverlay/...`, and `additional properties 'eventOverlay' not allowed`
@@ -111,8 +107,7 @@ omission; panel 1 sets `off`.
     {
       "name": "Deployments",
       "color": "purple",
-      "filters": { "source": ["github"], "type": ["deployment"] },
-      "filterMode": "MFD"
+      "kql": "source:github type:deployment"
     }
   ],
   "panels": [
@@ -158,8 +153,7 @@ To give a panel production deployments only, replace its dashboard overlays:
       {
         "name": "Prod deployments",
         "color": "orange",
-        "filters": { "advanced_query": ["type = deployment AND environment = production"] },
-        "filterMode": "ADVANCED_QUERY"
+        "kql": "type:deployment environment:production"
       }
     ]
   }

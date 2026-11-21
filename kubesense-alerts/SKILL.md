@@ -73,6 +73,9 @@ and `new_value` rules, and `type: "float"` on the operand of a numeric `value_op
 `severity` and `unit` are deliberately left open by the contract, so a bad value there still
 passes — use `critical`/`error`/`warning`/`info` and a real formatter unit.
 
+A `query_config` entry may carry its filter as `kql` + `kql_version`; a legacy filter
+(`raw_filters`, `unified_filter`) still validates but with a `legacy_filter` warning.
+
 It validates the **wire document** — the export/import shape with `query_config`,
 `threshold_operator` and `frequency_type`. It is *not* for `create-alert`'s arguments;
 that tool validates its own input and rejects with the same findings.
@@ -168,12 +171,13 @@ monitors.
   `avg`, `sum`, `min`, `max` — **no percentiles**. For a p95 latency rule use import JSON.
 - `query`, `group_by_fields` and `fields` take the **query tools' catalog labels** (`service`,
   `type`, `status_code`). Storage names such as `return_code` or `level` are refused with a
-  "use the catalog label" message — the opposite of import JSON, where `advanced_query`
-  strings and `raw_filters` use storage names. The tool maps labels to the engine's names
-  for you (`service` → `app_service` on traces, `type` → `level` on logs).
+  "use the catalog label" message. The tool maps labels to the engine's names for you (`service` → `app_service` on traces, `type` → `level` on logs).
 - Required: `name`, `threshold_operator`, `threshold_value`, `notification_channels`.
 - Defaults: `severity=warning`, `threshold_frequency=at_least_once`,
   `evaluation_interval=1m`, `time_window=5m`.
+- The rule is saved in KQL mode: `kql` and `kql_version` (4) beside the tree the engine
+  runs, no Advanced text. `field:*` means "has a value", `-field:*` "has no value". A legacy
+  filter argument (`where`, `raw_filters`, ...) is refused.
 - `threshold_operator` also accepts `above`/`below` here (it does **not** in import
   JSON). They are **normalised** before the rule is built — `above` is stored as
   `greater_than`, `below` as `less_than` — so the rule reads back with the canonical
@@ -389,7 +393,7 @@ predates that fix — group by `workload` instead.
 **Logs filter keys** = the 19 above **plus** `env`, `node_name`, and **`body`**.
 
 > [!NOTE]
-> **`body` is a filter key, not a dimension.** `raw_filters: {"body": ["timeout"]}` is
+> **`body` is a filter key, not a dimension.** a `query` of `body:timeout` is
 > accepted; `body` as a **group-by or value field is still rejected**, deliberately —
 > grouping by the message text yields one series per distinct line, and there is nothing to
 > aggregate. `body_length` is the numeric field, and a different one.
@@ -444,7 +448,7 @@ as a group-by (`status_code` and `return_code`, `resource` and `clustered_resour
 > filter-only — as a dimension the column is called `host`.
 
 Fields marked `is_attribute: true` skip validation entirely, as do filter keys that are
-empty, `advanced_query`, or `@`-prefixed.
+empty, `advanced_query` (legacy import format), or `@`-prefixed.
 
 ### What happens on a bad field name
 
@@ -475,8 +479,8 @@ verify on the condition chart.
 | `unit: "ns"` / `"percent"` / `"short"` | Not valid values — silently becomes `auto`. Use `nanoseconds`, `percentage`, `number` |
 | `frequency_type: "always"` alone | Silently downgrades to `at_least_once` — you must also send `threshold_frequency: "always"` |
 | `notification_channel_ids: []` on a single-rule import | The editor requires ≥ 1 channel; the user **cannot click Create** |
-| A hand-written `unified_filter` block | **Never read on import** — silently discarded |
-| `advanced_query` alongside other `raw_filters` keys | `advanced_query` is **exclusive**; every other filter key is dropped |
+| A hand-written `unified_filter` block (legacy import format) | **Never read on import** — silently discarded. Filter with `kql` |
+| `advanced_query` alongside other `raw_filters` keys (legacy import format) | `advanced_query` is **exclusive**; every other filter key is dropped. Filter with `kql` |
 | A `label` key on a `query_config` entry | Ignored — labels bind **positionally** (index 0 → `A`, 1 → `B`) |
 | `send_resolved: false` on a rule routed to `pagerduty` / `jsm` / `datadog_oncall` | **Refused with a warning.** The resolved payload is what CLOSES the incident there, so suppressing it would leave it open forever |
 | Re-creating a deleted rule with the same name to "restore" it | Deletes are soft — the old rule keeps its history and stays deleted. You get a **new** rule with no past events |
@@ -571,36 +575,19 @@ nanoseconds — it never converts.
 
 ## Text and Pattern Filters
 
-For a single body match, filter on **`body` directly** — `raw_filters: {"body": ["timeout"]}`
-— and read the note under the logs field list for what that costs and how it matches.
+Filter body text in the same `query` as everything else (`kql` in import JSON). One phrase
+is `body:timeout`; an OR across phrases, or body text mixed with another field, is one text:
 
-For anything the simple prefix operators cannot express — an OR across two phrases, a mix
-of body text and another field, a status-code class — `unified_filter` does not work
-through import, and the only working route is the reserved `advanced_query` key holding a
-WHERE string:
-
-```json
-"raw_filters": {
-  "advanced_query": ["body SUBSTR_ILIKE \"timeout\" OR body SUBSTR_ILIKE \"connection refused\""]
-}
+```
+body:(timeout OR "connection refused") namespace:prod
 ```
 
-Same for a status-code class — `return_code LIKE "5__"` (`_` = one character: `4__` = 4xx,
-`40_` = 40x). Remember `advanced_query` **replaces** all other filter keys, so fold every
-condition into the one string.
-
-`raw_filters` values also support prefix operators for simple cases:
-
-| Prefix | Operation | Example |
-|---|---|---|
-| none | IN | `{"level": ["ERROR"]}` |
-| `-` | NOT IN | `{"return_code": ["-200"]}` |
-| `>` `<` `>=` `<=` | comparison | `{"duration": [">500000000"]}` |
-
-Because these filter shapes are fiddly and a filter that fails to bind is **silent** (the
-rule then matches *everything*, not nothing), the reliable path is: build the condition in
-the Explorer's advanced-query editor, attach it in the alert editor, verify on the condition
-chart, then Export.
+Read the note under the logs field list for what a `body` filter costs. For a status-code
+class or any other wildcard, use the form that the field's `forms` column from `get-fields`
+lists. A filter that fails to bind is **silent** in the legacy format (the rule matches
+*everything*); a KQL text that does not compile is refused instead, so a saved rule always
+has the filter you sent. Check the rule with `get-alert-details`, whose `kql` shows what was
+stored.
 
 ## Placeholders in a Name or Description
 
@@ -747,8 +734,9 @@ cluster-specific. Ask the user, or have them export a reference rule.
    `row_count`.
 7. `unit` must be a real formatter value — `nanoseconds`, `milliseconds`, `percentage`,
    `bytes`, `CPU`, `number`, `raw`.
-8. Text/class filters go in `raw_filters.advanced_query`, never `unified_filter` — and
-   `advanced_query` displaces all other filter keys.
+8. Every logs/traces filter, text and class filters included, is KQL: `query` in
+   `create-alert`, `kql` in import JSON. Never `raw_filters`, `advanced_query` or
+   `unified_filter`.
 9. Query labels are **positional**; `metric_query_label` names the thresholded query
    (single → `A`; formula → the formula's label).
 10. One rule → object; multiple → **one array**. One code block either way.

@@ -175,7 +175,7 @@ feature_flag.new_checkout:true                  (any event type)
 ```
 
 Quote values that contain a space or a colon. Exclude with `-field:value` or
-`-field:(a OR b)`; there is no `NOT IN`. The old `where` argument is deprecated: send `query`.
+`-field:(a OR b)`; there is no `NOT IN`. `query` is the only filter argument; a legacy one such as `where` is refused.
 
 ## Rules
 

@@ -11,7 +11,7 @@ The complete, exact field catalog the KubeSense MCP server accepts. Source of tr
 **Type the "Label" column.** The "Storage column" is what the backend uses internally; it
 is **rejected** at every input slot with a message naming the correct label.
 
-Input slots this applies to: `query` (and the deprecated `where`), `required_fields`, `group_by_fields`, `fields`,
+Input slots this applies to: `query`, `required_fields`, `group_by_fields`, `fields`,
 `sort_by`.
 
 ---
@@ -35,7 +35,7 @@ Input slots this applies to: `query` (and the deprecated `where`), `required_fie
 | `app_version` | `app_version` | string | | |
 | `env_type` | `env_type` | string | | |
 | `timestamp` | `timestamp` | string | | hidden from discovery, still accepted |
-| `pattern` | derived from `body` | string | | hidden, **group-by only**: the body with timestamps, IDs and numbers masked. Needs a `query`. Rejected in any `query` or `where` (search-logs, analyze, create-alert) and in `search-logs` `required_fields`; allowed only in `group_by_fields` of analyze-logs / analyze-telemetry, or as an `execute-sql` column |
+| `pattern` | derived from `body` | string | | hidden, **group-by only**: the body with timestamps, IDs and numbers masked. Needs a `query`. Rejected in any `query` (search-logs, analyze, create-alert) and in `search-logs` `required_fields`; allowed only in `group_by_fields` of analyze-logs / analyze-telemetry, or as an `execute-sql` column |
 | `body_length` | `body_length` | **float** | | hidden; the only numeric log field |
 
 **14 advertised by discovery** (sorted): `app_version`, `body`, `container`, `domain`,
@@ -156,7 +156,7 @@ unknown field "svc" for signal=logs; call get-fields with signal=logs to
   discover valid fields (attributes carry an @ prefix)
 ```
 
-Errors are prefixed by the slot that failed: `query: …` (a KQL error carries its code and position, `query: unknown_field: unknown field svc for logs (at 0-3)`; a deprecated `where` reads `where clause: …`),
+Errors are prefixed by the slot that failed: `query: …` (a KQL error carries its code and position, `query: unknown_field: unknown field svc for logs (at 0-3)`),
 `required_fields[0]: …`, `group_by_fields[0]: …`, `fields[0]: …`, `sort_by: …`.
 
 ---

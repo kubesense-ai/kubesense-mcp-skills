@@ -329,9 +329,8 @@ supply is overwritten. Don't bother setting it.
   "selectedMode": "logs",
   "label": "A",
   "columnFields": [],
-  "filters": {},
+  "kql": "",
   "queryMode": "builder",
-  "filterMode": "MFD",
   "aggregation": { "function": "row_count" },
   "groupBy": [],
   "chart_type": "table",
@@ -357,10 +356,10 @@ supply is overwritten. Don't bother setting it.
   field, separate from the panel-level `panelType`. There is deliberately **no `treemap`
   arm**: the panel is not offered for SPL/SQL, so a `treemap` panel sets `chart_type` to
   `topList` the way a `stat` panel sets `table`.
-- `filterMode` — `MFD`, `ADVANCED_QUERY`, `SPL`, `SQL`. Use `ADVANCED_QUERY` for anything
-  MFD's equality-only filters can't express (e.g. a latency threshold). See **Filtering a
-  logs / traces / events / rum query** below: write the filter as `kql`; stored, it is
-  Advanced text in `filters.advanced_query`, **never** in `query`.
+- `kql` — the filter, as KQL (see **Filtering a logs / traces / events / rum query**
+  below), **never** in `query`. The server saves it as `filterMode: "KQL"`; leave
+  `filterMode` and `filters` out. `filterMode` is written by hand only for `SPL` / `SQL`
+  panels.
 - `groupBy` entries use the same shape as `columnFields`.
 - `list` (array) and `value` (string) are the SPL/SQL column fields. There is no
   `topListLabel`/`topListValue`.
@@ -382,8 +381,8 @@ Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggreg
 
 ### Filtering a logs / traces / events / rum query
 
-**With `create-dashboard` and `update-dashboard`, write the filter as KQL in the query's
-`kql` field**, the same syntax as the `query` argument of `search-logs` and `analyze-logs`
+**Write the filter as KQL in the query's `kql` field**, the same syntax as the `query`
+argument of `search-logs` and `analyze-logs`
 (see [kubesense-mcp](../kubesense-mcp/SKILL.md#filter-syntax-kql-query)):
 
 ```json
@@ -396,42 +395,30 @@ Get any of that wrong — missing `fields`, `type: "string"` on a numeric aggreg
 }
 ```
 
-The server compiles `kql` against the signal's field catalog and stores the Advanced text
-below (`filterMode: "ADVANCED_QUERY"`); `kql` itself is never stored. A rum query also needs
-`rumEventType`. A query takes `kql` or `filters`, not both. The key is `kql` here, not
-`query`, because on a dashboard query `query` already holds SPL or SQL text; search, analyze
-and `create-alert` call the same text `query`. A condition the Advanced editor cannot hold is
-refused with the condition named.
+The server compiles `kql` against the signal's field catalog, with the dashboard's
+variables bound, and saves `filterMode: "KQL"`, `filters.kql` (an array holding the one
+text) and `kqlVersion` (the latest grammar). A text that does not compile is refused and
+nothing is saved. A rum query also needs `rumEventType`. `field:*` means "has a value" and
+`-field:*` "has no value", on a column as well as an attribute.
 
-`get-dashboard-details` returns, beside each stored filter, `kql` (the stored filter written
-as KQL) or `legacy` with a reason when it has none. Send a query back as read to keep it
-unchanged; to change the filter, send `kql` with no `filters`. A `kql` that differs from the
-stored `filters` in the same query is refused.
+Basic chips (`filterMode: "MFD"`, `filters: {"<field>": [...]}`) and Advanced text
+(`filterMode: "ADVANCED_QUERY"`, `filters.advanced_query`) are refused on a logs, traces,
+events or RUM query, variable or overlay; send `kql` and leave out `filters` and
+`filterMode`. The key is `kql` here, not `query`, because on a dashboard query `query`
+holds SPL or SQL text; search, analyze and `create-alert` call the same text `query`.
+**A filter put in `query` is never run:** the panel silently shows every row.
 
-**Stored form.** What the dashboard keeps, and what hand-written preset JSON must contain,
-is a WHERE-style Advanced text in the **filter store**, not in `query`:
+`get-dashboard-details` returns each filter as `kql` (with `kql_version`), or as `legacy`
+`{reason, detail}` when a dashboard saved before KQL holds a filter with no KQL form. Send
+a query back as read to keep it unchanged. To change the filter, send `kql` with no
+`filters`. Send a `legacy` query back unchanged to keep its stored filter.
 
-```json
-{
-  "selectedMode": "traces",
-  "label": "A",
-  "columnFields": [],
-  "filterMode": "ADVANCED_QUERY",
-  "filters": { "advanced_query": ["service = checkout AND duration > 500"] },
-  "aggregation": { "function": "row_count" }
-}
-```
+`validate-dashboard-json` accepts KQL-mode documents. A legacy-format preset still
+validates, with a `legacy_filter` warning; the write tools refuse it.
 
-- `filters.advanced_query` is an array holding **one** WHERE string. `filterMode:
-  "ADVANCED_QUERY"` makes the panel open in the Advanced editor.
-- This stored text is the explorer's SQL-style syntax, not KQL: `=`, `!=`, `<`, `>`, `<=`,
-  `>=`, `LIKE`, `ILIKE`, `IN (...)`, combined with `AND`, `OR` and a prefix `NOT`: exclude a
-  list as `NOT namespace IN (a, b)`, never `namespace NOT IN (a, b)`.
-  Field names are the catalog labels from `get-fields` (same `signal`); prefix an attribute
-  with `@` (`@http.route = /api/orders`).
-- **`query` is only for SPL or SQL text** (`filterMode: "SPL"` / `"SQL"`). A filter put in
-  `query` is never run: the panel silently shows **every** row.
-- `filterMode: "MFD"` panels keep plain equality filters as `filters: {"<field>": ["<value>", ...]}`.
+Host map panels (`selectedMode: "infrastructure"`) are the exception: KQL has no
+infrastructure signal, so they keep their Basic / Advanced filter. See
+[references/host-map.md](./references/host-map.md).
 
 ### Events query
 
@@ -439,7 +426,7 @@ is a WHERE-style Advanced text in the **filter store**, not in `query`:
 reviews, CI runs and jobs, deployments, security alerts, and events customers push. Same
 shape as a logs query (so `columnFields` is required), with these differences:
 
-- `filterMode` is `MFD` or `ADVANCED_QUERY`. Events have **no SPL or SQL**.
+- The filter is `kql`. Events have **no SPL or SQL**.
 - Fields come from `get-fields` with `signal: "events"`: `timestamp`,
   `severity` (`info` `success` `warning` `error` `critical`), `type`, `title`, `message`,
   `repository`, `actor`, `status`, `category`, `source`, `service`, `environment`,
@@ -453,10 +440,7 @@ shape as a logs query (so `columnFields` is required), with these differences:
   "selectedMode": "events",
   "label": "A",
   "columnFields": [],
-  "filterMode": "ADVANCED_QUERY",
-  "filters": {
-    "advanced_query": ["category = deployment AND severity IN (error, critical) AND environment = production"]
-  },
+  "kql": "category:deployment severity:(error OR critical) environment:production",
   "aggregation": { "function": "row_count" },
   "groupBy": [{ "field": "repository", "type": "string", "is_attribute": false }]
 }
@@ -475,14 +459,12 @@ query (so `columnFields` is required), with these differences:
   inside the mode (`selectedMode: "rum_view"`). A panel stores `selectedMode: "rum"` plus
   `rumEventType: "view"`. To turn a tested `analyze-telemetry` query into a panel, split
   the mode and keep everything else.
-- `filterMode` is `ADVANCED_QUERY`. RUM has **no SPL or SQL**, and the panel editor has no
-  mode toggle for it. The WHERE clause goes in `filters.advanced_query`.
+- The filter is `kql`. RUM has **no SPL or SQL**.
 - Fields and rules come from [kubesense-rum](../kubesense-rum/SKILL.md): `get-fields` with
   the matching signal, LIKE only on low-cardinality fields, array fields filter-only, no
   group-by on a raw duration, `feature_flag.<key>` group-by on view and error only.
 - **Measure durations on the base field** (`lcp`, `duration`), which is stored in
-  nanoseconds. The `_ms` / `_s` twins (`lcp_ms`) are filter-only: use them in the
-  WHERE clause, never as an aggregation field or group-by. Leave `fieldConfig.unit`
+  nanoseconds. The `_ms` / `_s` twins (`lcp_ms`) are filter-only: use them in `kql`, never as an aggregation field or group-by. Leave `fieldConfig.unit`
   unset: the chart detects a base duration and shows it as a readable duration. A
   fixed `nanoseconds` unit prints the raw count (`12500000000.00ns`).
 - Numeric aggregations (`avg`, `sum`, `min`, `max`, `p50`, `p75`, `p90`, `p95`, `p99`)
@@ -498,8 +480,7 @@ query (so `columnFields` is required), with these differences:
   "rumEventType": "view",
   "label": "A",
   "columnFields": [],
-  "filterMode": "ADVANCED_QUERY",
-  "filters": { "advanced_query": ["browser_name = Chrome AND env = production"] },
+  "kql": "browser_name:Chrome env:production",
   "aggregation": {
     "function": "p90",
     "fields": [ { "field": "lcp", "type": "float", "is_attribute": false } ]

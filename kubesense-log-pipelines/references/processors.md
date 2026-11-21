@@ -24,7 +24,7 @@ Conventions:
 | `remove-fields` | delete attributes | `field` |
 | `stringify-fields` | turn a non-string attribute into a JSON string | `field` |
 | `replace` | regex replace in an attribute or the body | `pattern` |
-| `block` | drop logs | `field` + `pattern` |
+| `block` | drop logs | `kql` |
 | `protect` | encrypt and mask sensitive values | `pattern`, `fields`, `secret_captures` |
 | `lookup` | enrich from a reference table | `reference_table_id`, `lookup_key`, `source_field`, `target_fields` |
 
@@ -176,11 +176,10 @@ Regex replace.
 | `replace_original` | **Destructive.** Write the result back to `field`. |
 | `delete_original` | **Destructive.** Remove `field` afterwards, even on a log the pattern did not match. |
 
-With `field` set, set exactly one of `new_field` or `replace_original`. A rule read back
-carries `condition_version`, `conditions` and `raw_conditions`; resend them unchanged. An
-update that drops a saved replace rule's conditions is refused, as is a replace rule with no
-`field`, `pattern` or `conditions`. To widen on purpose, send `condition_version: 1` with
-empty `conditions`.
+With `field` set, set exactly one of `new_field` or `replace_original`. `field` and
+`pattern` here are the text to rewrite, not which logs. Which logs the rule applies to is its
+`kql` (as for `block`); a replace rule with no `kql` applies to every log of the pipeline.
+A rule read back carries `kql` (or `legacy`); resend it unchanged to keep its match.
 
 ```json
 { "field": "url", "pattern": "token=[^&]+", "replacement": "token=REDACTED", "new_field": "url_clean" }
@@ -192,19 +191,16 @@ Drop logs. Dropped logs are not stored.
 
 | Field | Meaning |
 |---|---|
-| `field` | Attribute to test. Empty tests the body. |
-| `pattern` | Regex. Drops logs that match. |
+| `kql` | Required. A KQL filter for the logs to drop, e.g. `workload:payment AND type:WARN` or `body:/timeout.*gold/`. Compiled into `conditions` (`condition_version` 2). See [SKILL.md](../SKILL.md). |
 | `block_unmatched` | Drops logs that do **not** match instead. |
-| `kql` | A KQL filter in place of `field` + `pattern`, e.g. `workload:payment AND type:WARN` or `body:/timeout.*gold/`. Compiled into `conditions` (`condition_version` 2). See [SKILL.md](../SKILL.md). |
 
-A block rule with no `field`, `pattern` or `conditions` would drop **every** log the
-pipeline's inputs match, so the server refuses it (also `block_unmatched` with no match, and
-`condition_version: 1` with empty `conditions`). A rule read back carries `condition_version`,
-`conditions` and `raw_conditions`; resend all three unchanged, or the save is refused.
-An over-broad `pattern` is not caught.
+A block rule with no match would drop **every** log the pipeline's inputs match, so the
+server refuses it (also `block_unmatched` with no match). `field` + `pattern` as the match
+and hand-written `conditions` are refused. A rule read back carries `kql` (or `legacy`
+{reason, detail}); resend it unchanged to keep its match. An over-broad `kql` is not caught.
 
 ```json
-{ "field": "path", "pattern": "^/healthz$" }
+{ "kql": "@path:/^\\/healthz$/" }
 ```
 
 ## protect

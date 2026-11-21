@@ -128,10 +128,9 @@ An unknown field or a bad form comes back as `query: <code>: <message> (at start
 the message; `get-fields` lists the forms each field takes in its `forms` column.
 
 > [!NOTE]
-> The old `where` argument (`type = ERROR AND namespace = production`) is deprecated: a
-> server accepts it for now with a deprecation note, and refuses a call that sends it
-> together with `query`. Send `query`. A server that predates `query` returns the unfiltered
-> window with no error.
+> `query` is the only filter argument. A call that sends the old `where`
+> (`type = ERROR AND namespace = production`) or any other legacy filter argument is
+> refused with a hint to send `query`.
 
 In `group_by_fields` / `fields` / `required_fields` / `sort_by` there is **no `@`** — set
 the flag instead:

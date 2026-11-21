@@ -191,7 +191,7 @@ A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
 `$name`. To run a panel as it is, prefer `run-dashboard-panel`, which resolves them. To run
 the query by hand, resolve them against the variables table and use `analyze-metrics`.
-A `$$name` elsewhere in a query (a filter key, an advanced query, a code-mode selector) is a
+A `$$name` elsewhere in a query (a filter key, a code-mode selector) is a
 field reference: `<that variable's field> = $name`, dropped when nothing is selected.
 
 **Log pipelines** — see [kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md)
@@ -360,18 +360,16 @@ nanoseconds with filter-only `_ms` / `_s` twins. See
 **`get-fields` `forms`.** Its `forms` column lists the KQL forms each field takes, with `<f>`
 for the field name; use only those.
 
-### Legacy `where` (deprecated)
+### Legacy filter arguments are refused
 
-Older agents sent the same filter as `where`, a SQL-style string (`type = ERROR AND
-namespace = production`). Servers still accept it for a while, with a deprecation note at the
-end of the result, and refuse a call that sends both `query` and `where`. Do not write new
-calls with it. To translate: `=` to `:`, `IN (a, b)` to `:(a OR b)`, `!=` to `-field:value`,
-`LIKE "x%"` to `field:x*`, `ILIKE` to `field:~...`, `NOT (...)` unchanged.
-
-A server that predates `query` ignores it and returns the unfiltered window with no error.
-If a filtered call returns suspiciously many rows (every service, every level), check that
-the result header or the tool schema names `query`; if it does not, the server is old and
-only `where` works there.
+Every tool takes a filter only as KQL: `query` on `search-logs`, `search-traces`,
+`search-rum`, `analyze-logs`, `analyze-traces`, `create-alert` and each `queries[].query`
+of `analyze-telemetry`; `kql` on dashboard queries, variables and overlays. A call that
+sends `where`, `filters`, `filter`, `advanced`, `advanced_query`, `unified_filter`,
+`raw_filters`, `common_filter`, `adv_filters`, `filter_mode` or `filterMode` is refused
+with a hint naming the argument to use, before anything runs. To translate an old filter:
+`=` to `:`, `IN (a, b)` to `:(a OR b)`, `!=` to `-field:value`, `LIKE "x%"` to `field:x*`,
+`ILIKE` to `field:~...`, `NOT (...)` unchanged.
 
 ## Choosing a Tool
 
@@ -548,8 +546,7 @@ KubeSense UI, in the header or on each row. It lets the user check your answer.
   does not know the UI address, so links are root-relative paths such as `/logs?...`. Say so
   and prefix the user's own KubeSense address; do not guess one.
 - **The link carries your filter.** An explorer link holds the `query` as `q=` (with
-  `searchMode=KQL`), so the page opens on the same rows. A filter written as `where` travels
-  as the page's Advanced query. Read the `ui_note` / header notes: a link may be absent for a
+  `searchMode=KQL`), so the page opens on the same rows. Read the `ui_note` / header notes: a link may be absent for a
   trace whose root span has no id or whose cluster is ambiguous, and a UI without the KQL bar
   enabled ignores `q`, so tell the user to check the filter bar if the rows differ.
 - **Links pin the clusters the result came from.** An explorer link pins the clusters of the
@@ -570,8 +567,8 @@ KubeSense UI, in the header or on each row. It lets the user check your answer.
 4. Never carry a field name across signals (`node` vs `node_name`; `type` vs `status`).
 5. Enum casing from `enum_values`, not `example`.
 6. Filters are KQL in `query`: `field:value`, `field:(a OR b)`, `-field:value`, `field>n`,
-   `@attr:value`. Quote values with spaces or a colon. Send `where` only to a server that
-   does not know `query`, and never both.
+   `@attr:value`; `field:*` means "has a value", `-field:*` "has none". Quote values with
+   spaces or a colon. A legacy argument (`where`, `filters`, ...) is refused.
 7. `value_operation` is `row_count` — never `count`.
 8. `analyze-*` for numbers, `search-*` only to read records.
 9. `analyze-telemetry` + formula for ratios and percentages.
