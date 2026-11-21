@@ -288,8 +288,7 @@ its position. `body:word` in a pipeline is a case-insensitive substring test, no
 explorer's word match. A rule read back carries `kql` (what its stored conditions read as) or
 `legacy` {reason, detail} (they have no faithful KQL form, so leave them as they are). Send
 the rule back unchanged to keep it, or change `kql` (and drop `conditions`,
-`condition_version` and `raw_conditions`) to change what it matches. `kql_version` is
-optional; leave it out for the latest (4).
+`condition_version` and `raw_conditions`) to change what it matches. The tools always work at the latest KQL.
 
 ## Rules
 

@@ -73,7 +73,7 @@ and `new_value` rules, and `type: "float"` on the operand of a numeric `value_op
 `severity` and `unit` are deliberately left open by the contract, so a bad value there still
 passes — use `critical`/`error`/`warning`/`info` and a real formatter unit.
 
-A `query_config` entry may carry its filter as `kql` + `kql_version`; a legacy filter
+A `query_config` entry may carry its filter as `kql`; a legacy filter
 (`raw_filters`, `unified_filter`) still validates but with a `legacy_filter` warning.
 
 It validates the **wire document** — the export/import shape with `query_config`,
@@ -175,7 +175,7 @@ monitors.
 - Required: `name`, `threshold_operator`, `threshold_value`, `notification_channels`.
 - Defaults: `severity=warning`, `threshold_frequency=at_least_once`,
   `evaluation_interval=1m`, `time_window=5m`.
-- The rule is saved in KQL mode: `kql` and `kql_version` (4) beside the tree the engine
+- The rule is saved in KQL mode: `kql` beside the tree the engine
   runs, no Advanced text. `field:*` means "has a value", `-field:*` "has no value". A legacy
   filter argument (`where`, `raw_filters`, ...) is refused.
 - `threshold_operator` also accepts `above`/`below` here (it does **not** in import

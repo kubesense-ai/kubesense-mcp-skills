@@ -146,7 +146,7 @@ durable identity.
 
 Shared keys: `variables` (`[]`), `visible` (bool), `filters` (`{}`), `raw_filters` (`{}`),
 `selectedMeasurement`, `selectedMode`, `labelOptions`. A logs or traces query filters with
-`kql` and `kql_version` (see below); `filters` and `raw_filters` stay `{}` there.
+`kql` (see below); `filters` and `raw_filters` stay `{}` there.
 
 `selectedMeasurement` is `count` | `sum` | `avg` | `min` | `max` — a legacy field; set
 `count` for logs/traces/formula and `avg` for metrics.
@@ -158,8 +158,8 @@ evaluation.
 ### Filtering a logs or traces query: `kql`
 
 A logs or traces query carries its filter as `kql`, the KQL text of `search-logs`'
-`query`, with `kql_version` set to `4` (a missing `kql_version` means the latest). This is
-the KQL mode `create-alert` saves. `validate-alert-json` fills in the tree the engine runs
+`query`. This is the KQL mode `create-alert` saves. An import document may also carry
+`kql_version`; it is optional and a missing one means the latest, so leave it out (the MCP tools never show or take it). `validate-alert-json` fills in the tree the engine runs
 from the text and refuses a text that does not compile, or that sits beside a different
 tree. `field:*` means "has a value" and `-field:*` "has no value". An empty `kql` matches
 everything.
@@ -196,7 +196,7 @@ grouping in the PromQL `by (...)`; each series is one firing instance.
 ```json
 {
   "variables": [], "visible": true, "filters": {}, "raw_filters": {},
-  "kql": "type:ERROR", "kql_version": 4,
+  "kql": "type:ERROR",
   "selectedMeasurement": "count", "selectedMode": "logs",
   "value_operation": "row_count",
   "groupBy": [ { "field": "workload", "type": "string", "is_attribute": false } ],
@@ -676,7 +676,7 @@ The composite and two-level examples live in their own sections above.
   "query_config": [
     { "variables": [], "visible": true,
       "filters": {}, "raw_filters": {},
-      "kql": "type:ERROR", "kql_version": 4,
+      "kql": "type:ERROR",
       "selectedMeasurement": "count", "selectedMode": "logs",
       "value_operation": "row_count",
       "groupBy": [ { "field": "workload", "type": "string", "is_attribute": false } ],
@@ -706,8 +706,8 @@ Text-search variant. `body` is a valid filter field (never a group-by); one `kql
 single phrase, an OR across phrases, or body text mixed with another field:
 
 ```json
-"kql": "body:timeout", "kql_version": 4
-"kql": "body:(timeout OR \"connection refused\") namespace:prod", "kql_version": 4
+"kql": "body:timeout"
+"kql": "body:(timeout OR \"connection refused\") namespace:prod"
 ```
 
 Either way the rule reads the **raw** logs table every evaluation — no rollup carries
@@ -760,14 +760,14 @@ Either way the rule reads the **raw** logs table every evaluation — no rollup 
   "query_config": [
     { "variables": [], "visible": false,
       "filters": {}, "raw_filters": {},
-      "kql": "status_code:(500 OR 501 OR 502 OR 503 OR 504) protocol:HTTP", "kql_version": 4,
+      "kql": "status_code:(500 OR 501 OR 502 OR 503 OR 504) protocol:HTTP",
       "selectedMeasurement": "count", "selectedMode": "traces",
       "value_operation": "row_count",
       "groupBy": [ { "field": "workload", "type": "string", "is_attribute": false } ],
       "labelOptions": { "label": "A" } },
     { "variables": [], "visible": false,
       "filters": {}, "raw_filters": {},
-      "kql": "protocol:HTTP", "kql_version": 4,
+      "kql": "protocol:HTTP",
       "selectedMeasurement": "count", "selectedMode": "traces",
       "value_operation": "row_count",
       "groupBy": [ { "field": "workload", "type": "string", "is_attribute": false } ],

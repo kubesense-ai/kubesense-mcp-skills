@@ -29,7 +29,7 @@ One overlay:
 |---|---|---|---|
 | `name` | string | `"Events"` in the legend | label on the legend and the hover card |
 | `color` | `red` \| `purple` \| `orange` \| `gray` \| `green` \| `blue` | `red` | a palette name, never a hex value |
-| `kql` | string | `""` | which events to mark, KQL over the events catalog, as in an events query's `kql`. The server saves it as `filterMode: "KQL"`, `filters.kql` and `kqlVersion`. Basic chips and Advanced text are refused. |
+| `kql` | string | `""` | which events to mark, KQL over the events catalog, as in an events query's `kql`. The server saves it as `filterMode: "KQL"`, and `filters.kql`. Basic chips and Advanced text are refused. |
 
 `eventOverlays` is an array of these. A panel's choice:
 

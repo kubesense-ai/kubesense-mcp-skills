@@ -397,8 +397,7 @@ argument of `search-logs` and `analyze-logs`
 
 The server compiles `kql` against the signal's field catalog, with the dashboard's
 variables bound, and saves `filterMode: "KQL"`, `filters.kql` (an array holding the one
-text) and `kqlVersion` (the latest grammar). A text that does not compile is refused and
-nothing is saved. A rum query also needs `rumEventType`. `field:*` means "has a value" and
+text). A text that does not compile is refused and nothing is saved. A rum query also needs `rumEventType`. `field:*` means "has a value" and
 `-field:*` "has no value", on a column as well as an attribute.
 
 Basic chips (`filterMode: "MFD"`, `filters: {"<field>": [...]}`) and Advanced text
@@ -408,7 +407,7 @@ events or RUM query, variable or overlay; send `kql` and leave out `filters` and
 holds SPL or SQL text; search, analyze and `create-alert` call the same text `query`.
 **A filter put in `query` is never run:** the panel silently shows every row.
 
-`get-dashboard-details` returns each filter as `kql` (with `kql_version`), or as `legacy`
+`get-dashboard-details` returns each filter as `kql`, or as `legacy`
 `{reason, detail}` when a dashboard saved before KQL holds a filter with no KQL form. Send
 a query back as read to keep it unchanged. To change the filter, send `kql` with no
 `filters`. Send a `legacy` query back unchanged to keep its stored filter.
