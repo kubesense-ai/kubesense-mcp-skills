@@ -158,7 +158,11 @@ evaluation.
 ### Filtering a logs or traces query: `kql`
 
 A logs or traces query carries its filter as `kql`, the KQL text of `search-logs`'
-`query`. This is the KQL mode `create-alert` saves. `validate-alert-json` fills in the tree the engine runs
+`query`. This is the KQL mode `create-alert` saves. An import document may also carry an
+optional integer `kql_version` beside `kql`: a missing one means the latest grammar (version 1
+today), so leave it out unless you are pinning an older reading. The MCP tools that take KQL
+(`create-alert`, `validate-alert-json`, `search-*`, `analyze-*`) accept `kql_version` too, and
+a stored rule reads back with the version it was saved at. `validate-alert-json` fills in the tree the engine runs
 from the text and refuses a text that does not compile, or that sits beside a different
 tree. `field:*` means "has a value" and `-field:*` "has no value". An empty `kql` matches
 everything.
