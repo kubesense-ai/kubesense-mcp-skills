@@ -2,7 +2,7 @@
 name: kubesense-dashboards
 description: Use when the user wants a KubeSense dashboard built, edited or extended (panels over metrics, logs, traces, RUM or host maps), asks for dashboard preset JSON to import, asks what a panel on an existing dashboard shows, or has dashboard JSON that fails import or renders empty panels.
 metadata:
-  version: "2.8.0"
+  version: "2.8.1"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,dashboards,panels,json,import,preset,visualization,host-map,rum
@@ -460,7 +460,8 @@ query (so `columnFields` is required), with these differences:
   fixed `nanoseconds` unit prints the raw count (`12500000000.00ns`).
 - Numeric aggregations (`avg`, `sum`, `min`, `max`, `p50`, `p75`, `p90`, `p95`, `p99`)
   need `fields` with `type: "float"`, as on logs.
-- RUM is not offered on alert rules; see [kubesense-alerts](../kubesense-alerts/SKILL.md).
+- An alert rule can read the same RUM query; see
+  [kubesense-alerts → RUM Rules](../kubesense-alerts/SKILL.md#rum-rules).
 - Recipes (exact unique users and p75 with a `total` stat, crash-free users, Web Vital
   good/poor shares, Apdex, top errors and URLs, ANR rate):
   [kubesense-rum/references/dashboard-recipes.md](../kubesense-rum/references/dashboard-recipes.md).
