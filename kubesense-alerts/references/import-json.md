@@ -70,7 +70,7 @@ is written until the user confirms.
 | `notification_channel_ids` | Array of **integer** channel ids from `list-notification-channels`. **`[]` blocks a single-rule import.** |
 | `route_by_labels` | `false` → route to the listed channels. `true` → route via each channel's own label matchers, and `notification_channel_ids` is **discarded**. |
 | `no_data_state` | `normal` (default) \| `firing` \| `previous` |
-| `include_samples` / `sample_limit` | **Logs only** — attach matching rows to notifications. `sample_limit` 1–100. |
+| `include_samples` / `sample_limit` | **Logs only** — attach matching rows to notifications. `sample_limit` 1–100. Not available on RUM rules. |
 | `unit` | Display only. Must be a real formatter value — see below. |
 | `conditions` / `condition_expression` / `join_by` | Several thresholds combined with AND / OR. Absent on an ordinary rule. See [Composite Conditions](#composite-conditions-and--or). |
 | `warning_threshold_value` | A second, lower level on a single threshold. See [Two Levels on One Threshold](#two-levels-on-one-threshold). |
@@ -157,6 +157,7 @@ evaluation.
 ### `filters` vs `raw_filters`
 
 Only **`raw_filters`** is read for logs/traces. For metrics it is `raw_filters ?? filters`.
+For **RUM** it is neither: the engine reads `unified_filter` — see [RUM query](#rum-query).
 The product's own templates set both, which is harmless — do the same for safety, but know
 that `raw_filters` is the load-bearing one.
 
@@ -202,6 +203,40 @@ grouping in the PromQL `by (...)`; each series is one firing instance.
   "labelOptions": { "label": "A" }
 }
 ```
+
+### RUM query
+
+```json
+{
+  "label": "A", "variables": [], "visible": true, "filters": {}, "raw_filters": {},
+  "selectedMeasurement": "count", "selectedMode": "rum",
+  "rumEventType": "error",
+  "value_operation": "row_count", "fields": [],
+  "groupBy": [ { "field": "app_name", "type": "string", "is_attribute": false } ],
+  "unified_filter": {
+    "type": "common",
+    "common_filter": [
+      { "field": "service",   "operation": "IN", "values": ["web-store"],  "type": "string" },
+      { "field": "view_name", "operation": "IN", "values": ["/checkout"], "type": "string" }
+    ]
+  },
+  "labelOptions": { "label": "A" }
+}
+```
+
+- `rumEventType` is `session` | `view` | `action` | `error` | `resource` | `long_task`; the
+  fields of the measure, `groupBy` and filter must exist on it.
+- **The filter is `unified_filter`**, in RUM catalog names. Set `label` on the query: import
+  matches the filter to its query by it. `raw_filters` only feeds the editor's filter bar —
+  leave it `{}` rather than hand-writing one that disagrees.
+- Operators are the names, not symbols: `IN`, `NOT_IN`, `GT`, `GTE`, `LT`, `LTE`, `LIKE`…
+  (`">"` is refused). Numeric conditions take numbers:
+  `{ "field": "lcp_ms", "operation": "GT", "values": [2500] }` (the `_ms` / `_s` twins are
+  converted to nanoseconds) is the same filter as `lcp` `GT` `[2500000000]`.
+- `LIKE` works on `view_name` for `view` rules only; `view_url`, and `view_name` on other
+  event types, take `=` / `IN`.
+- A measured duration is in **nanoseconds** — `fields: [{ "field": "lcp", "type": "float",
+  "is_attribute": false }]` with `value_operation: "p75"` and a threshold of `2500000000`.
 
 ### Formula query
 
@@ -732,6 +767,46 @@ Either way the rule reads the **raw** logs table every evaluation — no rollup 
   "evaluation_interval": "1m",
   "time_window": "5m",
   "frequency_type": "at_least_once",
+  "severity": "warning",
+  "labels": {},
+  "notification_channel_ids": [1],
+  "route_by_labels": false,
+  "no_data_state": "normal",
+  "include_samples": false,
+  "sample_limit": 5,
+  "unit": "nanoseconds"
+}
+```
+
+### RUM p75 LCP per app (2.5 s)
+
+```json
+{
+  "name": "Slow LCP {{app_name}}",
+  "description": "p75 Largest Contentful Paint above 2.5s over 15m",
+  "enabled": true,
+  "query_type": "rum",
+  "query_config": [
+    { "label": "A", "variables": [], "visible": true, "filters": {}, "raw_filters": {},
+      "selectedMeasurement": "count", "selectedMode": "rum",
+      "rumEventType": "view",
+      "value_operation": "p75",
+      "fields": [ { "field": "lcp", "type": "float", "is_attribute": false } ],
+      "groupBy": [ { "field": "app_name", "type": "string", "is_attribute": false } ],
+      "unified_filter": { "type": "common", "common_filter": [] },
+      "labelOptions": { "label": "A" } }
+  ],
+  "metric_query_label": "A",
+  "raw_query": "",
+  "threshold_operator": "greater_than",
+  "threshold_value": 2500000000,
+  "condition_type": "threshold",
+  "compared_to": "",
+  "evaluation_interval": "1m",
+  "time_window": "15m",
+  "frequency_type": "at_least_once",
+  "breach_counting_window": "15m",
+  "breach_counting_window_prometheus_format": "15m",
   "severity": "warning",
   "labels": {},
   "notification_channel_ids": [1],
