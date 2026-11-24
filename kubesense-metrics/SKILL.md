@@ -2,7 +2,7 @@
 name: kubesense-metrics
 description: Use when the user asks KubeSense about CPU, memory, disk, network, GPU, JVM, saturation or capacity of pods, nodes or cloud resources (AWS, GCP, Azure, MongoDB Atlas, Confluent, Kong), writes or debugs a PromQL/MetricsQL query, gets an empty metrics result, or asks which cloud accounts are connected.
 metadata:
-  version: "2.2.0"
+  version: "2.2.1"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,metrics,promql,metricsql,prometheus,kube-state-metrics,cadvisor,node-exporter,gpu,jvm,interval-macros,cloud,aws,gcp,azure,cloudwatch,mongodb-atlas,confluent,kong
@@ -261,7 +261,10 @@ For the metric families KubeSense collects — exact names for pods, containers,
 workloads, PVCs, network, GPU, JVM, and process metrics — read
 **[references/metric-catalog.md](./references/metric-catalog.md)**. For AWS, GCP, Azure,
 MongoDB Atlas, Confluent Cloud and Kong resource metrics, read
-**[references/cloud-metric-catalog.md](./references/cloud-metric-catalog.md)**.
+**[references/cloud-metric-catalog.md](./references/cloud-metric-catalog.md)**. Synthetic
+check results arrive as `kubesense_synthetics_*` series (run counts, run and phase
+durations, monitor status) — listed with their labels in
+[kubesense-alerts → Synthetics Rules](../kubesense-alerts/SKILL.md#synthetics-rules).
 
 Treat the catalog as *what to expect*, not a substitute for discovery: which families
 are present depends on the cluster's collectors, and application metrics are entirely

@@ -223,7 +223,8 @@ Quote values that contain a space or a colon. Exclude with `-field:value` or
     `p50`, `p75`, `p90`, `p95` or `p99`. `row_count` takes no field. Everything else takes
     exactly one `fields` entry. The numeric operations need a number field or an
     attribute; `unique_count` takes any non-list field.
-12. **`alert_mode`, `group_by_present_only` and `lookback_seconds` are refused** for RUM.
+12. **`group_by_present_only` is refused** for RUM. `alert_mode` and `lookback_seconds` are
+    accepted: they replay an alert rule's evaluation for its chart.
 
 ## analyze-telemetry
 
@@ -323,8 +324,10 @@ good/poor shares, Apdex, top errors and URLs, ANR rate) are in
 - **Row reads are bounded per call.** `search-rum` returns at most 200 rows a call and has
   no total. Paging has no depth limit. For questions that are a number,
   aggregate instead.
-- **No alerts, SQL or SPL.** RUM is not a datasource for alert rules, `execute-sql` or
-  `execute-spl`. Say so rather than approximating with logs.
+- **Alert rules, but no SQL or SPL.** A RUM alert rule is built as import JSON — see
+  [kubesense-alerts → RUM Rules](../kubesense-alerts/SKILL.md#rum-rules); `create-alert` does
+  not take RUM. RUM is not a datasource for `execute-sql` or `execute-spl`. Say so rather
+  than approximating with logs.
 - **No attribute-key discovery.** See Discover First.
 
 ## Failure Messages

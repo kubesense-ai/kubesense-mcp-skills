@@ -1,11 +1,11 @@
 ---
 name: kubesense-alerts
-description: Use when the user asks which KubeSense alerts are firing, why an alert fired or paged nobody, wants an alert rule created, edited or resolved ("alert me when…"), needs alert import JSON built or validated, wants a Datadog monitor converted, or is setting up a maintenance window.
+description: Use when the user asks which KubeSense alerts are firing, why an alert fired or paged nobody, wants an alert rule created, edited or resolved ("alert me when…"), needs alert import JSON built or validated, wants a Datadog monitor converted, wants to alert on RUM (frontend errors, Web Vitals) or synthetic checks, or is setting up a maintenance window.
 metadata:
   version: "3.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels,composite-conditions
+  tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels,composite-conditions,rum,synthetics
 ---
 
 # KubeSense Alerts
@@ -33,7 +33,8 @@ Two distinct jobs, don't confuse them:
 | "why did this fire but page nobody?" | channel cadence first, then whether a **maintenance window** covers it |
 | "put these rules in a list / folder" | UI-only grouping — no MCP surface, say so rather than guessing |
 | you hand-built rule JSON and want it checked | `validate-alert-json` before handing it over |
-| "alert on page load time / frontend errors / crashes" (RUM) | not supported: alert rules cover metrics, logs and traces only. Say so; offer a [dashboard panel](../kubesense-dashboards/SKILL.md#rum-query) over the RUM data instead, and do not approximate with logs |
+| "alert on page load time / frontend errors / crashes" (RUM) | a RUM rule, as import JSON — `create-alert` does not take RUM. See [RUM Rules](#rum-rules) |
+| "alert when a synthetic check fails / is slow" | one monitor: its own managed rule already does it. Across monitors, locations or a team: a metrics rule over `kubesense_synthetics_*`. See [Synthetics Rules](#synthetics-rules) |
 | "error budget", "burn rate", "are we meeting 99.9%" | [kubesense-slo](../kubesense-slo/SKILL.md) — burn-rate rules are generated from an SLO's `alert_types`, not hand-written |
 
 ## Reading Alerts
@@ -75,6 +76,8 @@ passes — use `critical`/`error`/`warning`/`info` and a real formatter unit.
 
 A `query_config` entry may carry its filter as `kql`; a legacy filter
 (`raw_filters`, `unified_filter`) still validates but with a `legacy_filter` warning.
+A RUM query is the exception: it carries no `kql` (the engine refuses one), and its
+`unified_filter` is the correct form.
 
 It validates the **wire document** — the export/import shape with `query_config`,
 `threshold_operator` and `frequency_type`. It is *not* for `create-alert`'s arguments;
@@ -479,9 +482,9 @@ verify on the condition chart.
 | `unit: "ns"` / `"percent"` / `"short"` | Not valid values — silently becomes `auto`. Use `nanoseconds`, `percentage`, `number` |
 | `frequency_type: "always"` alone | Silently downgrades to `at_least_once` — you must also send `threshold_frequency: "always"` |
 | `notification_channel_ids: []` on a single-rule import | The editor requires ≥ 1 channel; the user **cannot click Create** |
-| A hand-written `unified_filter` block (legacy import format) | **Never read on import** — silently discarded. Filter with `kql` |
+| A hand-written `unified_filter` block on a logs/traces query (legacy import format) | **Never read on import** — silently discarded. Filter with `kql`. RUM queries are the opposite: `unified_filter` is the only filter they read |
 | `advanced_query` alongside other `raw_filters` keys (legacy import format) | `advanced_query` is **exclusive**; every other filter key is dropped. Filter with `kql` |
-| A `label` key on a `query_config` entry | Ignored — labels bind **positionally** (index 0 → `A`, 1 → `B`) |
+| A `label` key on a `query_config` entry | Ignored — labels bind **positionally** (index 0 → `A`, 1 → `B`). The one use of `label` is a RUM query, where import matches its `unified_filter` by it |
 | `send_resolved: false` on a rule routed to `pagerduty` / `jsm` / `datadog_oncall` | **Refused with a warning.** The resolved payload is what CLOSES the incident there, so suppressing it would leave it open forever |
 | Re-creating a deleted rule with the same name to "restore" it | Deletes are soft — the old rule keeps its history and stays deleted. You get a **new** rule with no past events |
 | Cross-query composite with `join_by` missing or `null` in import JSON | Refused by a bulk import's dry-run; the editor will not save it. Webapps before #2530 turn it into `[]` ("every query ungrouped") without refusing it, and grouped queries are then all left out, so the rule never fires. Always write it |
@@ -572,6 +575,81 @@ nanoseconds — it never converts.
 >
 > The product's own `type-tracing` starter template uses `threshold: 500` with a description
 > saying "ms" — that is 500 *nanoseconds*. Don't copy it.
+
+## RUM Rules
+
+A rule can count or measure one RUM event type: `selectedMode: "rum"` plus `rumEventType`
+(`session`, `view`, `action`, `error`, `resource` or `long_task`). The engine evaluates it
+with the RUM explorer's own field and filter code, so a rule reads exactly what a RUM chart
+with the same query shows.
+
+**Build it as import JSON** ([references/import-json.md](./references/import-json.md#rum-query))
+or over the REST API — `create-alert` does not take RUM. Run `validate-alert-json` on it:
+it checks the event type, measure, group-by and filter exactly as the import will.
+
+What differs from logs and traces:
+
+- **Field names are the RUM catalog's** — the names `search-rum` and `analyze-telemetry` take
+  (see [kubesense-rum](../kubesense-rum/SKILL.md)), not the alert engine's log/trace lists.
+  A field must exist on the rule's event type: `lcp` on an `error` rule is refused at save.
+- **The filter is `unified_filter`, not `raw_filters` and not `kql`.** A RUM query that
+  carries `kql` is refused: alert KQL is for logs and traces only. The engine reads only the compiled
+  filter for RUM; `raw_filters` is just what the editor shows. Give each query its `label`
+  (`"A"`), which import uses to attach the filter.
+- **Every filter must apply.** A condition with no operator, a value-taking operator with no
+  value, `STARTS_WITH`, or a field the event type lacks is refused at save rather than
+  silently dropped.
+- **Durations are nanoseconds.** Measure the base field (`p75` of `lcp`), and write the
+  threshold in nanoseconds: 2.5 s = `2500000000`, `"unit": "nanoseconds"`. The `_ms` / `_s`
+  twins (`lcp_ms`, `duration_s`) are filter-only — they can't be measured or grouped.
+- **Lists are filter-only.** A session's `service` (and other list columns) can be filtered,
+  never grouped or measured.
+- **`min` / `max` over an empty window are no data**, not 0.
+
+Not available on RUM rules yet: log samples / `include_samples`, a RUM data link
+placeholder, and an evaluation delay for late-arriving browser batches — prefer windows of
+5 minutes or more.
+
+> [!NOTE]
+> RUM data is sparse for a small app or a quiet hour. For a `less_than` rule (e.g. "fewer
+> than 10 sessions", "min CLS below…") set `no_data_state: "previous"`, so an empty window
+> holds the current state instead of being judged against the threshold. For a "too many
+> errors" rule keep `normal`.
+
+## Synthetics Rules
+
+Every synthetics monitor already owns a managed rule, **[Synthetics] &lt;monitor&gt;**, that
+fires while it is down or has no data (plus SSL-expiry rules for SSL monitors). Those are
+changed through the monitor, never the alert editor — don't write a duplicate.
+
+For anything **across** monitors — failures per location, p95 run time per service, more than
+N monitors of a team down — write an ordinary **metrics** rule over the series synthetics
+exports. Labels on all of them: `monitor_id`, `monitor_name`, `check_type`, `location`, and
+the monitor tags copied as `label_service`, `label_env`, `label_team`.
+
+| Series | What it is |
+|---|---|
+| `kubesense_synthetics_monitor_status` | gauge: 0 up, 1 degraded, 2 down, 3 no data |
+| `kubesense_synthetics_runs_total` | counter of runs, labels `status` (`success`/`failure`) and `failure_code` |
+| `kubesense_synthetics_run_duration_seconds` | histogram of run time (`_bucket`, `_sum`, `_count`) |
+| `kubesense_synthetics_phase_duration_seconds` | `_sum`/`_count` per `phase` (`dns`, `connect`, `tls`, `ttfb`) |
+| `kubesense_synthetics_step_duration_seconds` | `_sum`/`_count` per `step` of a browser or multistep check |
+| `kubesense_synthetics_ssl_cert_expiry_days` | days until the certificate expires |
+
+```promql
+# Failed runs per location for the checkout service's monitors (threshold: > 3)
+sum by (location) (increase(kubesense_synthetics_runs_total{status="failure", label_service="checkout"}[5m]))
+
+# p95 run time per monitor, in seconds (threshold: > 2)
+histogram_quantile(0.95, sum by (monitor_name, le) (rate(kubesense_synthetics_run_duration_seconds_bucket[10m])))
+
+# Monitors of the payments team that are down (threshold: >= 2)
+count(max by (monitor_id) (kubesense_synthetics_monitor_status{label_team="payments"}) >= 2)
+```
+
+Use `no_data_state: "normal"` on the counter rules — a window with no failures has no
+`status="failure"` series at all. Per-run detail (HTTP status code, run attributes, error
+text, other monitor labels) is not in these series and cannot be alerted on.
 
 ## Text and Pattern Filters
 
@@ -736,7 +814,9 @@ cluster-specific. Ask the user, or have them export a reference rule.
    `bytes`, `CPU`, `number`, `raw`.
 8. Every logs/traces filter, text and class filters included, is KQL: `query` in
    `create-alert`, `kql` in import JSON. Never `raw_filters`, `advanced_query` or
-   `unified_filter`.
+   `unified_filter`. RUM is the
+   exception: it takes no `kql`, and its filter is `unified_filter` only (see
+   [RUM Rules](#rum-rules)).
 9. Query labels are **positional**; `metric_query_label` names the thresholded query
    (single → `A`; formula → the formula's label).
 10. One rule → object; multiple → **one array**. One code block either way.

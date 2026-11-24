@@ -62,6 +62,8 @@ format, which the MCP tools do not write.
 | `metric alert`, `query alert` | `metrics` — build PromQL |
 | `log alert` | `logs` — `value_operation: "row_count"` + `kql` + `groupBy` |
 | `trace-analytics alert`, `apm` | `traces` — `row_count`, or `p95`/`p99` over `duration`. See the latency note below. |
+| `rum alert` | `rum` — `rumEventType` from `@type:` (`error`, `view`, `action`, `resource`, `long_task`, `session`); `rollup("count")` → `row_count`, a vital → `p75`/`avg` over the base field in nanoseconds. Filters go in `unified_filter` with RUM catalog names (`@view.url_path` → `view_name`, `service` → `service`, `@application.id` → `application_id`). A wildcard path (`/x*`) has no `STARTS_WITH`: on a `view` rule use `view_name` `LIKE "/x%"`; on other event types `view_name` takes only `IN`, so list the paths and **tell the user**. See [RUM Rules](../SKILL.md#rum-rules). |
+| `synthetics alert` | Not a hand-written rule: create the KubeSense synthetics monitor, which owns its alert rule. Cross-monitor conditions → `metrics` over `kubesense_synthetics_*` — see [Synthetics Rules](../SKILL.md#synthetics-rules). |
 | `anomaly`, `forecast`, `outlier` | No direct equivalent. Closest is `condition_type: "change_percent"` or a static threshold — **flag the gap to the user.** |
 | `composite` | One rule with AND/OR `conditions` — see [Composite monitors](#composite-monitors-a--b) below. |
 
