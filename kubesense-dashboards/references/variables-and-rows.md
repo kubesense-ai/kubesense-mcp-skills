@@ -67,6 +67,8 @@ renders `{namespace="kubesense", phase="Running"}`.
   or `custom` variable, or no variable at all, is silently dropped from the query.
 - An attribute field (`is_attribute: true`) expands to the `@_@` key for you.
 - Nothing selected → the condition is dropped, not matched against an empty set.
+- In a `kql` text, write `$$name` on its own: `"kql": "type:ERROR $$namespace"`; `-$$namespace`
+  leaves the selected values out. `$$name:value` takes only the field from the variable.
 - It works inside a code-mode PromQL selector
   (`kube_pod_status_phase{$$namespace, phase="Running"}`). Outside `{…}` in PromQL it is not
   expanded.
