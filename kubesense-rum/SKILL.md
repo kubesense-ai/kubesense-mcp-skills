@@ -324,10 +324,10 @@ good/poor shares, Apdex, top errors and URLs, ANR rate) are in
 - **Row reads are bounded per call.** `search-rum` returns at most 200 rows a call and has
   no total. Paging has no depth limit. For questions that are a number,
   aggregate instead.
-- **Alert rules, but no SQL or SPL.** A RUM alert rule is built as import JSON — see
-  [kubesense-alerts → RUM Rules](../kubesense-alerts/SKILL.md#rum-rules); `create-alert` does
-  not take RUM. RUM is not a datasource for `execute-sql` or `execute-spl`. Say so rather
-  than approximating with logs.
+- **Alert rules, but no SQL or SPL.** Create a RUM alert rule with `create-alert`, passing the
+  same `rum_*` signal you query with, or as import JSON — see
+  [kubesense-alerts → RUM Rules](../kubesense-alerts/SKILL.md#rum-rules). RUM is not a
+  datasource for `execute-sql` or `execute-spl`. Say so rather than approximating with logs.
 - **No attribute-key discovery.** See Discover First.
 
 ## Failure Messages
