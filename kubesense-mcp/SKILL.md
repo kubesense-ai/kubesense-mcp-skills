@@ -191,8 +191,9 @@ A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
 `$name`. To run a panel as it is, prefer `run-dashboard-panel`, which resolves them. To run
 the query by hand, resolve them against the variables table and use `analyze-metrics`.
-A `$$name` elsewhere in a query (a `kql` text, a filter key, a code-mode selector) is a
-field reference: `<that variable's field> = $name`, dropped when nothing is selected.
+A `$$name` elsewhere in a dashboard query (a `kql` text, a filter key, a code-mode selector) is a
+field reference: `<that variable's field> = $name`, dropped when nothing is selected, and
+dropped too when the dashboard has no such variable. Off a dashboard it is plain text.
 
 **Log pipelines** — see [kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md)
 
@@ -333,6 +334,13 @@ duration_ms>500
 | combine | space or `AND`; `OR`; parentheses | space means AND |
 
 **Quoting.** Quote a value that has a space or a colon: `@msg:"a b"`, `resource:"/api/v1/x"`.
+
+**`$` is ordinary text outside a dashboard.** In a search, alert, SLO or pipeline `query`, a
+`$name`, `${name}` or `$$name` is searched as typed, not filled in and not an error:
+`service:$nope` is `service:"$nope"`, and a bare `$$nope` on logs is a word search on the
+body. On traces, events and RUM a bare `$$nope` is an error like any bare word, and
+`$$nope:x` is an unknown field. Only a dashboard fills variables in, and there a name the
+dashboard does not have is dropped with its term.
 
 **Field names are catalog labels.** An unknown field or a storage name comes back as an
 error naming the right label, with its position in the query (`at 4-12`). Read it; do not
