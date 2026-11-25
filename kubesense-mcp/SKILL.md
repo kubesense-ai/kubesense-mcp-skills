@@ -322,7 +322,7 @@ duration_ms>500
 | To match | Write | Notes |
 |---|---|---|
 | a value | `field:value` | exact and case-sensitive on a column |
-| any of several | `field:(a OR b)` | |
+| any of several | `field:(a OR b)` | a space inside the brackets is AND: `body:(a b)` needs both, and `service:(a b)` matches nothing |
 | wildcards | `field:checkout-*`, `field:5??` | `*` any run, `?` one character |
 | ignore case | `field:~error` | not needed on log `body`, which always ignores case |
 | exclude | `-field:value`, `NOT (...)` | `-field:(a OR b)` excludes both |
