@@ -39,7 +39,8 @@ required — omit `variables`, `subGrids`, and `subGridLayout` entirely and they
 ### Referencing a variable
 
 In a logs, traces, events or RUM `kql`, a variable is referenced as `field:$name`
-(`workload:$svc type:ERROR`). A selection of several values matches any of them, and a
+(`workload:$svc type:ERROR`), or as `$$name` on its own when it filters the variable's own
+field (see below). A selection of several values matches any of them, and a
 term whose name is not a variable of the dashboard is ignored, so check the spelling: the
 panel then runs without that term. In a metrics builder query it is `$name` in a
 `filters` value:

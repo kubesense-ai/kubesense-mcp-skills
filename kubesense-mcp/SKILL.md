@@ -191,7 +191,7 @@ A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
 `$name`. To run a panel as it is, prefer `run-dashboard-panel`, which resolves them. To run
 the query by hand, resolve them against the variables table and use `analyze-metrics`.
-A `$$name` elsewhere in a query (a filter key, a code-mode selector) is a
+A `$$name` elsewhere in a query (a `kql` text, a filter key, a code-mode selector) is a
 field reference: `<that variable's field> = $name`, dropped when nothing is selected.
 
 **Log pipelines** — see [kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md)

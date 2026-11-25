@@ -397,7 +397,8 @@ argument of `search-logs` and `analyze-logs`
 
 The server compiles `kql` against the signal's field catalog, with the dashboard's
 variables bound, and saves `filterMode: "KQL"`, `filters.kql` (an array holding the one
-text). A text that does not compile is refused and nothing is saved. A rum query also needs `rumEventType`. `field:*` means "has a value" and
+text). A text that does not compile is refused and nothing is saved. A term that names
+a variable the dashboard does not have is not refused: the panel runs without it. A rum query also needs `rumEventType`. `field:*` means "has a value" and
 `-field:*` "has no value", on a column as well as an attribute.
 
 Basic chips (`filterMode: "MFD"`, `filters: {"<field>": [...]}`) and Advanced text

@@ -53,8 +53,8 @@ An overlay's `kql` is an events query's `kql`, so everything in the SKILL.md sec
 **Filtering a logs / traces / events / rum query** and **Events query** applies:
 
 - `"kql": "source:github type:deployment"` ANDs the terms; `type:(deployment OR rollback)`
-  matches either value; `-environment:staging` excludes; `$$name` reads a dashboard
-  variable.
+  matches either value; `-environment:staging` excludes; `service:$name` reads a dashboard
+  variable, and `$$name` on its own is the variable's field with its selection.
 - Field names are the events catalog: `type`, `category`, `source`, `repository`,
   `environment`, `status`, `actor`, `severity`, `service`, `namespace`, `cluster`, and the
   rest that `get-fields` returns with `signal: "events"`. Discover values with it before
