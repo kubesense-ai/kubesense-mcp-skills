@@ -47,6 +47,11 @@ claude mcp add --scope user --transport http kubesense \
 An API key only works in `x-api-key`. Sent as `Authorization: Bearer <api-key>` it is
 read as a JWT and refused with 401.
 
+**Clients that reject hyphens in tool names**, such as Kiro, drop every KubeSense tool.
+Add the header `X-KubeSense-Tool-Names: underscore` next to the credential, and
+`tools/list` returns the same tools with `_` for `-` (`search_logs`). This skill
+names tools with hyphens. A call by either form works, with or without the header.
+
 Liveness: `GET /mcp_health`. To confirm *who* you are authenticated as, call
 `get-current-user` — no arguments, cheap, resolved from the request credentials.
 
