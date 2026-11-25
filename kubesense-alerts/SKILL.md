@@ -2,7 +2,7 @@
 name: kubesense-alerts
 description: Use when the user asks which KubeSense alerts are firing, why an alert fired or paged nobody, wants an alert rule created, edited or resolved ("alert me when…"), needs alert import JSON built or validated, wants a Datadog monitor converted, wants to alert on RUM (frontend errors, Web Vitals) or synthetic checks, or is setting up a maintenance window.
 metadata:
-  version: "2.5.0"
+  version: "2.6.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,alerts,alerting,monitors,thresholds,datadog-migration,promql,notification-channels,composite-conditions,rum,synthetics
@@ -33,7 +33,7 @@ Two distinct jobs, don't confuse them:
 | "why did this fire but page nobody?" | channel cadence first, then whether a **maintenance window** covers it |
 | "put these rules in a list / folder" | UI-only grouping — no MCP surface, say so rather than guessing |
 | you hand-built rule JSON and want it checked | `validate-alert-json` before handing it over |
-| "alert on page load time / frontend errors / crashes" (RUM) | a RUM rule, as import JSON — `create-alert` does not take RUM. See [RUM Rules](#rum-rules) |
+| "alert on page load time / frontend errors / crashes" (RUM) | a RUM rule — `create-alert` with a `rum_*` signal, or import JSON. See [RUM Rules](#rum-rules) |
 | "alert when a synthetic check fails / is slow" | one monitor: its own managed rule already does it. Across monitors, locations or a team: a metrics rule over `kubesense_synthetics_*`. See [Synthetics Rules](#synthetics-rules) |
 | "error budget", "burn rate", "are we meeting 99.9%" | [kubesense-slo](../kubesense-slo/SKILL.md) — burn-rate rules are generated from an SLO's `alert_types`, not hand-written |
 
@@ -162,11 +162,14 @@ monitors.
 }
 ```
 
-- `signal`: `metrics` | `logs` | `traces`.
-- **metrics** → supply `promql`. **logs/traces** → `where` (search-logs syntax) +
+- `signal`: `metrics` | `logs` | `traces`, or a RUM event type: `rum_session` | `rum_view` |
+  `rum_action` | `rum_error` | `rum_resource` | `rum_long_task` — see
+  [RUM Rules](#rum-rules).
+- **metrics** → supply `promql`. **logs/traces/RUM** → `where` (search-logs syntax) +
   `value_operation`, plus `fields` for anything other than `row_count`.
 - `value_operation` here is narrower than the query tools: `row_count`, `unique_count`,
-  `avg`, `sum`, `min`, `max` — **no percentiles**. For a p95 latency rule use import JSON.
+  `avg`, `sum`, `min`, `max` — **no percentiles for logs or traces**. For a p95 latency rule
+  use import JSON. RUM signals also take `p50`, `p75`, `p90`, `p95`, `p99`.
 - `where`, `group_by_fields` and `fields` take the **query tools' catalog labels** (`service`,
   `type`, `status_code`). Storage names such as `return_code` or `level` are refused with a
   "use the catalog label" message — the opposite of import JSON, where `advanced_query`
@@ -580,9 +583,40 @@ A rule can count or measure one RUM event type: `selectedMode: "rum"` plus `rumE
 with the RUM explorer's own field and filter code, so a rule reads exactly what a RUM chart
 with the same query shows.
 
-**Build it as import JSON** ([references/import-json.md](./references/import-json.md#rum-query))
-or over the REST API — `create-alert` does not take RUM. Run `validate-alert-json` on it:
-it checks the event type, measure, group-by and filter exactly as the import will.
+**Create one rule with `create-alert`**, passing the event type as the signal — the same
+`rum_*` names `get-fields`, `analyze-telemetry` and `search-rum` take. Call `get-fields` with
+that signal first: each event type has its own fields.
+
+```json
+{
+  "signal": "rum_view",
+  "name": "Checkout LCP p75 high",
+  "where": "app_name = shop AND view_name = \"/checkout\"",
+  "value_operation": "p75",
+  "fields": [ { "field": "lcp" } ],
+  "group_by_fields": [ { "field": "app_name" } ],
+  "threshold_operator": "greater_than",
+  "threshold_value": 2500000000,
+  "notification_channels": [1]
+}
+```
+
+- **One field per aggregation.** Every `value_operation` except `row_count` takes exactly
+  one field; `p75` over `lcp` and `fcp` is refused.
+- **One event type per rule.** Every query of the rule — formulas included — reads the
+  event type its signal names, so errors ÷ views is not one rule.
+- **Refusals are the save's own.** The tool builds the query; which fields the event type
+  can measure, group or filter on is decided by the same check the API runs before it
+  stores the rule, and its message comes back verbatim (`LIKE is not supported on view_url;
+  use = or IN`, `lcp is not a field of error`, `cannot group by session_id`). Fix what it
+  names rather than retrying.
+- The rule is stored with the compiled filter and no `raw_filters`; the editor shows that
+  filter as text and keeps it as stored when the rule is opened and saved.
+
+**Or build it as import JSON** ([references/import-json.md](./references/import-json.md#rum-query))
+or over the REST API — for several rules, a migration, or JSON the user wants to review.
+Run `validate-alert-json` on it: it checks the event type, measure, group-by and filter
+exactly as the import will.
 
 What differs from logs and traces:
 
