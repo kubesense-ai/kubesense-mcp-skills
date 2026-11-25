@@ -40,7 +40,8 @@ required — omit `variables`, `subGrids`, and `subGridLayout` entirely and they
 
 In a logs, traces, events or RUM `kql`, a variable is referenced as `field:$name`
 (`workload:$svc type:ERROR`). A selection of several values matches any of them, and a
-name that is not a variable is refused. In a metrics builder query it is `$name` in a
+term whose name is not a variable of the dashboard is ignored, so check the spelling: the
+panel then runs without that term. In a metrics builder query it is `$name` in a
 `filters` value:
 
 ```json
