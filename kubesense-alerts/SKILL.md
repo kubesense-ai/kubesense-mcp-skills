@@ -170,13 +170,12 @@ monitors.
 - `signal`: `metrics` | `logs` | `traces`, or a RUM event type: `rum_session` | `rum_view` |
   `rum_action` | `rum_error` | `rum_resource` | `rum_long_task` — see
   [RUM Rules](#rum-rules).
-- **metrics** → supply `promql`. **logs/traces** → `query` (KQL, as in search-logs) +
-  `value_operation`, plus `fields` for anything other than `row_count`. **RUM** → `where`
-  instead of `query`: alert rules on RUM do not take KQL.
+- **metrics** → supply `promql`. **logs/traces/RUM** → `query` (KQL, as in search-logs, or search-rum for RUM) +
+  `value_operation`, plus `fields` for anything other than `row_count`.
 - `value_operation` here is narrower than the query tools: `row_count`, `unique_count`,
   `avg`, `sum`, `min`, `max` — **no percentiles for logs or traces**. For a p95 latency rule
   use import JSON. RUM signals also take `p50`, `p75`, `p90`, `p95`, `p99`.
-- `query`, `where`, `group_by_fields` and `fields` take the **query tools' catalog labels** (`service`,
+- `query`, `group_by_fields` and `fields` take the **query tools' catalog labels** (`service`,
   `type`, `status_code`). Storage names such as `return_code` or `level` are refused with a
   "use the catalog label" message. The tool maps labels to the engine's names for you (`service` → `app_service` on traces, `type` → `level` on logs).
 - Required: `name`, `threshold_operator`, `threshold_value`, `notification_channels`.
@@ -595,7 +594,7 @@ that signal first: each event type has its own fields.
 {
   "signal": "rum_view",
   "name": "Checkout LCP p75 high",
-  "where": "app_name = shop AND view_name = \"/checkout\"",
+  "query": "app_name:shop view_name:\"/checkout\"",
   "value_operation": "p75",
   "fields": [ { "field": "lcp" } ],
   "group_by_fields": [ { "field": "app_name" } ],
@@ -614,6 +613,9 @@ that signal first: each event type has its own fields.
   stores the rule, and its message comes back verbatim (`LIKE is not supported on view_url;
   use = or IN`, `lcp is not a field of error`, `cannot group by session_id`). Fix what it
   names rather than retrying.
+- **`query` is KQL, the same text `search-rum` takes**, with one limit: an attribute takes exact
+  values only (`@plan:pro`, `@plan:(pro OR team)`, `@plan:*`). Patterns, `~` and comparisons on
+  an attribute are refused.
 - The rule is stored with the compiled filter and no `raw_filters`; the editor shows that
   filter as text and keeps it as stored when the rule is opened and saved.
 
