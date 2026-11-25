@@ -191,7 +191,7 @@ Drop logs. Dropped logs are not stored.
 
 | Field | Meaning |
 |---|---|
-| `kql` | Required. A KQL filter for the logs to drop, e.g. `workload:payment AND type:WARN` or `body:/timeout.*gold/`. Compiled into `conditions` (`condition_version` 2). See [SKILL.md](../SKILL.md). |
+| `kql` | Required. A KQL filter for the logs to drop, e.g. `workload:payment AND body:timeout` or `body:/timeout.*gold/`. Not `type`, which is not known yet in a pipeline. Compiled into `conditions` (`condition_version` 2). See [SKILL.md](../SKILL.md). |
 | `block_unmatched` | Drops logs that do **not** match instead. |
 
 A block rule with no match would drop **every** log the pipeline's inputs match, so the

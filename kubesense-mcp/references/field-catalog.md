@@ -219,6 +219,6 @@ Rules the grammar adds:
 - `duration_ms` takes numbers in milliseconds (`duration_ms>250`, decimals allowed); every
   other trace column is text or an enum.
 - `body` on logs is a word match: `body:timeout`; `body:*timeout*` is a substring. Both
-  ignore case.
+  ignore case. A word alone, `timeout`, means `body:timeout`; on other signals it is an error.
 - `AND` binds tighter than `OR`, and a space is `AND`: `type:ERROR OR namespace:a service:b`
   reads as `type:ERROR OR (namespace:a AND service:b)`. Add parentheses when you mean otherwise.

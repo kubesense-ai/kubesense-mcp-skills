@@ -57,7 +57,8 @@ matches by `kql` only: `field` + `pattern` as a block rule's match, and hand-wri
 `conditions`, `condition_version` and `raw_conditions`, are refused. A `replace` rule with no
 `kql` rewrites every log of the pipeline; the server accepts it, so set a `kql` unless that
 is the intent.
-An over-broad `kql` is **not** caught: it drops everything it matches.
+An over-broad `kql` is **not** caught: it drops everything it matches. `-type:INFO` is one:
+in a pipeline it matches every Kubernetes log (see [Processors](#processors)).
 `block_unmatched: true` inverts the test and drops everything the `kql` does *not* match.
 A block or replace rule read back from `get-log-pipeline` carries `kql` (what its stored
 match reads as), or `legacy` {reason, detail} when it has no KQL form.
@@ -254,7 +255,7 @@ Read first, then send the **complete** result you want:
 Common failures. Each is returned as a tool error; `invalid pipeline:` messages name the rule and the reason: fix and re-confirm.
 - `stale: pipeline changed since you read it; call get-log-pipeline again` (Danger 13). Also `stale: nothing was changed: who may edit this pipeline changed while you were acting on it. Re-read it with get-log-pipeline and try again`.
 - `invalid pipeline: updated_at is required to change a pipeline's name, inputs or rules: pass the value get-log-pipeline returned`.
-- `invalid pipeline: the pipeline produced a Vector config the validator rejected: <reason>` (Danger 12).
+- `invalid pipeline: the pipeline produced a Vector config the validator rejected: <reason>` (Danger 12). A reason `rule "<name>" (<type>) does not compile: ...` names the rule whose program Vector refuses: change its name, pattern or `kql`.
 - `invalid pipeline: rules[<i>] (block, "<name>"): a block rule with no match drops EVERY log of the pipeline. ...` (Danger 3). Give it a `kql`.
 - `invalid pipeline: rules cannot be deleted through this tool. The list must include every existing rule; missing: <id> ("<name>"). To stop the pipeline from running, set enabled to false instead`. Your list left a saved rule out; re-read and include it.
 - `invalid pipeline: rules[<i>]: id "<id>" is not a rule of this pipeline` and `rule id "<id>" is listed twice`.
@@ -280,15 +281,27 @@ that allow it.
 with `kql`.
 
 **Matching by KQL.** A `block` or `replace` rule matches by `kql` in its config, never by
-`field` and `pattern` or hand-written `conditions`: `{"kql": "workload:payment AND type:WARN"}`. It is the same KQL as the
+`field` and `pattern` or hand-written `conditions`: `{"kql": "workload:payment AND body:timeout"}`. It is the same KQL as the
 `query` of `search-logs`, plus one term that exists only here, a regular expression,
 `body:/timeout.*gold/`. The server compiles it into the rule's conditions
 (`condition_version` 2) and keeps the text; an unsupported or invalid text is refused with
-its position. `body:word` in a pipeline is a case-insensitive substring test, not the
-explorer's word match. A rule read back carries `kql` (what its stored conditions read as) or
+its position. Text matches as it does in `search-logs`: `body:error` is the whole word in any
+case, and `body:*err*` is a substring. Three terms differ, see below. A rule read back carries `kql` (what its stored conditions read as) or
 `legacy` {reason, detail} (they have no faithful KQL form, so leave them as they are). Send
 the rule back unchanged to keep it, or change `kql` (and drop `conditions`,
 `condition_version` and `raw_conditions`) to change what it matches. The tools always work at the latest KQL.
+
+**Where a pipeline match differs from `search-logs`.** A pipeline reads a log before it is
+stored, so a `kql` that finds the right logs in `search-logs` can match other logs here:
+
+- **`type` is not known yet.** On Kubernetes logs it is `UNKNOWN` until every pipeline has
+  run: `type:ERROR` matches nothing, and `-type:INFO` matches **every** log. The server does
+  not refuse either. Test the attribute, `@level:~error`, after checking with `search-logs`
+  that the logs carry `@level`; or put a `json-extract` rule with `new_field: "level"` before
+  the rule, in the same pipeline.
+- **A true or false attribute.** `@flag:true` matches the text `true`, not the value true.
+- **A number stored as text.** `@code>=500` reads numbers only; `search-logs` also reads the
+  text `"500"`. `@code:500` matches both.
 
 ## Rules
 

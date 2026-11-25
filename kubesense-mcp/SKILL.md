@@ -329,7 +329,7 @@ duration_ms>500
 | number | `field>n`, `>=`, `<`, `<=` | `duration_ms>250` is over 250 ms |
 | attribute | `@key:value` | on **both** logs and traces; takes every operator |
 | attribute is set | `@key:*` | a column always has a value, so `col:*` is pointless |
-| log text | `body:timeout`, `body:"connection refused"`, `body:*timeout*` | there is no bare word: free text needs a field |
+| log text | `body:timeout`, `body:"connection refused"`, `body:*timeout*` | on logs a word alone, `timeout`, means `body:timeout`; on traces, events and RUM free text needs a field |
 | combine | space or `AND`; `OR`; parentheses | space means AND |
 
 **Quoting.** Quote a value that has a space or a colon: `@msg:"a b"`, `resource:"/api/v1/x"`.

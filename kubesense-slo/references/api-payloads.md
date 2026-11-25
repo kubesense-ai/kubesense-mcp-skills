@@ -57,11 +57,7 @@ Identical to an alert rule's `query_config` entry.
   "value_operation": "row_count",  // row_count | unique_count | avg | sum | min | max | p95 | p99
   "fields": [],                    // required for any non-count value_operation: [{"field":"duration","type":"float"}]
   "groupBy": [],                   // [{"field":"workload","type":"string","is_attribute":false}]
-  "unified_filter": {              // traces/logs only
-    "type": "common",              // "common" | "advanced"
-    "common_filter": [ {"field": "app_service", "operation": "IN", "values": ["checkout"]} ],
-    "adv_filters": {}
-  },
+  "kql": "service:checkout",       // traces/logs only: the filter, in KQL with catalog labels
   "promql": "",                    // metrics only
   "alert_ids": []                  // alert SLOs only
 }
@@ -83,6 +79,18 @@ send it, and a top-level `is_free_search` on the SLO body is ignored.
 > in one place is enough; setting it in both with different values is asking for
 > confusion.
 
+**Filter with `kql`.** It is the same KQL as the MCP tools' `query`, so a text you tried with
+`analyze-traces` or `analyze-logs` works here unchanged. The server compiles it into
+`unified_filter`, stores both, and returns `kql` on a read. A text it cannot compile is a
+`400` with the position.
+
+**The older form, `unified_filter`.** Use it only when the server answers
+`400 kql_not_enabled`:
+
+```json
+{ "type": "common", "common_filter": [ {"field": "app_service", "operation": "IN", "values": ["checkout"]} ], "adv_filters": {} }
+```
+
 **Filter operations** (`common_filter[].operation`): `IN`, `NIN`, `EQ`, `NEQ`, `LT`,
 `LTE`, `GT`, `GTE`, `LIKE`, `ILIKE`, `NOT_LIKE`, `SUBSTR_ILIKE`, `HAS_TOKEN`,
 `HAS_ANY_TOKENS`, `HAS_ALL_TOKENS`. `IN` with a values array is the normal case.
@@ -103,7 +111,7 @@ For a nested AND/OR tree set `"type": "advanced"` and fill `adv_filters`:
 }
 ```
 
-**Field names come from the alert engine's allow-lists** (`app_service`, `level`,
+**In a `unified_filter`, field names come from the alert engine's allow-lists** (`app_service`, `level`,
 `return_code`, `pod_name`, …), not the query tools' catalog labels. See
 [kubesense-alerts](../../kubesense-alerts/SKILL.md#field-names--a-different-vocabulary).
 
@@ -133,29 +141,14 @@ Availability of the checkout service, split per workload.
     "selectedMode": "traces",
     "value_operation": "row_count",
     "groupBy": [{"field": "workload", "type": "string", "is_attribute": false}],
-    "unified_filter": {
-      "type": "common",
-      "common_filter": [
-        {"field": "app_service", "operation": "IN", "values": ["checkout"]},
-        {"field": "role",        "operation": "IN", "values": ["server"]},
-        {"field": "status",      "operation": "IN", "values": ["ok"]}
-      ],
-      "adv_filters": {}
-    }
+    "kql": "service:checkout role:server status:ok"
   },
   "total_events_filter": {
     "label": "B",
     "selectedMode": "traces",
     "value_operation": "row_count",
     "groupBy": [{"field": "workload", "type": "string", "is_attribute": false}],
-    "unified_filter": {
-      "type": "common",
-      "common_filter": [
-        {"field": "app_service", "operation": "IN", "values": ["checkout"]},
-        {"field": "role",        "operation": "IN", "values": ["server"]}
-      ],
-      "adv_filters": {}
-    }
+    "kql": "service:checkout role:server"
   },
   "alert_types": ["burn_rate_fast", "burn_rate_slow", "error_budget_low"],
   "notification_channels": [1]

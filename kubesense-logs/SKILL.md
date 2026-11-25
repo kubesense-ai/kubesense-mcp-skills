@@ -102,7 +102,7 @@ and is not needed on `body`, which always ignores case; `-field:value` or `NOT` 
 terms separated by a space (or `AND`) must all hold, `OR` gives alternatives, parentheses
 group. `AND` binds tighter than `OR`. Numeric fields take `field>n`, `>=`, `<`, `<=`.
 
-**Log text** is `body`, and there is no bare word: `body:timeout` matches the whole word
+**Log text** is `body`, and a word alone, `timeout`, means `body:timeout`. It matches the whole word
 (a token), so it finds "request timeout" but not "timeouts". `body:"node-agent"` matches
 rows that contain all of its words anywhere; `body:(timeout AND refused)` needs both words;
 `body:*timeout*` is a substring. Every body match ignores case.

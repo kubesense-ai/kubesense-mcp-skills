@@ -94,20 +94,19 @@ KubeSense equivalent depends on where the data actually lives in your cluster:
 | a real Prometheus counter | `selectedMode: "metrics"` with `sum(increase(<metric>{…}[1m]))` on both sides |
 | `logs` count queries | `selectedMode: "logs"`, `value_operation: "row_count"` |
 
-Scope translation for the traces path — note these are the **alert engine's** field
-names, not the query tools' catalog labels:
+Scope translation for the traces path, as `kql` in the query tools' catalog labels:
 
-| Datadog scope | KubeSense filter |
+| Datadog scope | KubeSense KQL |
 |---|---|
-| `service:checkout` | `{"field": "app_service", "operation": "IN", "values": ["checkout"]}` |
-| `!http.status_class:5xx` | `{"field": "return_code", "operation": "NOT_LIKE", "values": ["5__"]}` (`_` = one char) |
-| `http.status_code:200` | `{"field": "return_code", "operation": "IN", "values": ["200"]}` |
+| `service:checkout` | `service:checkout` |
+| `!http.status_class:5xx` | `-status_code:5??` |
+| `http.status_code:200` | `status_code:200` |
 | `env:prod` | whichever field your deployment carries it on — **discover it**, often `env_type` or a cluster/namespace |
-| `resource_name:POST_/checkout` | `{"field": "resource", "operation": "IN", "values": ["post_/checkout"]}` |
+| `resource_name:POST_/checkout` | `resource:post_/checkout` |
 | `by {service}` | `groupBy: [{"field": "workload", …}]` — see the grouping note below |
 
 Datadog's convention "good = total − errors" becomes a good-side filter of
-`status = ok`, or a `return_code NOT_LIKE "5__"`. Do not express the numerator as a
+`status:ok`, or `-status_code:5??`. Do not express the numerator as a
 subtraction: there is **no formula mode on an SLI query**, and a ratio does not belong
 in a `by_count` SLO in the first place — the evaluator computes good/total itself. See
 [Formulas and Ratios](../SKILL.md#formulas-and-ratios) for where a `(A/B)*100` from
@@ -239,33 +238,18 @@ KubeSense — preview it, then create it:
   "workload": "", "namespace": "", "cluster": "", "customer_identifier": "",
   "good_events_filter": {
     "label": "A", "selectedMode": "traces", "value_operation": "row_count", "groupBy": [],
-    "unified_filter": {
-      "type": "common",
-      "common_filter": [
-        {"field": "app_service",  "operation": "IN",       "values": ["checkout"]},
-        {"field": "role",         "operation": "IN",       "values": ["server"]},
-        {"field": "return_code",  "operation": "NOT_LIKE", "values": ["5__"]}
-      ],
-      "adv_filters": {}
-    }
+    "kql": "service:checkout role:server -status_code:5??"
   },
   "total_events_filter": {
     "label": "B", "selectedMode": "traces", "value_operation": "row_count", "groupBy": [],
-    "unified_filter": {
-      "type": "common",
-      "common_filter": [
-        {"field": "app_service", "operation": "IN", "values": ["checkout"]},
-        {"field": "role",        "operation": "IN", "values": ["server"]}
-      ],
-      "adv_filters": {}
-    }
+    "kql": "service:checkout role:server"
   },
   "alert_types": ["burn_rate_fast", "burn_rate_slow"],
   "notification_channels": [1]
 }
 ```
 
-`role = server` is not in the Datadog query. It is there because
+`role:server` is not in the Datadog query. It is there because
 `trace.http.request.hits` counts inbound requests to the service, and without it the
 client spans of everything calling checkout are counted too. Add it, and say you did.
 
