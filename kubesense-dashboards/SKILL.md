@@ -673,6 +673,10 @@ list-dashboards  →  get-dashboard-details  →  update-dashboard (panel_operat
 you are about to change, and call it only when the user asked for the change. It needs
 edit access on the dashboard.
 
+`list-dashboards` takes an optional KQL `query` over `name`, `type` (`system` or `user`),
+`integrated`, `created_by`, `owner`, `access` and `public` (e.g. `type:user name:*latency*`),
+ANDed with `search`, `type` and what the caller may see.
+
 `list-dashboards` caps rows at `limit`, but its header `total_count` is the real number of
 matching dashboards; if `truncated=true`, say how many exist and page or narrow by `type`.
 

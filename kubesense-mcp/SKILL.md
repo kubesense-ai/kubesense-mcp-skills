@@ -382,7 +382,10 @@ for the field name; use only those.
 
 Every tool takes a filter only as KQL: `query` on `search-logs`, `search-traces`,
 `search-rum`, `analyze-logs`, `analyze-traces`, `create-alert` and each `queries[].query`
-of `analyze-telemetry`; `kql` on dashboard queries, variables and overlays. A call that
+of `analyze-telemetry`; `kql` on dashboard queries, variables and overlays. The list tools
+`list-pods`, `list-nodes`, `list-workloads`, `list-issues`, `list-alert-rules` and
+`list-dashboards` also take an optional KQL `query` next to their own arguments; their
+input schemas name the fields each one filters on. A call that
 sends `where`, `filters`, `filter`, `advanced`, `advanced_query`, `unified_filter`,
 `raw_filters`, `common_filter`, `adv_filters`, `filter_mode` or `filterMode` is refused
 with a hint naming the argument to use, before anything runs. To translate an old filter:
