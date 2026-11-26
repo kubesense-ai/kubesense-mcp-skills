@@ -311,7 +311,7 @@ in KQL. Both signals use the same grammar.
 
 ```
 type:ERROR namespace:production
-status:error role:server
+status:Error role:Server
 namespace:(production OR staging)
 -env_type:dev
 body:timeout
@@ -477,7 +477,7 @@ way to get a ratio, error rate, or percentage.
   "query_type": "instant",
   "queries": {
     "A": { "selectedMode": "traces", "value_operation": "row_count" },
-    "B": { "selectedMode": "traces", "query": "status:error", "value_operation": "row_count" },
+    "B": { "selectedMode": "traces", "query": "status:Error", "value_operation": "row_count" },
     "C": { "query_type": "formula", "expression": "(B/A)*100" }
   }
 }

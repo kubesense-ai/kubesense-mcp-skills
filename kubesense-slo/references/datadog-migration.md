@@ -106,7 +106,7 @@ Scope translation for the traces path, as `kql` in the query tools' catalog labe
 | `by {service}` | `groupBy: [{"field": "workload", …}]` — see the grouping note below |
 
 Datadog's convention "good = total − errors" becomes a good-side filter of
-`status:ok`, or `-status_code:5??`. Do not express the numerator as a
+`status:OK`, or `-status_code:5??`. Do not express the numerator as a
 subtraction: there is **no formula mode on an SLI query**, and a ratio does not belong
 in a `by_count` SLO in the first place — the evaluator computes good/total itself. See
 [Formulas and Ratios](../SKILL.md#formulas-and-ratios) for where a `(A/B)*100` from
@@ -238,18 +238,18 @@ KubeSense — preview it, then create it:
   "workload": "", "namespace": "", "cluster": "", "customer_identifier": "",
   "good_events_filter": {
     "label": "A", "selectedMode": "traces", "value_operation": "row_count", "groupBy": [],
-    "kql": "service:checkout role:server -status_code:5??"
+    "kql": "service:checkout role:Server -status_code:5??"
   },
   "total_events_filter": {
     "label": "B", "selectedMode": "traces", "value_operation": "row_count", "groupBy": [],
-    "kql": "service:checkout role:server"
+    "kql": "service:checkout role:Server"
   },
   "alert_types": ["burn_rate_fast", "burn_rate_slow"],
   "notification_channels": [1]
 }
 ```
 
-`role:server` is not in the Datadog query. It is there because
+`role:Server` is not in the Datadog query. It is there because
 `trace.http.request.hits` counts inbound requests to the service, and without it the
 client spans of everything calling checkout are counted too. Add it, and say you did.
 

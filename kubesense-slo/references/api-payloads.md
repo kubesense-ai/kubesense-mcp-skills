@@ -141,14 +141,14 @@ Availability of the checkout service, split per workload.
     "selectedMode": "traces",
     "value_operation": "row_count",
     "groupBy": [{"field": "workload", "type": "string", "is_attribute": false}],
-    "kql": "service:checkout role:server status:ok"
+    "kql": "service:checkout role:Server status:OK"
   },
   "total_events_filter": {
     "label": "B",
     "selectedMode": "traces",
     "value_operation": "row_count",
     "groupBy": [{"field": "workload", "type": "string", "is_attribute": false}],
-    "kql": "service:checkout role:server"
+    "kql": "service:checkout role:Server"
   },
   "alert_types": ["burn_rate_fast", "burn_rate_slow", "error_budget_low"],
   "notification_channels": [1]

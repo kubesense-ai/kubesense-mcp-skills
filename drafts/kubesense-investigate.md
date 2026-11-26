@@ -143,7 +143,7 @@ If the symptom is latency or request errors, get a `trace_id` — from `search-t
 to the workload, or from `list-issues`:
 
 ```
-search-traces  query: "workload:checkout status:error"   → trace_id
+search-traces  query: "workload:checkout status:Error"   → trace_id
 get-distributed-trace(trace_id, from_time, to_time)
 ```
 

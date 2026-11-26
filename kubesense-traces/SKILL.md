@@ -86,14 +86,14 @@ topology.
 
 | Field | Values |
 |---|---|
-| `status` | `error`, `ok` |
-| `role` | `server`, `client` |
+| `status` | `Error`, `OK` |
+| `role` | `Server`, `Client` |
 | `protocol` | `HTTP`, `gRPC`, `TCP`, `MongoDB`, `Redis`, `MySQL`, `PostgreSQL` |
 | `method` | `GET`, `POST`, `PUT`, `DELETE`, `PATCH` |
 | `source` | `eBPF`, `OTel` |
 | `status_code` | `200`, `400`, `401`, `403`, `404`, `500`, `502`, `503`, `504` |
 
-`status:error` — lowercase, unlike logs' UPPERCASE `type:ERROR`.
+`status`, `role` and `request_type` take only their labels (`status:Error`, `status:OK`, `role:Server`, `request_type:External`), in any case; the stored value (`request_type:true`) is refused. Logs' `type:ERROR` is a plain value.
 
 `status_code` is a **string** field, so a range does not work (`status_code>=500` is an
 error that says so): enumerate the codes, `status_code:(500 OR 502 OR 503)`, or write a class
@@ -178,10 +178,10 @@ summary line suggests.
 | Question | Shape |
 |---|---|
 | p95 latency by service, over time | `range`, group `service`, `fields: [duration_ms]`, `p95` |
-| top 5 services by errors, now | `instant`, `query: "status:error"`, group `service`, `row_count`, `sort_direction: DESC`, `limit: 5` |
-| errors by status code | `instant`, `query: "status:error"`, group `status_code`, `row_count` |
+| top 5 services by errors, now | `instant`, `query: "status:Error"`, group `service`, `row_count`, `sort_direction: DESC`, `limit: 5` |
+| errors by status code | `instant`, `query: "status:Error"`, group `status_code`, `row_count` |
 | slowest endpoints | `instant`, group `resource`, `fields: [duration_ms]`, `p99`, `sort_direction: DESC` |
-| server-side only | add `query: "role:server"` — otherwise client spans double-count |
+| server-side only | add `query: "role:Server"` — otherwise client spans double-count |
 
 **Error rate as a percentage** needs two queries plus a formula → `analyze-telemetry`.
 See [kubesense-mcp](../kubesense-mcp/SKILL.md).
@@ -295,10 +295,10 @@ Steps 4–5 use [kubesense-infra](../kubesense-infra/SKILL.md) and
    `duration` is the legacy nanosecond field.
 6. `@attr:value` filters work on traces. In `group_by_fields`/`fields` use
    `is_attribute: true` instead of the prefix.
-7. Enum values are lowercase (`status:error`, `role:server`); `status_code` is a
+7. `status`, `role` and `request_type` take only their labels (`status:Error`, `role:Server`, `request_type:Internal`), in any case; `status_code` is a
    string, so enumerate codes or use `status_code:5??` rather than a range.
 8. `value_operation` is `row_count`, not `count`.
-9. Add `role:server` when counting requests, or client spans double-count.
+9. Add `role:Server` when counting requests, or client spans double-count.
 10. `get-distributed-trace` needs a window containing the trace's start; widen it first if
     nothing is found.
 11. Don't try to page traces exhaustively — `observation_point` can't be pinned. Shorten
