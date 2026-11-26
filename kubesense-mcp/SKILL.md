@@ -330,6 +330,7 @@ duration_ms>500
 | number | `field>n`, `>=`, `<`, `<=` | `duration_ms>250` is over 250 ms |
 | attribute | `@key:value` | on **both** logs and traces; takes every operator |
 | attribute is set | `@key:*` | a column always has a value, so `col:*` is pointless |
+| any element of a log array | `@tags[*]:prod` | **logs only**; see **Arrays in a log** below |
 | log text | `body:timeout`, `body:"connection refused"`, `body:*timeout*` | on logs a word alone, `timeout`, means `body:timeout`; on traces, events and RUM free text needs a field |
 | combine | space or `AND`; `OR`; parentheses | space means AND |
 
@@ -349,6 +350,15 @@ retry the same text.
 **Attributes** carry `@` in `query`, on logs and on traces alike (`@db.system:postgresql`).
 In `group_by_fields`, `fields`, `required_fields` and `sort_by` an attribute is
 `{"field": "db.system", "is_attribute": true}` with no `@`.
+
+**Arrays in a log (logs only).** `@tags:x` reads the attribute named `tags` as one value;
+`@tags[*]:x` looks inside the parsed-log array `tags` and matches when ANY element matches,
+and `@tags[0]:x` reads one element by position. `[*]` takes `:value`, `"a b"`, `prod*`, `~Prod`
+(ignore case), `(a OR b)`, `(a AND b)`, `-@tags[*]:x` (no element is `x`), `@tags[*]:*` (the
+array exists), comparisons such as `@tags[*]>5` (elements read as numbers) and `@"tags[*]":x`.
+Not valid: `[*]` anywhere but the end of the key (`@a[*].b`, `@a[*][0]`, `@a[0][*]`), `[*]` on
+traces, RUM or events (error: `@tags[*] reads a list in the parsed log, which only logs have`),
+and a `/regex/` term on `[*]`.
 
 **Numbers in attributes.** `@latency>200` reads a number or text such as `"250"`; a value
 that is not a number matches neither the comparison nor its negation. On logs and events,
