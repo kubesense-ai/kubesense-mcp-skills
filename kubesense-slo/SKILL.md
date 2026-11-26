@@ -134,7 +134,7 @@ Minimum viable `by_count` SLO over traces:
   "status": "active",
   "cluster": "", "namespace": "", "workload": "", "customer_identifier": "",
   "operation": "", "threshold_value": 0, "value": 0,
-  "good_events_filter":  { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "kql": "service:checkout status:OK" },
+  "good_events_filter":  { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "kql": "service:checkout status:ok" },
   "total_events_filter": { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "kql": "service:checkout" },
   "alert_types": ["burn_rate_fast", "error_budget_low"],
   "notification_channels": [1]
@@ -174,7 +174,7 @@ rule's query applies here.
 | Key | Meaning |
 |---|---|
 | `selectedMode` | `traces` \| `logs` \| `metrics`. **Defaults to `traces`** when empty. |
-| `kql` | traces/logs filter, in KQL with catalog labels (`service:checkout status:OK`). The server compiles and stores it. Needs an explicit `selectedMode`. |
+| `kql` | traces/logs filter, in KQL with catalog labels (`service:checkout status:ok`). The server compiles and stores it. Needs an explicit `selectedMode`. |
 | `unified_filter` | traces/logs filter tree, the older form: `{type, common_filter[], adv_filters{}}`. Use it only when the server answers `kql_not_enabled`. Never send both for a new SLO. |
 | `promql` | metrics only — the whole metrics query. (An alert rule's `queryMode` has no field here and is dropped.) |
 | `value_operation` | `row_count` (the normal choice), `unique_count`, `avg`, `sum`, `min`, `max`, percentiles |

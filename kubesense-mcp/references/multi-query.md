@@ -21,7 +21,7 @@ For one aggregation over one datasource, use `analyze-logs` / `analyze-traces` /
   "to_time": "2026-07-30T11:00:00Z",
   "query_type": "range",
   "queries": {
-    "A": { "selectedMode": "traces", "query": "status:Error", "value_operation": "row_count" },
+    "A": { "selectedMode": "traces", "query": "status:error", "value_operation": "row_count" },
     "B": { "selectedMode": "traces", "value_operation": "row_count" },
     "C": { "query_type": "formula", "expression": "(A/B)*100" }
   }
@@ -119,7 +119,7 @@ Either group both, or group neither.
   "queries": {
     "A": {
       "selectedMode": "traces",
-      "query": "status:Error",
+      "query": "status:error",
       "group_by_fields": [ { "field": "workload", "is_attribute": false } ],
       "value_operation": "row_count"
     },

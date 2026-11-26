@@ -154,7 +154,7 @@ monitors.
   "signal": "traces",
   "name": "Checkout average latency high",
   "description": "average server latency above 500ms for 5 minutes",
-  "query": "service:checkout role:Server",
+  "query": "service:checkout role:server",
   "value_operation": "avg",
   "fields": [ { "field": "duration" } ],
   "group_by_fields": [ { "field": "workload" } ],
