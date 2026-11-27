@@ -10,7 +10,7 @@ skill for the tool layer they share.
 
 | Skill | Description |
 |---|---|
-| **kubesense-mcp** | Tool layer — connection, auth, full tool inventory, the WHERE/field-name contract |
+| **kubesense-mcp** | Tool layer — connection, auth, full tool inventory, the KQL filter / field-name contract |
 | **kubesense-logs** | Search and aggregate logs |
 | **kubesense-traces** | Spans, latency percentiles, error rates, distributed traces |
 | **kubesense-metrics** | PromQL/MetricsQL over Kubernetes and infrastructure metrics |

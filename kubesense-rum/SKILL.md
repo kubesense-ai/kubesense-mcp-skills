@@ -2,7 +2,7 @@
 name: kubesense-rum
 description: Use when the user asks KubeSense about real user monitoring (RUM) — page load time, web vitals (LCP, INP, CLS), frontend or mobile errors and crashes, user sessions, views, clicks and actions, slow resource requests or long tasks in a browser or mobile app.
 metadata:
-  version: "1.2.0"
+  version: "2.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,rum,real-user-monitoring,web-vitals,sessions,frontend,errors,observability
@@ -11,7 +11,7 @@ metadata:
 # KubeSense RUM
 
 Requires the KubeSense MCP server; see **[kubesense-mcp](../kubesense-mcp/SKILL.md)** for
-connection, auth, and the shared WHERE-clause reference. RUM queries resolve RBAC against
+connection, auth, and the shared KQL filter reference. RUM queries resolve RBAC against
 the **RUM** module (`rbac(rum)`). A key without it fails with
 `rbac(rum): this API key does not have access to this resource`; ask for the RUM grant
 rather than retrying. `search-rum` needs the same grant. So do the RUM list routes it reads through
@@ -51,7 +51,7 @@ To compare RUM with logs or traces, or to compute a rate, put several sub-querie
 
 Call `get-fields` with the signal you will query. The field set differs per event type:
 `lcp` exists only on `rum_view`, `error_type` only on `rum_error`, and `view_name` allows
-LIKE on `rum_view` but not elsewhere. The full catalog for every event type is in
+wildcards on `rum_view` but not elsewhere. The full catalog for every event type is in
 **[references/field-catalog.md](./references/field-catalog.md)**; use it to check a name
 before the call, and `get-fields` as the authority for the deployment you are talking to.
 
@@ -59,13 +59,14 @@ before the call, and `get-fields` as the authority for the deployment you are ta
 
 - The header line is `# signal=rum_view total_count=<N> truncated=<bool> note=RUM has no
   attribute-key scan; ...`. There is no `attribute_scan_error`. The note says to type a
-  custom attribute as `@key` (no LIKE on attributes) and a feature flag as
+  custom attribute as `@key` (it takes every operator) and a feature flag as
   `feature_flag.<key>`.
-- Operators come as sets (`# ops.o1=EQ|NEQ|IN|NIN|LT|GT|LTE|GTE`). A field that allows
-  LIKE has a set that includes `LIKE` / `ILIKE`; an exact field such as `user_email` does
-  not. Trust the set over any assumption about the field.
+- Forms come as sets (`# forms.f1=<f>:v|<f>:(a OR b)|-<f>:v|<f>>n ...`), with `<f>` for the
+  field name. A field that allows wildcards has a set that includes `<f>:val*` and `<f>:~val`;
+  an exact field such as `user_email` does not. Trust the set over any assumption about the
+  field.
 - A trailing `notes` column appears when some field has a note, for example
-  `filter-only: use it in WHERE only (milliseconds); aggregate the base field lcp instead; platform: browser`
+  `filter-only: use it in query only (milliseconds); aggregate the base field lcp instead; platform: browser`
   on `lcp_ms` and `filter-only: not groupable; platform: browser` on `lcp_target_selector`.
 - `enum_values` carries `severity`'s `crash` and `error`.
 - Pass `search` to narrow the list (`search=lcp` returns `lcp`, `lcp_ms`, `lcp_s` and
@@ -83,10 +84,10 @@ requests were, the text of an error). Use `analyze-telemetry` for anything that 
 counts, rates, percentiles and trends. Reading rows to compute a count is slower and cuts
 off at the page limit.
 
-Call `get-fields` with the same `signal` first. `where` and `required_fields` take catalog
+Call `get-fields` with the same `signal` first. `query` and `required_fields` take catalog
 labels, `@key` for an attribute and `feature_flag.<key>` for a flag (views and errors only).
 `from_time`, `to_time` and `signal` are required. There is no `clusters` argument; passing
-one is refused. Scope to an app with `application_id = "<id>"` or `env = production`.
+one is refused. Scope to an app with `application_id:<id>` or `env:production`.
 
 **The slowest failed requests in the last hour, 20 per page**
 
@@ -95,7 +96,7 @@ one is refused. Scope to an app with `application_id = "<id>"` or `env = product
   "signal": "rum_resource",
   "from_time": "2026-10-20T10:00:00Z",
   "to_time": "2026-10-20T11:00:00Z",
-  "where": "status_code >= 500",
+  "query": "status_code>=500",
   "sort_by": "duration_ms",
   "sort_order": "desc",
   "page_size": 20
@@ -126,7 +127,7 @@ row. Every row also carries `application_id`, `session_id`, `row_id` (the event'
 Whatever `required_fields` you ask for, every row also carries the columns that identify it, always present: sessions `application_id`, `session_id`, `session_start`, `session_has_replay`; views add `view_id`, `view_start`; actions `action_id`, `action_start`; errors `error_id`, `error_start`, `is_crash`; resources `resource_id`, `resource_start`; long tasks `task_id`, `task_start` (each with `view_id` except sessions).
 
 **Paging.** There is no total (`total_count=unknown`). While `next_cursor` is non-empty,
-call again with the same `from_time`, `to_time`, `where`, `sort_by`, `sort_order`,
+call again with the same `from_time`, `to_time`, `query`, `sort_by`, `sort_order`,
 `page_size` and `required_fields`, and `cursor=<next_cursor>`. The cursor is a page token
 bound to the query, so a cursor replayed under a different query is refused.
 
@@ -156,43 +157,45 @@ is left as asked.
 **No read-budget errors.** The list reads have no read-budget limit. A slow read can still
 time out; shorten the window or filter on `application_id`, `env` or `session_id`.
 
-## WHERE Syntax
+## Filter Syntax (KQL `query`)
 
-The shared syntax from [kubesense-mcp](../kubesense-mcp/SKILL.md#where-syntax) applies,
-with the field names from the RUM catalog.
+The shared syntax from [kubesense-mcp](../kubesense-mcp/SKILL.md#filter-syntax-kql-query)
+applies, with the field names from the RUM catalog.
 
 ```
-env = production AND browser_name = Chrome
-severity = crash AND country IN (US, DE)
-view_name ILIKE "%checkout%"                    (rum_view only)
-lcp_ms > 2500 AND browser_name = Chrome         (rum_view)
-status_code >= 500 AND resource_host = api.example.com   (rum_resource)
-error_count > 0                                 (rum_session)
-feature_flag.new_checkout = true                (any event type)
-@checkout.step = payment                        (attribute)
+env:production browser_name:Chrome
+severity:crash country:(US OR DE)
+view_name:*checkout*                            (rum_view only)
+lcp_ms>2500 browser_name:Chrome                 (rum_view)
+status_code>=500 resource_host:api.example.com  (rum_resource)
+error_count>0                                   (rum_session)
+feature_flag.new_checkout:true                  (any event type)
+@checkout.step:payment                          (attribute)
+@plan:pr*  @seats>=5                            (attribute patterns and comparisons)
 ```
 
-Quote values that contain `/`, `:`, `%` or a space. Write `NOT (x IN (...))`, not
-`x NOT IN (...)`.
+Quote values that contain a space or a colon. Exclude with `-field:value` or
+`-field:(a OR b)`; there is no `NOT IN`. `query` is the only filter argument; a legacy one such as `where` is refused.
 
 ## Rules
 
-1. **LIKE and ILIKE only on fields whose `LIKE` column says `yes`** in the catalog.
-   Those are the low-cardinality columns (`env`, `country`, `error_type`, `action_name`,
-   `view_name` on `rum_view`). Everything else (`user_id`, `view_url`, `resource_url`,
-   `error_message`, `view_name` on the other event types) takes `=` and `IN`. A LIKE on
-   them is refused with `LIKE is not supported on <field>; use = or IN`.
-2. **No LIKE on `@attribute` fields.** Attributes take `=`, `!=`, `IN`, `<`, `>`, `<=`
-   and `>=`. Comparisons need a number. `@plan LIKE ...` is refused with
-   `operator "LIKE" not allowed for rum_view attribute field "plan"`.
+1. **Wildcards and `~` only on fields whose `forms` set lists them** in `get-fields` and the
+   catalog's `LIKE` column. That is every text field people search by pattern: names, URLs,
+   paths, hosts, `error_message`, `error_stack`, `user_name`, `user_email`, `device_name`, and
+   low-cardinality columns such as `env` and `country`. Ids (`session_id`, `view_id`,
+   `trace_id`, `user_id`, `issue_id`, …) take `field:value` and `field:(a OR b)` only. A
+   wildcard on them is refused with the field and the position.
+2. **Attributes take every operator.** `@plan:pro`, `@plan:pr*`, `@seats>=5`, `@plan:*` (the
+   attribute is set), `-@plan:pro`. A comparison reads a number; a value that is not a number
+   matches neither the comparison nor its negation.
 3. **Array fields filter only.** `service`, `state`, `city`, `network_connectivity` and
    `ip` on `rum_session`, `ip` on `rum_view`, and `action_id` on `rum_error`,
-   `rum_resource` and `rum_long_task` hold lists. `=` and `IN` test membership. They
+   `rum_resource` and `rum_long_task` hold lists. `field:value` and `field:(a OR b)` test membership. They
    cannot be grouped or measured.
 4. **Durations are nanoseconds.** Raw columns (`lcp`, `duration`, `loading_time`,
    `time_spent`, …) are stored and returned in nanoseconds, and cannot be a group-by.
    Each has an `_ms` and an `_s` twin (`lcp_ms`, `duration_s`) that is **filter-only**: use
-   it in `where` (`lcp_ms > 2500` filters at 2.5 seconds), never as an aggregation field,
+   it in `query` (`lcp_ms>2500` filters at 2.5 seconds), never as an aggregation field,
    group-by or list column. To aggregate a duration, use the base field (`p75` of `lcp`);
    the result is nanoseconds.
 5. **Group-by is `no` for free-search ids and text** (`session_id`, `view_id`,
@@ -200,15 +203,15 @@ Quote values that contain `/`, `:`, `%` or a space. Write `NOT (x IN (...))`, no
    the top N groups (the page size): `error_message` (grouped by its first 200
    characters), `fingerprint`, `issue_id`, and `view_url` / `resource_url` (grouped by the
    path, without query string or fragment). Filters still read the full value, so a URL
-   group label is a path, and `view_url = "<path>"` matches only URLs that have no query
+   group label is a path, and `view_url:"<path>"` matches only URLs that have no query
    string.
 6. **`feature_flag.<key>`** filters on every event type. It groups or measures only on
    `rum_view` and `rum_error`, where the flag value is stored on the row. On the other
    four it is stored per session, so a group-by there is refused. Keys are
    case-sensitive and values are text (`true`, `dark`, `5`). A group-by on a flag key
-   (`feature_flag.new-checkout`) is confirmed on `rum_view`. The `where` form follows the
+   (`feature_flag.new-checkout`) is confirmed on `rum_view`. The `query` form follows the
    engine source and has not been run against a live server.
-7. **Attributes need `@`** in `where` (`@checkout.step`) and `is_attribute: true`
+7. **Attributes need `@`** in `query` (`@checkout.step`) and `is_attribute: true`
    without `@` in `group_by_fields` / `fields`. There is no discovery for the key.
 8. **`severity`** on `rum_error` is `crash` or `error`, lowercase. It is the label for
    `is_crash`; type `severity`, not `is_crash` as a string.
@@ -237,7 +240,7 @@ Set `selectedMode` to the signal. Omitting it makes the sub-query a metrics quer
   "queries": {
     "A": {
       "selectedMode": "rum_view",
-      "where": "browser_name = Chrome",
+      "query": "browser_name:Chrome",
       "group_by_fields": [ { "field": "view_name", "is_attribute": false } ],
       "value_operation": "p90",
       "fields": [ { "field": "lcp", "is_attribute": false } ],
@@ -258,7 +261,7 @@ Set `selectedMode` to the signal. Omitting it makes the sub-query a metrics quer
   "queries": {
     "A": {
       "selectedMode": "rum_error",
-      "where": "severity = crash AND env = production",
+      "query": "severity:crash env:production",
       "group_by_fields": [ { "field": "error_type", "is_attribute": false } ],
       "value_operation": "row_count"
     }
@@ -275,14 +278,14 @@ Set `selectedMode` to the signal. Omitting it makes the sub-query a metrics quer
   "query_type": "instant",
   "queries": {
     "A": { "selectedMode": "rum_session", "value_operation": "row_count" },
-    "B": { "selectedMode": "rum_session", "where": "error_count > 0", "value_operation": "row_count" },
+    "B": { "selectedMode": "rum_session", "query": "error_count>0", "value_operation": "row_count" },
     "C": { "query_type": "formula", "expression": "(B/A)*100" }
   }
 }
 ```
 
 **Slowest hosts by p95 request time, failed requests only**
-`selectedMode: rum_resource`, `where: "status_code >= 500"`,
+`selectedMode: rum_resource`, `query: "status_code>=500"`,
 `group_by_fields: [{"field":"resource_host"}]`, `value_operation: p95`,
 `fields: [{"field":"duration"}]` (nanoseconds)
 
@@ -292,7 +295,7 @@ Set `selectedMode` to the signal. Omitting it makes the sub-query a metrics quer
 
 **Sessions by a custom attribute**
 `selectedMode: rum_session`, `group_by_fields: [{"field":"checkout.step","is_attribute":true}]`,
-`where: "@checkout.step IN (cart, payment)"`
+`query: "@checkout.step:(cart OR payment)"`
 
 ## Dashboard Panels
 
@@ -335,8 +338,7 @@ Seen from a live server:
 |---|---|
 | `unknown field "services" for signal=rum_session ...` | A storage name; type the catalog name (`service`) |
 | `analysis failed: cannot group by lcp_ms` | Rule 4: `_ms` / `_s` twins are filter-only; aggregate the base field |
-| `analysis failed: LIKE is not supported on user_email; use = or IN` | Rule 1 |
-| `operator "LIKE" not allowed for rum_view attribute field "plan" — use one of: EQ, NEQ, ...` | Rule 2 |
+| `query: <code>: <message> (at 0-12)` on a wildcard | Rule 1: the field takes only exact forms |
 | `rbac(rum): this API key does not have access to this resource` | The key lacks the RUM module |
 
 Worded from the kubeapi source, not seen live:

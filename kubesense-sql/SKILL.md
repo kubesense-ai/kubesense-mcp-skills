@@ -123,7 +123,7 @@ predicates work too (`WHERE timestamp >= now() - INTERVAL 1 HOUR`), but the macr
 the query aligned with the window you passed.
 
 > [!NOTE]
-> String values in SQL use **single quotes** (`type = 'ERROR'`), unlike the `where`
+> String values in SQL use **single quotes** (`type = 'ERROR'`), unlike the KQL `query`
 > argument of the analyze/search tools, which uses bare words or double quotes. Enum
 > casing is unchanged: `ERROR` uppercase on logs, `error` lowercase on traces `status`.
 
@@ -270,7 +270,7 @@ More patterns: [references/recipes.md](references/recipes.md).
 6. `duration_ms` (milliseconds) on traces. `duration` is rejected — do not carry a
    nanosecond threshold over from an old query.
 7. `timestamp` is valid on both signals even though discovery does not list it.
-8. Single quotes for string values — SQL, not the `where` mini-language.
+8. Single quotes for string values — SQL, not the KQL `query` language.
 9. Attribute keys are never validated. All-empty column = wrong key, not missing data.
 10. An empty result set is an answer. Check the window before rewriting the query.
 11. Aggregate in SQL; never paginate rows to compute a total. 1000-row cap.

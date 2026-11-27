@@ -21,7 +21,7 @@ For one aggregation over one datasource, use `analyze-logs` / `analyze-traces` /
   "to_time": "2026-07-30T11:00:00Z",
   "query_type": "range",
   "queries": {
-    "A": { "selectedMode": "traces", "where": "status = error", "value_operation": "row_count" },
+    "A": { "selectedMode": "traces", "query": "status:error", "value_operation": "row_count" },
     "B": { "selectedMode": "traces", "value_operation": "row_count" },
     "C": { "query_type": "formula", "expression": "(A/B)*100" }
   }
@@ -67,7 +67,7 @@ required.
 ```json
 {
   "selectedMode": "logs",
-  "where": "type = ERROR",
+  "query": "type:ERROR",
   "group_by_fields": [ { "field": "workload", "is_attribute": false } ],
   "value_operation": "row_count",
   "clusters": [],
@@ -119,7 +119,7 @@ Either group both, or group neither.
   "queries": {
     "A": {
       "selectedMode": "traces",
-      "where": "status = error",
+      "query": "status:error",
       "group_by_fields": [ { "field": "workload", "is_attribute": false } ],
       "value_operation": "row_count"
     },
@@ -141,7 +141,7 @@ Either group both, or group neither.
   "to_time": "2026-07-30T11:00:00Z",
   "query_type": "instant",
   "queries": {
-    "A": { "selectedMode": "logs", "where": "type = ERROR", "value_operation": "row_count" },
+    "A": { "selectedMode": "logs", "query": "type:ERROR", "value_operation": "row_count" },
     "B": { "selectedMode": "logs", "value_operation": "row_count" },
     "C": { "query_type": "formula", "expression": "(A/B)*100" }
   }
@@ -158,13 +158,13 @@ Either group both, or group neither.
   "queries": {
     "A": {
       "selectedMode": "traces",
-      "where": "protocol = HTTP AND status_code LIKE \"5%\"",
+      "query": "protocol:HTTP status_code:5??",
       "group_by_fields": [ { "field": "service", "is_attribute": false } ],
       "value_operation": "row_count"
     },
     "B": {
       "selectedMode": "traces",
-      "where": "protocol = HTTP",
+      "query": "protocol:HTTP",
       "group_by_fields": [ { "field": "service", "is_attribute": false } ],
       "value_operation": "row_count"
     },
@@ -183,7 +183,7 @@ Either group both, or group neither.
   "queries": {
     "A": {
       "selectedMode": "logs",
-      "where": "type = ERROR",
+      "query": "type:ERROR",
       "group_by_fields": [ { "field": "workload", "is_attribute": false } ],
       "value_operation": "row_count"
     },

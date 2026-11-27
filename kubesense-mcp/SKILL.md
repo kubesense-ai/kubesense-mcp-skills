@@ -1,17 +1,17 @@
 ---
 name: kubesense-mcp
-description: Use before the first KubeSense MCP tool call, when connecting or authenticating the KubeSense MCP server, when choosing which KubeSense tool answers a question, when the user asks what a service calls or depends on, what calls it, its blast radius, or for its service map or dependency graph, when one query must combine datasources with a formula, or when a KubeSense tool returns a field-name or WHERE error, an unexpectedly empty result, or TSV/columnar output to decode.
+description: Use before the first KubeSense MCP tool call, when connecting or authenticating the KubeSense MCP server, when choosing which KubeSense tool answers a question, when the user asks what a service calls or depends on, what calls it, its blast radius, or for its service map or dependency graph, when one query must combine datasources with a formula, or when a KubeSense tool returns a field-name or query (KQL) error, an unexpectedly empty result, or TSV/columnar output to decode.
 metadata:
-  version: "2.6.0"
+  version: "3.0.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
-  tags: kubesense,mcp,observability,tools,where-clause,discovery,field-catalog,auth,log-pipelines,service-map,dependencies
+  tags: kubesense,mcp,observability,tools,kql,discovery,field-catalog,auth,log-pipelines,service-map,dependencies
 ---
 
 # KubeSense MCP
 
 The tool layer every KubeSense query skill sits on. This skill owns the **shared
-contract** — field names, WHERE syntax, output formats — so the per-signal skills don't
+contract** — field names, KQL filter syntax, output formats — so the per-signal skills don't
 each have to redefine it.
 
 ## Routing
@@ -113,7 +113,7 @@ output. Use `get-fields`.
 | `analyze-metrics` | PromQL result |
 | `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics, events or RUM (`selectedMode: rum_<type>`) |
 | `get-distributed-trace` | Full span tree for one `trace_id` |
-| `get-service-map` | Service-to-service dependency graph (callers, callees, blast radius), as a `## call tree` plus nodes and edges TSV; optionally with Kafka producer/consumer topology |
+| `get-service-map` | Service-to-service dependency graph (callers, callees, blast radius), as a `## call tree` plus nodes and edges TSV; optionally with Kafka producer/consumer topology. Optional KQL `query` over `namespace`, `workload`, `protocol_type`, `source` and `status` (the connection status, `ok`/`error`), e.g. `namespace:payments status:error` |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |
 | `validate-spl` | Dry-run verdict for an SPL query, plus the SQL it compiles to |
@@ -191,8 +191,9 @@ A builder-mode metrics query stores no PromQL, so `get-dashboard-details` adds
 `rendered_promql`: the exact PromQL the panel runs, with dashboard variables left as
 `$name`. To run a panel as it is, prefer `run-dashboard-panel`, which resolves them. To run
 the query by hand, resolve them against the variables table and use `analyze-metrics`.
-A `$$name` elsewhere in a query (a filter key, an advanced query, a code-mode selector) is a
-field reference: `<that variable's field> = $name`, dropped when nothing is selected.
+A `$$name` elsewhere in a dashboard query (a `kql` text, a filter key, a code-mode selector) is a
+field reference: `<that variable's field> = $name`, dropped when nothing is selected, and
+dropped too when the dashboard has no such variable. Off a dashboard it is plain text.
 
 **Log pipelines** — see [kubesense-log-pipelines](../kubesense-log-pipelines/SKILL.md)
 
@@ -263,7 +264,7 @@ query: attribute keys are window-scoped and differ across windows.
 
 ## The Field-Name Contract
 
-Logs/traces inputs — `where`, `required_fields`, `group_by_fields`, `fields`, `sort_by` —
+Logs/traces inputs — `query`, `required_fields`, `group_by_fields`, `fields`, `sort_by` —
 accept **catalog labels only**. Storage column names are rejected:
 
 ```
@@ -303,54 +304,95 @@ Read enum casing from the **`enum_values`** column of discovery output, never th
 `example` column — the example generator silently returns blanks for several enum fields
 (logs `type`; traces `method`, `protocol`, `status_code`).
 
-## WHERE Syntax
+## Filter Syntax (KQL `query`)
+
+Every tool that filters logs, traces, events or RUM takes the filter as **`query`**, written
+in KQL. Both signals use the same grammar.
 
 ```
-type = ERROR AND namespace = production
-status = error AND role = server
-namespace IN (production, staging)
-NOT (env_type = dev)
-body ILIKE "%timeout%"
-duration_ms > 500
-@user.id = abc-123
+type:ERROR namespace:production
+status:error role:server
+namespace:(production OR staging)
+-env_type:dev
+body:timeout
+duration_ms>500
+@user.id:abc-123
+@http.route:/healthz
 ```
 
-**Operators the parser accepts:** `=` `!=` `<` `>` `<=` `>=` `LIKE` `ILIKE`
-`SUBSTR_ILIKE` `IN` — combined with `AND` / `OR` / `NOT` and parentheses.
+| To match | Write | Notes |
+|---|---|---|
+| a value | `field:value` | exact and case-sensitive on a column |
+| any of several | `field:(a OR b)` | a space inside the brackets is AND: `body:(a b)` needs both, and `service:(a b)` matches nothing |
+| wildcards | `field:checkout-*`, `field:5??` | `*` any run, `?` one character |
+| ignore case | `field:~error` | not needed on log `body`, which always ignores case |
+| exclude | `-field:value`, `NOT (...)` | `-field:(a OR b)` excludes both |
+| number | `field>n`, `>=`, `<`, `<=` | `duration_ms>250` is over 250 ms |
+| attribute | `@key:value` | on **both** logs and traces; takes every operator |
+| attribute is set | `@key:*` | a column always has a value, so `col:*` is pointless |
+| any element of a log array | `@tags[*]:prod` | **logs only**; see **Arrays in a log** below |
+| log text | `body:timeout`, `body:"connection refused"`, `body:*timeout*` | on logs a word alone, `timeout`, means `body:timeout`; on traces, events and RUM free text needs a field |
+| combine | space or `AND`; `OR`; parentheses | space means AND |
 
-> [!WARNING]
-> Discovery's `operators` column **over-advertises**. `HAS_TOKEN`, `HAS_ALL`, `HAS_ANY`,
-> `LIKE_AND`, `ILIKE_LOG`, `IS_IP_ADDRESS`, `EXIST` appear in the legend but have **no
-> WHERE-string syntax**. `body HAS_TOKEN oom` is a parse error. `exist(@field)` is broken
-> on both signals (it emits a value-bearing `EXIST` the validator rejects) — there is no
-> working existence check.
+**Quoting.** Quote a value that has a space or a colon: `@msg:"a b"`, `resource:"/api/v1/x"`.
 
-**Quoting.** Bare values may contain only letters, digits, `_`, `.`, `-`. Anything with a
-slash, colon, `%`, or space must be double-quoted:
+**`$` is ordinary text outside a dashboard.** In a search, alert, SLO or pipeline `query`, a
+`$name`, `${name}` or `$$name` is searched as typed, not filled in and not an error:
+`service:$nope` is `service:"$nope"`, and a bare `$$nope` on logs is a word search on the
+body. On traces, events and RUM a bare `$$nope` is an error like any bare word, and
+`$$nope:x` is an unknown field. Only a dashboard fills variables in, and there a name the
+dashboard does not have is dropped with its term.
 
-```
-resource = "/api/v1/checkout"           ✓
-timestamp > "2026-07-30T10:00:00Z"      ✓
-resource = /api/v1/checkout             ✗ parse error
-```
+**Field names are catalog labels.** An unknown field or a storage name comes back as an
+error naming the right label, with its position in the query (`at 4-12`). Read it; do not
+retry the same text.
 
-**`NOT IN` is not a leaf operator.** Write `NOT (namespace IN (kube-system, default))`.
+**Attributes** carry `@` in `query`, on logs and on traces alike (`@db.system:postgresql`).
+In `group_by_fields`, `fields`, `required_fields` and `sort_by` an attribute is
+`{"field": "db.system", "is_attribute": true}` with no `@`.
 
-**Attributes** carry `@` in WHERE — **but only on logs.** On traces, `@attr` filters are
-rejected as unknown fields (a server-side defect; the tool descriptions claim otherwise).
-Trace attributes still work in `group_by_fields` / `fields` / `required_fields` /
-`sort_by` via `{"field": "db.system", "is_attribute": true}` — no `@` there, for either
-signal.
+**Arrays in a log (logs only).** `@tags:x` reads the attribute named `tags` as one value;
+`@tags[*]:x` looks inside the parsed-log array `tags` and matches when ANY element matches,
+and `@tags[0]:x` reads one element by position. `[*]` takes `:value`, `"a b"`, `prod*`, `~Prod`
+(ignore case), `(a OR b)`, `(a AND b)`, `-@tags[*]:x` (no element is `x`), `@tags[*]:*` (the
+array exists), comparisons such as `@tags[*]>5` (elements read as numbers) and `@"tags[*]":x`.
+Not valid: `[*]` anywhere but the end of the key (`@a[*].b`, `@a[*][0]`, `@a[0][*]`), `[*]` on
+traces, RUM or events (error: `@tags[*] reads a list in the parsed log, which only logs have`),
+and a `/regex/` term on `[*]`.
 
-**Trace latency is `duration_ms`**, milliseconds in WHERE, operands, results and rows of the
-query tools. Bare `duration` is the legacy nanosecond field. **Alerts are the exception:**
-`create-alert` rejects `duration_ms` as an operand or group-by, thresholds on `duration` are
-nanoseconds (500 ms = `500000000`), and only an alert's `where` takes `duration_ms`. See [kubesense-traces](../kubesense-traces/SKILL.md).
+**Numbers in attributes.** `@latency>200` reads a number or text such as `"250"`; a value
+that is not a number matches neither the comparison nor its negation. On logs and events,
+`-@k:v`, negated patterns and negated comparisons need the key to exist.
 
-**RUM** takes the same operators but differs on three points: `LIKE`
-and `ILIKE` work only on low-cardinality fields (the catalog's `LIKE` column), `@attr`
-filters never take `LIKE`, and raw durations are nanoseconds, and their `_ms` / `_s` twins are filter-only.
-See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
+**Trace latency is `duration_ms`**: milliseconds in `query`, operands, results and rows.
+Bare `duration` is the legacy nanosecond field; filter on `duration_ms`. **Alerts are the
+exception:** `create-alert` rejects `duration_ms` as an operand or group-by, and a threshold
+on `duration` is in nanoseconds (500 ms = `500000000`). Its `query` takes `duration_ms`. See
+[kubesense-traces](../kubesense-traces/SKILL.md).
+
+**RUM** uses the same grammar, but wildcards and `~` apply only to the fields whose `forms`
+column from `get-fields` lists them, `@attr` takes every operator, and raw durations are
+nanoseconds with filter-only `_ms` / `_s` twins. See
+[kubesense-rum](../kubesense-rum/SKILL.md#rules).
+
+**`get-fields` `forms`.** Its `forms` column lists the KQL forms each field takes, with `<f>`
+for the field name; use only those.
+
+### Legacy filter arguments are refused
+
+Every tool takes a filter only as KQL: `query` on `search-logs`, `search-traces`,
+`search-rum`, `analyze-logs`, `analyze-traces`, `create-alert` and each `queries[].query`
+of `analyze-telemetry`; `kql` on dashboard queries, variables and overlays. The list tools
+`list-pods`, `list-nodes`, `list-workloads`, `list-issues`, `list-alert-rules`,
+`list-dashboards`, `list-active-alerts`, `list-alerts`, `synthetics-list-monitors`,
+`synthetics-list-suites` and `synthetics-list-incidents`, and `get-service-map`, also take an
+optional KQL `query` next to their own arguments; their input schemas name the fields each one
+filters on. A field named both in `query` and in its own argument is refused. A call that
+sends `where`, `filters`, `filter`, `advanced`, `advanced_query`, `unified_filter`,
+`raw_filters`, `common_filter`, `adv_filters`, `filter_mode` or `filterMode` is refused
+with a hint naming the argument to use, before anything runs. To translate an old filter:
+`=` to `:`, `IN (a, b)` to `:(a OR b)`, `!=` to `-field:value`, `LIKE "x%"` to `field:x*`,
+`ILIKE` to `field:~...`, `NOT (...)` unchanged.
 
 ## Choosing a Tool
 
@@ -359,7 +401,7 @@ See [kubesense-rum](../kubesense-rum/SKILL.md#rules).
 | "show me recent errors" | `search-logs` |
 | "list the crashes / slowest sessions / failed requests" | `search-rum` |
 | "how many errors in the last hour" | `analyze-logs`, `row_count` |
-| "top / most common errors" | `analyze-logs`, `row_count` grouped by `pattern` with a `where` ([kubesense-logs](../kubesense-logs/SKILL.md#top--most-common-errors-group-by-pattern)) |
+| "top / most common errors" | `analyze-logs`, `row_count` grouped by `pattern` with a `query` ([kubesense-logs](../kubesense-logs/SKILL.md#top--most-common-errors-group-by-pattern)) |
 | "p99 latency for checkout" | `analyze-traces`, `p99` over `duration_ms` |
 | "why did this request fail" | `get-distributed-trace` |
 | "what calls X / what does X depend on / blast radius / dependency chain" | `get-service-map` |
@@ -440,7 +482,7 @@ way to get a ratio, error rate, or percentage.
   "query_type": "instant",
   "queries": {
     "A": { "selectedMode": "traces", "value_operation": "row_count" },
-    "B": { "selectedMode": "traces", "where": "status = error", "value_operation": "row_count" },
+    "B": { "selectedMode": "traces", "query": "status:error", "value_operation": "row_count" },
     "C": { "query_type": "formula", "expression": "(B/A)*100" }
   }
 }
@@ -526,9 +568,10 @@ KubeSense UI, in the header or on each row. It lets the user check your answer.
 - **`ui_base=unset`** (header token, or a `ui_base` key in JSON results) means the server
   does not know the UI address, so links are root-relative paths such as `/logs?...`. Say so
   and prefix the user's own KubeSense address; do not guess one.
-- **Read the `ui_note` / header notes.** A link may omit a long `where` filter (the page then
-  shows more rows than your query), or be absent for a trace whose root span has no id or
-  whose cluster is ambiguous.
+- **The link carries your filter.** An explorer link holds the `query` as `q=` (with
+  `searchMode=KQL`), so the page opens on the same rows. Read the `ui_note` / header notes: a link may be absent for a
+  trace whose root span has no id or whose cluster is ambiguous, and a UI without the KQL bar
+  enabled ignores `q`, so tell the user to check the filter bar if the rows differ.
 - **Links pin the clusters the result came from.** An explorer link pins the clusters of the
   rows (or, for an analysis, the series grouped by domain) it returned, so the page opens on
   the data you saw. Pass `clusters` only to narrow the query, not to make the link correct.
@@ -546,8 +589,9 @@ KubeSense UI, in the header or on each row. It lets the user check your answer.
    name.
 4. Never carry a field name across signals (`node` vs `node_name`; `type` vs `status`).
 5. Enum casing from `enum_values`, not `example`.
-6. WHERE operators: `= != < > <= >= LIKE ILIKE SUBSTR_ILIKE IN` only. Quote values with
-   `/`, `:`, `%`, or spaces. `NOT (x IN (...))`, never `x NOT IN (...)`.
+6. Filters are KQL in `query`: `field:value`, `field:(a OR b)`, `-field:value`, `field>n`,
+   `@attr:value`; `field:*` means "has a value", `-field:*` "has none". Quote values with
+   spaces or a colon. A legacy argument (`where`, `filters`, ...) is refused.
 7. `value_operation` is `row_count` — never `count`.
 8. `analyze-*` for numbers, `search-*` only to read records.
 9. `analyze-telemetry` + formula for ratios and percentages.

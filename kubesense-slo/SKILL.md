@@ -2,7 +2,7 @@
 name: kubesense-slo
 description: Use when the user wants a KubeSense service level objective (SLO) created, read, changed or deleted, asks about an error budget or burn-rate alerting, wants a Datadog SLO ported, or has an SLO that saved fine but reports no data.
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,slo,sli,error-budget,burn-rate,datadog-migration,reliability
@@ -134,8 +134,8 @@ Minimum viable `by_count` SLO over traces:
   "status": "active",
   "cluster": "", "namespace": "", "workload": "", "customer_identifier": "",
   "operation": "", "threshold_value": 0, "value": 0,
-  "good_events_filter":  { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "unified_filter": { "type": "common", "common_filter": [ {"field": "app_service", "operation": "IN", "values": ["checkout"]}, {"field": "status", "operation": "IN", "values": ["ok"]} ], "adv_filters": {} } },
-  "total_events_filter": { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "unified_filter": { "type": "common", "common_filter": [ {"field": "app_service", "operation": "IN", "values": ["checkout"]} ], "adv_filters": {} } },
+  "good_events_filter":  { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "kql": "service:checkout status:ok" },
+  "total_events_filter": { "selectedMode": "traces", "value_operation": "row_count", "groupBy": [], "kql": "service:checkout" },
   "alert_types": ["burn_rate_fast", "error_budget_low"],
   "notification_channels": [1]
 }
@@ -174,7 +174,8 @@ rule's query applies here.
 | Key | Meaning |
 |---|---|
 | `selectedMode` | `traces` \| `logs` \| `metrics`. **Defaults to `traces`** when empty. |
-| `unified_filter` | traces/logs filter tree: `{type, common_filter[], adv_filters{}}` |
+| `kql` | traces/logs filter, in KQL with catalog labels (`service:checkout status:ok`). The server compiles and stores it. Needs an explicit `selectedMode`. |
+| `unified_filter` | traces/logs filter tree, the older form: `{type, common_filter[], adv_filters{}}`. Use it only when the server answers `kql_not_enabled`. Never send both for a new SLO. |
 | `promql` | metrics only — the whole metrics query. (An alert rule's `queryMode` has no field here and is dropped.) |
 | `value_operation` | `row_count` (the normal choice), `unique_count`, `avg`, `sum`, `min`, `max`, percentiles |
 | `fields` | required for any non-count `value_operation` |
@@ -367,8 +368,9 @@ of "this number looks wrong".
 
 1. Discover real metric and field names first (`get-available-metrics`,
    `get-fields`). Never invent one.
-2. Use the **alert engine's** field vocabulary in `unified_filter` — `app_service`,
-   not `service`; `level`, not `type`.
+2. Filter logs and traces with `kql`, in catalog labels (`service`, `type`). Only a
+   `unified_filter` uses the **alert engine's** names: `app_service`, not `service`;
+   `level`, not `type`.
 3. Always `POST /api/slo/preview` before creating, and show the user the compliance
    and budget numbers it returns. Preview is free and stores nothing.
 4. Set `selectedMode` explicitly on both filters. The default is `traces`.

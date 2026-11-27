@@ -3,12 +3,12 @@
 <!-- Source of truth: kubeapi/observability/fieldcatalog/rum_catalog.go. This file is
      edited by hand to match it; change both together. -->
 
-The fields each RUM event type accepts in `where`, `group_by_fields`, `fields` and
+The fields each RUM event type accepts in `query`, `group_by_fields`, `fields` and
 `sort_by`. Type the **Field** column. Rules for reading the columns are in
 [SKILL.md](../SKILL.md#rules); the short version:
 
-- **LIKE**: `yes` means `LIKE` / `ILIKE` are accepted. `no` means the column is not
-  low-cardinality, so use `=` or `IN`. `-` means not a string.
+- **LIKE**: `yes` means `LIKE` / `ILIKE` (wildcards and `~`) are accepted. `no` marks ids and
+  other exact-match columns, so use `=` or `IN`. `-` means not a string.
 - **Group**: `yes` means the field can be a `group_by_fields` entry. Array fields,
   free-search ids and text (except `error_message`, `fingerprint`, `issue_id`, `view_url`
   and `resource_url`, which group on a trimmed value), raw nanosecond durations and `_ms` / `_s` fields are `no`.
@@ -52,10 +52,10 @@ The fields each RUM event type accepts in `where`, `group_by_fields`, `fields` a
 | `scope_name` | string | yes | yes |  |  |  |
 | `scope_version` | string | yes | yes |  |  |  |
 | `build_version` | string | no | yes |  |  |  |
-| `device_name` | string | no | yes |  |  |  |
+| `device_name` | string | yes | yes |  |  |  |
 | `user_id` | string | no | yes |  |  |  |
-| `user_name` | string | no | yes |  |  |  |
-| `user_email` | string | no | yes |  |  |  |
+| `user_name` | string | yes | yes |  |  |  |
+| `user_email` | string | yes | yes |  |  |  |
 | `user_mobile` | string | no | yes |  |  |  |
 | `session_id` | string | no | no |  |  | free search |
 | `session_has_replay` | boolean | - | yes |  |  |  |
@@ -71,7 +71,7 @@ The fields each RUM event type accepts in `where`, `group_by_fields`, `fields` a
 | `ip` | string | no | no |  | `ip_list` | list; filter only (`=` is membership) |
 | `first_view_name` | string | yes | yes |  |  |  |
 | `last_view_name` | string | yes | yes |  |  |  |
-| `session_referrer` | string | no | no | browser |  | free search |
+| `session_referrer` | string | yes | no | browser |  | free search |
 | `sampled_for_replay` | boolean | - | yes |  |  |  |
 | `time_spent` | number | - | no |  |  | nanoseconds; use `time_spent_ms` / `_s` to filter |
 | `view_count` | number | - | yes |  |  |  |
@@ -114,10 +114,10 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`.
 | `scope_name` | string | yes | yes |  |  |  |
 | `scope_version` | string | yes | yes |  |  |  |
 | `build_version` | string | no | yes |  |  |  |
-| `device_name` | string | no | yes |  |  |  |
+| `device_name` | string | yes | yes |  |  |  |
 | `user_id` | string | no | yes |  |  |  |
-| `user_name` | string | no | yes |  |  |  |
-| `user_email` | string | no | yes |  |  |  |
+| `user_name` | string | yes | yes |  |  |  |
+| `user_email` | string | yes | yes |  |  |  |
 | `user_mobile` | string | no | yes |  |  |  |
 | `session_id` | string | no | no |  |  | free search |
 | `session_has_replay` | boolean | - | yes |  |  |  |
@@ -135,14 +135,14 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`.
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | no |  |  | list; filter only (`=` is membership) |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
+| `view_url` | string | yes | yes |  |  | free search; group label is the path without query string |
 | `view_name` | string | yes | yes |  |  |  |
 | `loading_type` | string | yes | yes |  |  |  |
 | `lcp_target_selector` | string | no | no | browser |  | free search |
 | `fi_target_selector` | string | no | no | browser |  | free search |
 | `inp_target_selector` | string | no | no | browser |  | free search |
 | `cls_target_selector` | string | no | no | browser |  | free search |
-| `view_referrer` | string | no | no | browser |  | free search |
+| `view_referrer` | string | yes | no | browser |  | free search |
 | `sampled_for_replay` | boolean | - | yes |  |  |  |
 | `view_is_active` | boolean | - | yes |  |  |  |
 | `slow_rendered` | boolean | - | yes | mobile |  |  |
@@ -209,10 +209,10 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `scope_name` | string | yes | yes |  |  |  |
 | `scope_version` | string | yes | yes |  |  |  |
 | `build_version` | string | no | yes |  |  |  |
-| `device_name` | string | no | yes |  |  |  |
+| `device_name` | string | yes | yes |  |  |  |
 | `user_id` | string | no | yes |  |  |  |
-| `user_name` | string | no | yes |  |  |  |
-| `user_email` | string | no | yes |  |  |  |
+| `user_name` | string | yes | yes |  |  |  |
+| `user_email` | string | yes | yes |  |  |  |
 | `user_mobile` | string | no | yes |  |  |  |
 | `session_id` | string | no | no |  |  | free search |
 | `session_has_replay` | boolean | - | yes |  |  |  |
@@ -230,8 +230,8 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | yes |  |  |  |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
-| `view_name` | string | no | yes |  |  |  |
+| `view_url` | string | yes | yes |  |  | free search; group label is the path without query string |
+| `view_name` | string | yes | yes |  |  |  |
 | `action_type` | string | yes | yes |  |  |  |
 | `action_name` | string | yes | yes |  |  |  |
 | `action_target` | string | yes | yes |  |  |  |
@@ -276,10 +276,10 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `scope_name` | string | yes | yes |  |  |  |
 | `scope_version` | string | yes | yes |  |  |  |
 | `build_version` | string | no | yes |  |  |  |
-| `device_name` | string | no | yes |  |  |  |
+| `device_name` | string | yes | yes |  |  |  |
 | `user_id` | string | no | yes |  |  |  |
-| `user_name` | string | no | yes |  |  |  |
-| `user_email` | string | no | yes |  |  |  |
+| `user_name` | string | yes | yes |  |  |  |
+| `user_email` | string | yes | yes |  |  |  |
 | `user_mobile` | string | no | yes |  |  |  |
 | `session_id` | string | no | no |  |  | free search |
 | `session_has_replay` | boolean | - | yes |  |  |  |
@@ -297,16 +297,16 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | yes |  |  |  |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
-| `view_name` | string | no | yes |  |  |  |
+| `view_url` | string | yes | yes |  |  | free search; group label is the path without query string |
+| `view_name` | string | yes | yes |  |  |  |
 | `action_id` | string | no | no |  | `actions_id` | list; filter only (`=` is membership); free search |
 | `resource_method` | string | yes | yes |  |  |  |
 | `protocol` | string | yes | yes |  |  |  |
 | `clustered_resource` | string | no | yes |  |  |  |
-| `resource_host` | string | no | yes |  |  |  |
+| `resource_host` | string | yes | yes |  |  |  |
 | `provider_type` | string | no | yes |  |  |  |
-| `resource_url` | string | no | yes |  |  | free search; group label is the path without query string |
-| `resource_path` | string | no | no |  |  | free search |
+| `resource_url` | string | yes | yes |  |  | free search; group label is the path without query string |
+| `resource_path` | string | yes | no |  |  | free search |
 | `status_code` | number | - | yes |  |  |  |
 | `duration` | number | - | no |  |  | nanoseconds; use `duration_ms` / `_s` to filter |
 | `error_type` | string | yes | yes |  |  |  |
@@ -315,7 +315,7 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `source_type` | string | yes | yes |  |  |  |
 | `status` | string | yes | yes |  |  |  |
 | `error_id` | string | no | no |  |  | free search |
-| `error_message` | string | no | yes |  |  | free search; group label is the first 200 characters |
+| `error_message` | string | yes | yes |  |  | free search; group label is the first 200 characters |
 | `fingerprint` | string | no | yes |  |  | free search; groupable |
 | `handling` | string | no | yes |  |  |  |
 | `is_crash` | boolean | - | yes |  |  |  |
@@ -355,10 +355,10 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `scope_name` | string | yes | yes |  |  |  |
 | `scope_version` | string | yes | yes |  |  |  |
 | `build_version` | string | no | yes |  |  |  |
-| `device_name` | string | no | yes |  |  |  |
+| `device_name` | string | yes | yes |  |  |  |
 | `user_id` | string | no | yes |  |  |  |
-| `user_name` | string | no | yes |  |  |  |
-| `user_email` | string | no | yes |  |  |  |
+| `user_name` | string | yes | yes |  |  |  |
+| `user_email` | string | yes | yes |  |  |  |
 | `user_mobile` | string | no | yes |  |  |  |
 | `session_id` | string | no | no |  |  | free search |
 | `session_has_replay` | boolean | - | yes |  |  |  |
@@ -376,16 +376,16 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | yes |  |  |  |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
-| `view_name` | string | no | yes |  |  |  |
+| `view_url` | string | yes | yes |  |  | free search; group label is the path without query string |
+| `view_name` | string | yes | yes |  |  |  |
 | `action_id` | string | no | no |  | `actions_id` | list; filter only (`=` is membership); free search |
 | `resource_method` | string | yes | yes |  |  |  |
 | `protocol` | string | yes | yes |  |  |  |
 | `clustered_resource` | string | no | yes |  |  |  |
-| `resource_host` | string | no | yes |  |  |  |
+| `resource_host` | string | yes | yes |  |  |  |
 | `provider_type` | string | no | yes |  |  |  |
-| `resource_url` | string | no | yes |  |  | free search; group label is the path without query string |
-| `resource_path` | string | no | no |  |  | free search |
+| `resource_url` | string | yes | yes |  |  | free search; group label is the path without query string |
+| `resource_path` | string | yes | no |  |  | free search |
 | `status_code` | number | - | yes |  |  |  |
 | `duration` | number | - | no |  |  | nanoseconds; use `duration_ms` / `_s` to filter |
 | `resource_type` | string | yes | yes |  |  |  |
@@ -444,10 +444,10 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `scope_name` | string | yes | yes |  |  |  |
 | `scope_version` | string | yes | yes |  |  |  |
 | `build_version` | string | no | yes |  |  |  |
-| `device_name` | string | no | yes |  |  |  |
+| `device_name` | string | yes | yes |  |  |  |
 | `user_id` | string | no | yes |  |  |  |
-| `user_name` | string | no | yes |  |  |  |
-| `user_email` | string | no | yes |  |  |  |
+| `user_name` | string | yes | yes |  |  |  |
+| `user_email` | string | yes | yes |  |  |  |
 | `user_mobile` | string | no | yes |  |  |  |
 | `session_id` | string | no | no |  |  | free search |
 | `session_has_replay` | boolean | - | yes |  |  |  |
@@ -465,11 +465,11 @@ Not filterable or groupable: `start_timestamp`, `end_timestamp`, `tags`, `longit
 | `cellular` | string | no | yes | mobile |  |  |
 | `ip` | string | no | yes |  |  |  |
 | `view_id` | string | no | no |  |  | free search |
-| `view_url` | string | no | yes |  |  | free search; group label is the path without query string |
-| `view_name` | string | no | yes |  |  |  |
+| `view_url` | string | yes | yes |  |  | free search; group label is the path without query string |
+| `view_name` | string | yes | yes |  |  |  |
 | `action_id` | string | no | no |  | `actions_id` | list; filter only (`=` is membership); free search |
 | `duration` | number | - | no |  |  | nanoseconds; use `duration_ms` / `_s` to filter |
-| `long_task_name` | string | no | yes | browser |  |  |
+| `long_task_name` | string | yes | yes | browser |  |  |
 | `entry_type` | string | no | yes | browser |  |  |
 | `long_task_id` | string | no | no |  |  | free search |
 | `is_frozen_frame` | boolean | - | yes | mobile |  |  |

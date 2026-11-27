@@ -25,9 +25,9 @@ required — omit `variables`, `subGrids`, and `subGridLayout` entirely and they
 |---|---|
 | `textbox` | — (`defaultValue`, `value` default to `""`) |
 | `custom` | `options: string[]` with ≥ 1 entry |
-| `logs` / `traces` | `fieldMeta: {field, type, is_attribute}` — all three; optional `filters`, `filterMode` (`MFD`\|`ADVANCED_QUERY`). With `ADVANCED_QUERY`, the WHERE clause goes in `filters.advanced_query: ["<where>"]` |
+| `logs` / `traces` | `fieldMeta: {field, type, is_attribute}` — all three; optional `kql` (KQL scoping which rows the values come from; saved as `filterMode: "KQL"`). Basic chips and Advanced text are refused |
 | `metrics` | `metric` (non-empty) **and** `fieldMeta`; **no `filterMode`** |
-| `rum` | `rumEventType` (`session`\|`view`\|`action`\|`error`\|`resource`\|`long_task`) **and** `fieldMeta`; optional `filters`, `filterMode` |
+| `rum` | `rumEventType` (`session`\|`view`\|`action`\|`error`\|`resource`\|`long_task`) **and** `fieldMeta`; optional `kql` |
 
 `fieldMeta.type` and `fieldMeta.is_attribute` have no defaults — both must be present.
 
@@ -38,7 +38,13 @@ required — omit `variables`, `subGrids`, and `subGridLayout` entirely and they
 
 ### Referencing a variable
 
-A variable is referenced as `$name` in a query `filters` value:
+In a logs, traces, events or RUM `kql`, a variable is referenced as `field:$name`
+(`workload:$svc type:ERROR`), or as `$$name` on its own when it filters the variable's own
+field (see below). A selection of several values matches any of them, and a
+term whose name is not a variable of the dashboard is ignored, so check the spelling: the
+panel then runs without that term. (Only on a dashboard: in a Logs search, alert or pipeline
+a `$name` is plain text.) In a metrics builder query it is `$name` in a
+`filters` value:
 
 ```json
 { "namespace": ["$service"] }
@@ -64,8 +70,9 @@ renders `{namespace="kubesense", phase="Running"}`.
   or `custom` variable, or no variable at all, is silently dropped from the query.
 - An attribute field (`is_attribute: true`) expands to the `@_@` key for you.
 - Nothing selected → the condition is dropped, not matched against an empty set.
-- It also works inside `filters.advanced_query` (`"status = error AND $$namespace"` runs as
-  `status = error AND namespace IN (…)`) and inside a code-mode PromQL selector
+- In a `kql` text, write `$$name` on its own: `"kql": "type:ERROR $$namespace"`; `-$$namespace`
+  leaves the selected values out. `$$name:value` takes only the field from the variable.
+- It works inside a code-mode PromQL selector
   (`kube_pod_status_phase{$$namespace, phase="Running"}`). Outside `{…}` in PromQL it is not
   expanded.
 - Not expanded in SQL or SPL panels.
@@ -127,8 +134,7 @@ A `rum` variable lists the top 50 values of one RUM field over the dashboard tim
     "fieldMeta": { "field": "application_id", "type": "string", "is_attribute": false },
     "value": [],
     "selectType": "multiple",
-    "filters": {},
-    "filterMode": "MFD"
+    "kql": ""
   }
 }
 ```
@@ -141,13 +147,10 @@ A `rum` variable lists the top 50 values of one RUM field over the dashboard tim
   and `service` can: their values are listed one by one, and a selection matches rows whose
   list contains it. Prefer `application_id`, `browser_name`, `device_type`,
   `country`; `app_name` is in the catalog but empty in stored data.
-- `filters` scopes which rows the values come from, as field chips
-  (`{"application_id": ["shop"]}`, `MFD`) or typed (`filterMode: "ADVANCED_QUERY"`,
-  `{"advanced_query": ["application_id = $app"]}`). A filter may reference another variable,
-  which makes this one **dependent**: a `dev` variable on `device_type` filtered by
-  `application_id = $app` lists only the chosen app's device types.
-- In a `rum` panel, filter with `application_id = $app` in `filters.advanced_query`, or use
-  `"$$app": ["$$app"]`.
+- `kql` scopes which rows the values come from (`application_id:shop`). A filter may
+  reference another variable, which makes this one **dependent**: a `dev` variable on
+  `device_type` with `kql: "application_id:$app"` lists only the chosen app's device types.
+- In a `rum` panel, filter with `kql: "application_id:$app"`.
 
 ## Sub-Grids (Rows)
 

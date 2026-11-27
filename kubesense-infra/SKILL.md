@@ -54,6 +54,21 @@ not read out of a previous call.
 Every tool defaults to **the last 1 hour** and **all accessible clusters**. Pass
 `from_time`/`to_time` (RFC3339) to widen; pass `clusters` to narrow.
 
+`list-pods`, `list-nodes`, `list-workloads` and `list-issues` also take an optional KQL
+`query`, ANDed with the other arguments:
+
+| Tool | Fields in `query` | Example |
+|---|---|---|
+| `list-pods` | `name`, `namespace`, `cluster`, `status`, `node`, `workload` | `namespace:production status:Running -node:node-1` |
+| `list-nodes` | `name`, `cluster`, `status` (`Ready` or `"Not Ready"`) | `cluster:prod status:"Not Ready"` |
+| `list-workloads` | `kind`, `namespace`, `source`, `workload` | `namespace:payments kind:(Deployment OR StatefulSet)` |
+| `list-issues` | `cluster`, `perspective_namespace`, `perspective_workload`, `protocol_type`, `return_code`, `source` | `perspective_namespace:payments return_code:(500 OR 503)` |
+
+On these lists, `field:value`, `field:(a OR b)` and `-field:value` work. Wildcards,
+comparisons, `@attributes` and an OR across two different fields are refused. A field named
+both in `query` and in its own argument (`namespace`, `status`, `kind`) is refused, so pick one.
+`cluster:a` in `query` narrows within `clusters`; it cannot reach a cluster `clusters` leaves out.
+
 ## list-clusters
 
 Call this first when you need a cluster name. It is the *only* discovery for the

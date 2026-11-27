@@ -2,7 +2,7 @@
 name: kubesense-log-pipelines
 description: Use before any write to a KubeSense log pipeline, and when the user wants logs parsed, fields extracted, values masked or redacted, logs dropped, fields removed or renamed, or logs enriched at ingestion — or wants their log pipelines listed, read, created or edited.
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   author: kubesense
   repository: https://github.com/kubesense-ai/kubesense-mcp-skills
   tags: kubesense,log-pipelines,logs,ingestion,processors,parsing,masking,block,mcp
@@ -50,22 +50,22 @@ human must delete it in the UI. Never emulate deletion by emptying a rule's conf
 repointing `inputs` at a name that matches nothing, or turning a rule into a no-op.
 A pipeline reshaped into a stand-in for "deleted" still runs and still confuses the next reader.
 
-**3. `block` drops logs, and an over-broad pattern drops all of them.**
+**3. `block` drops logs, and an over-broad match drops all of them.**
 A dropped log is never stored. The server **refuses** a `block` rule that matches every
-log: no `field`, `pattern` or `conditions`; `block_unmatched` with no match; `condition_version: 1`
-with empty `conditions`. It also refuses `conditions` sent without `condition_version: 1`
-(they would be ignored), and a `replace` rule with no `field`, `pattern` or `conditions`.
-An over-broad regex is **not** caught: it drops everything it matches.
-`block_unmatched: true` inverts the test and drops everything the pattern does *not* match.
-A block or replace rule read back from `get-log-pipeline` has an empty `field`/`pattern`
-and carries its test in `condition_version`, `conditions` and `raw_conditions`. Re-saving
-it without them is refused for a block rule, and for a replace rule whose saved
-conditions the update drops (to widen a replace on purpose, send `condition_version: 1`
-with empty `conditions`).
-*Guard:* never send a `block` rule without a concrete `field`/`pattern`. When re-saving an
-existing block or replace rule, copy its config back unchanged, all three condition fields
-included. The refusal does not make the rule safe: say aloud which logs it will drop, with
-the sampled lines it matches and one it does not.
+log: one with no `kql`, or `block_unmatched` with no match. A `block` or `replace` rule
+matches by `kql` only: `field` + `pattern` as a block rule's match, and hand-written
+`conditions`, `condition_version` and `raw_conditions`, are refused. A `replace` rule with no
+`kql` rewrites every log of the pipeline; the server accepts it, so set a `kql` unless that
+is the intent.
+An over-broad `kql` is **not** caught: it drops everything it matches. `-type:INFO` is one:
+in a pipeline it matches every Kubernetes log (see [Processors](#processors)).
+`block_unmatched: true` inverts the test and drops everything the `kql` does *not* match.
+A block or replace rule read back from `get-log-pipeline` carries `kql` (what its stored
+match reads as), or `legacy` {reason, detail} when it has no KQL form.
+*Guard:* never send a `block` rule without a concrete `kql`. When re-saving an existing
+block or replace rule, send it back as it was read to keep its match. The refusal does not
+make the rule safe: say aloud which logs it will drop, with the sampled lines it matches and
+one it does not.
 
 **4. Destructive processors lose data on the logs they touch.**
 - `remove-fields` deletes attributes.
@@ -161,7 +161,7 @@ Each step ends when its condition is true.
 
 1. **Survey.** `list-log-pipelines` (add `name` or `source` to narrow). Done when you know which pipelines overlap the requested logs, their chain `index`, and whether `can_edit` is true for the one to change. Check for an existing pipeline that already does the job.
 2. **Template.** `get-log-pipeline` on the closest existing pipeline, and on the overlapping earlier ones. Done when you have read the `config` shape of each rule type you plan to use, and know which fields earlier pipelines add, remove or rename.
-3. **Sample.** Use [kubesense-logs](../kubesense-logs/SKILL.md): `get-fields` with `signal: "logs"`, then `search-logs` on the target `workload`/`namespace` with `body` and the attributes you plan to touch. Done when you hold at least 10 real lines per distinct format, one that the pattern must not match, and the attribute names verbatim. A processor's `field` is the attribute key without the `@` that WHERE uses. Sampled attributes are the *stored* ones, after existing pipelines ran; an `unparsed` pipeline runs earlier, so work from `body`.
+3. **Sample.** Use [kubesense-logs](../kubesense-logs/SKILL.md): `get-fields` with `signal: "logs"`, then `search-logs` on the target `workload`/`namespace` with `body` and the attributes you plan to touch. Done when you hold at least 10 real lines per distinct format, one that the pattern must not match, and the attribute names verbatim. A processor's `field` is the attribute key without the `@` that KQL uses. Sampled attributes are the *stored* ones, after existing pipelines ran; an `unparsed` pipeline runs earlier, so work from `body`.
 4. **Draft.** Write `name`, `source`, `inputs` and `rules`. Rule names must be unique across **all** pipelines and pipeline names unique across pipelines, so use a distinct prefix. Done when each regex is checked by hand against every sampled line (RE2 syntax; the server refuses an invalid regex, not a wrong one) and the Dangers that apply are named.
 5. **Confirm.** Danger 15. Done on an explicit yes.
 6. **Write.** One call. For `update-log-pipeline` pass `id`, `updated_at` and the full list (see below).
@@ -240,7 +240,7 @@ Read first, then send the **complete** result you want:
     { "id": "<existing rule id>", "name": "checkout-nginx-parse-access", "type": "parse",
       "config": { "pattern": "(?P<method>\\w+) (?P<path>\\S+) (?P<status>\\d{3})" } },
     { "name": "checkout-drop-health", "type": "block",
-      "config": { "field": "path", "pattern": "^/healthz$" } }
+      "config": { "kql": "@path:/^\\/healthz$/" } }
   ]
 }
 ```
@@ -255,10 +255,8 @@ Read first, then send the **complete** result you want:
 Common failures. Each is returned as a tool error; `invalid pipeline:` messages name the rule and the reason: fix and re-confirm.
 - `stale: pipeline changed since you read it; call get-log-pipeline again` (Danger 13). Also `stale: nothing was changed: who may edit this pipeline changed while you were acting on it. Re-read it with get-log-pipeline and try again`.
 - `invalid pipeline: updated_at is required to change a pipeline's name, inputs or rules: pass the value get-log-pipeline returned`.
-- `invalid pipeline: the pipeline produced a Vector config the validator rejected: <reason>` (Danger 12).
-- `invalid pipeline: rules[<i>] (block, "<name>"): a block rule with no field, pattern or conditions drops EVERY log of the pipeline. ...` (Danger 3). The replace form reads `a replace rule with no field, pattern or conditions would rewrite every log`.
-- `invalid pipeline: rules[<i>] (<type>, "<name>"): conditions are ignored unless condition_version is 1. Send condition_version, conditions and raw_conditions together, as get-log-pipeline shows them`.
-- `invalid pipeline: rules[<i>] (replace, "<name>"): the saved rule only applies to logs that match its conditions, and this update leaves them out, so it would apply to every log. ...`.
+- `invalid pipeline: the pipeline produced a Vector config the validator rejected: <reason>` (Danger 12). A reason `rule "<name>" (<type>) does not compile: ...` names the rule whose program Vector refuses: change its name, pattern or `kql`.
+- `invalid pipeline: rules[<i>] (block, "<name>"): a block rule with no match drops EVERY log of the pipeline. ...` (Danger 3). Give it a `kql`.
 - `invalid pipeline: rules cannot be deleted through this tool. The list must include every existing rule; missing: <id> ("<name>"). To stop the pipeline from running, set enabled to false instead`. Your list left a saved rule out; re-read and include it.
 - `invalid pipeline: rules[<i>]: id "<id>" is not a rule of this pipeline` and `rule id "<id>" is listed twice`.
 - `invalid pipeline: inputs[...]`: see the nesting refusals above.
@@ -279,10 +277,31 @@ attributes, not a top-level column); an empty `field` means the log `body` for t
 that allow it.
 
 `get-log-pipeline` omits config settings that are at their zero value. A `block` or
-`replace` rule read back also carries `condition_version`, `conditions` and
-`raw_conditions`: send all three back unchanged when re-saving that rule (a block rule
-without them, or a replace rule that drops saved conditions, is refused), and author new
-rules with `field` and `pattern` only.
+`replace` rule read back carries `kql` (or `legacy`, below); author every new rule's match
+with `kql`.
+
+**Matching by KQL.** A `block` or `replace` rule matches by `kql` in its config, never by
+`field` and `pattern` or hand-written `conditions`: `{"kql": "workload:payment AND body:timeout"}`. It is the same KQL as the
+`query` of `search-logs`, plus one term that exists only here, a regular expression,
+`body:/timeout.*gold/`. The server compiles it into the rule's conditions
+(`condition_version` 2) and keeps the text; an unsupported or invalid text is refused with
+its position. Text matches as it does in `search-logs`: `body:error` is the whole word in any
+case, and `body:*err*` is a substring. Three terms differ, see below. A rule read back carries `kql` (what its stored conditions read as) or
+`legacy` {reason, detail} (they have no faithful KQL form, so leave them as they are). Send
+the rule back unchanged to keep it, or change `kql` (and drop `conditions`,
+`condition_version` and `raw_conditions`) to change what it matches. The tools always work at the latest KQL.
+
+**Where a pipeline match differs from `search-logs`.** A pipeline reads a log before it is
+stored, so a `kql` that finds the right logs in `search-logs` can match other logs here:
+
+- **`type` is not known yet.** On Kubernetes logs it is `UNKNOWN` until every pipeline has
+  run: `type:ERROR` matches nothing, and `-type:INFO` matches **every** log. The server does
+  not refuse either. Test the attribute, `@level:~error`, after checking with `search-logs`
+  that the logs carry `@level`; or put a `json-extract` rule with `new_field: "level"` before
+  the rule, in the same pipeline.
+- **A true or false attribute.** `@flag:true` matches the text `true`, not the value true.
+- **A number stored as text.** `@code>=500` reads numbers only; `search-logs` also reads the
+  text `"500"`. `@code:500` matches both.
 
 ## Rules
 
@@ -290,7 +309,7 @@ rules with `field` and `pattern` only.
 2. Confirm the exact pipeline with the user before `create-log-pipeline` or `update-log-pipeline`.
 3. Always `get-log-pipeline` immediately before `update-log-pipeline`, and pass `updated_at` unchanged.
 4. `rules` in an update is the full ordered list with every existing id.
-5. Narrow `inputs` first; `block` always with a concrete pattern; `protect` always last.
+5. Narrow `inputs` first; `block` always with a concrete `kql`; `protect` always last.
 6. Prefer `new_field` over overwriting; leave `delete_original` and `replace_original` off by default.
 7. Deletion belongs to a human in the UI. Disable with `enabled: false`; never emulate deletion.
 8. Verify new logs after every write; on a bad result, disable and report.

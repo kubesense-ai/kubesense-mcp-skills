@@ -143,7 +143,7 @@ If the symptom is latency or request errors, get a `trace_id` — from `search-t
 to the workload, or from `list-issues`:
 
 ```
-search-traces  where: "workload = checkout AND status = error"   → trace_id
+search-traces  query: "workload:checkout status:error"   → trace_id
 get-distributed-trace(trace_id, from_time, to_time)
 ```
 
@@ -171,7 +171,7 @@ Now — and only now — read logs, with the scope you earned:
 
 ```
 search-logs
-  where: "workload = checkout AND type = ERROR"
+  query: "workload:checkout type:ERROR"
   from_time / to_time: the failing span's window, widened a few seconds
   required_fields: [instance, body]
 ```
@@ -183,7 +183,7 @@ field on logs — use `workload`.
 For the shape of the failure rather than individual lines:
 
 ```
-analyze-logs  where: "type = ERROR"  group_by_fields: [workload]  value_operation: row_count
+analyze-logs  query: "type:ERROR"  group_by_fields: [workload]  value_operation: row_count
 ```
 
 Group by `pattern_id` to cluster similar messages instead of reading each one.
