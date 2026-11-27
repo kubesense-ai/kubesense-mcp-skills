@@ -113,7 +113,7 @@ output. Use `get-fields`.
 | `analyze-metrics` | PromQL result |
 | `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics, events or RUM (`selectedMode: rum_<type>`) |
 | `get-distributed-trace` | Full span tree for one `trace_id` |
-| `get-service-map` | Service-to-service dependency graph (callers, callees, blast radius), as a `## call tree` plus nodes and edges TSV; optionally with Kafka producer/consumer topology |
+| `get-service-map` | Service-to-service dependency graph (callers, callees, blast radius), as a `## call tree` plus nodes and edges TSV; optionally with Kafka producer/consumer topology. Optional KQL `query` over `namespace`, `workload`, `protocol_type`, `source` and `has_issues` (`ok`/`error`), e.g. `namespace:payments has_issues:error` |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |
 | `validate-spl` | Dry-run verdict for an SPL query, plus the SQL it compiles to |
@@ -383,9 +383,11 @@ for the field name; use only those.
 Every tool takes a filter only as KQL: `query` on `search-logs`, `search-traces`,
 `search-rum`, `analyze-logs`, `analyze-traces`, `create-alert` and each `queries[].query`
 of `analyze-telemetry`; `kql` on dashboard queries, variables and overlays. The list tools
-`list-pods`, `list-nodes`, `list-workloads`, `list-issues`, `list-alert-rules` and
-`list-dashboards` also take an optional KQL `query` next to their own arguments; their
-input schemas name the fields each one filters on. A call that
+`list-pods`, `list-nodes`, `list-workloads`, `list-issues`, `list-alert-rules`,
+`list-dashboards`, `list-active-alerts`, `list-alerts`, `synthetics-list-monitors`,
+`synthetics-list-suites` and `synthetics-list-incidents`, and `get-service-map`, also take an
+optional KQL `query` next to their own arguments; their input schemas name the fields each one
+filters on. A field named both in `query` and in its own argument is refused. A call that
 sends `where`, `filters`, `filter`, `advanced`, `advanced_query`, `unified_filter`,
 `raw_filters`, `common_filter`, `adv_filters`, `filter_mode` or `filterMode` is refused
 with a hint naming the argument to use, before anything runs. To translate an old filter:
