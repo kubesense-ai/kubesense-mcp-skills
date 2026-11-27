@@ -180,11 +180,11 @@ Quote values that contain a space or a colon. Exclude with `-field:value` or
 ## Rules
 
 1. **Wildcards and `~` only on fields whose `forms` set lists them** in `get-fields` and the
-   catalog's `LIKE` column. Those are the low-cardinality columns (`env`, `country`,
-   `error_type`, `action_name`, `view_name` on `rum_view`). Everything else (`user_id`,
-   `view_url`, `resource_url`, `error_message`, `view_name` on the other event types) takes
-   `field:value` and `field:(a OR b)`. A wildcard on them is refused with the field and the
-   position.
+   catalog's `LIKE` column. That is every text field people search by pattern: names, URLs,
+   paths, hosts, `error_message`, `error_stack`, `user_name`, `user_email`, `device_name`, and
+   low-cardinality columns such as `env` and `country`. Ids (`session_id`, `view_id`,
+   `trace_id`, `user_id`, `issue_id`, …) take `field:value` and `field:(a OR b)` only. A
+   wildcard on them is refused with the field and the position.
 2. **Attributes take every operator.** `@plan:pro`, `@plan:pr*`, `@seats>=5`, `@plan:*` (the
    attribute is set), `-@plan:pro`. A comparison reads a number; a value that is not a number
    matches neither the comparison nor its negation.
