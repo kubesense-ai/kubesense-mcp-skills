@@ -113,7 +113,7 @@ output. Use `get-fields`.
 | `analyze-metrics` | PromQL result |
 | `analyze-telemetry` | Multiple queries + formulas in one call; sub-queries may be logs, traces, metrics, events or RUM (`selectedMode: rum_<type>`) |
 | `get-distributed-trace` | Full span tree for one `trace_id` |
-| `get-service-map` | Service-to-service dependency graph (callers, callees, blast radius), as a `## call tree` plus nodes and edges TSV; optionally with Kafka producer/consumer topology. Optional KQL `query` over `namespace`, `workload`, `protocol_type`, `source` and `has_issues` (`ok`/`error`), e.g. `namespace:payments has_issues:error` |
+| `get-service-map` | Service-to-service dependency graph (callers, callees, blast radius), as a `## call tree` plus nodes and edges TSV; optionally with Kafka producer/consumer topology. Optional KQL `query` over `namespace`, `workload`, `protocol_type`, `source` and `status` (the connection status, `ok`/`error`), e.g. `namespace:payments status:error` |
 | `execute-sql` | Rows from a raw ClickHouse SELECT over logs or traces |
 | `validate-sql` | Dry-run verdict for a SQL query, plus the SQL that would run |
 | `validate-spl` | Dry-run verdict for an SPL query, plus the SQL it compiles to |
